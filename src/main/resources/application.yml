@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: corp-idm-platform
+  datasource:
+    url: jdbc:h2:mem:idm;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  h2:
+    console:
+      enabled: true
+  jackson:
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  jwt:
+    secret: prototype-secret-prototype-secret-prototype-secret
+    expire-minutes: 30
+  sql-log:
+    enabled: true
+    slow-sql-threshold-ms: 200
+    show-parameters: true
+    max-sql-length: 2000
+    max-parameter-length: 128
+    max-collection-length: 5
+    mask-keywords:
+      - password
+      - pwd
+      - secret
+      - token
+      - credential
+      - bindPassword
+  ldap:
+    mode: stub
+    base-dn: dc=corp,dc=local
+    people-ou: ou=people
+    stub-users:
+      admin: admin123456

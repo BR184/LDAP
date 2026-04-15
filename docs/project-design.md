@@ -232,26 +232,36 @@ com.company.idm
    └─ audit
 ```
 
-### 4.2 Maven 多模块建议
+### 4.2 Maven 工程建议
 
-推荐采用如下 Maven 结构：
+原型阶段建议优先采用“单 Maven 工程 + 分层包结构”，而不是将 `common`、`domain`、`application`、`interfaces`、`infrastructure` 全部拆成独立 Maven 模块。
+
+推荐结构如下：
 
 ```text
 corp-idm-platform
 ├─ pom.xml
 ├─ docs
-├─ corp-idm-boot
-├─ corp-idm-common
-├─ corp-idm-interfaces
-├─ corp-idm-application
-├─ corp-idm-domain
-├─ corp-idm-infrastructure
-└─ corp-idm-test
+└─ src
+   ├─ main
+   │  ├─ java
+   │  │  └─ com.company.idm
+   │  │     ├─ boot
+   │  │     ├─ common
+   │  │     ├─ domain
+   │  │     ├─ application
+   │  │     ├─ interfaces
+   │  │     └─ infrastructure
+   │  └─ resources
+   └─ test
+      └─ java
 ```
 
 说明：
 
-- 若团队规模较小，也可先用单模块工程加分包实现，待稳定后再拆分为多模块。
+- 一期与原型阶段以快速落地、便于调试为主，单模块更适合当前体量。
+- `domain`、`application`、`interfaces`、`infrastructure` 通过包边界分层，而不是依赖 Maven 模块边界。
+- 当后续团队规模、构建时长或发布边界变复杂时，再考虑按稳定边界拆成多模块。
 - 不建议一期上来就做微服务拆分，否则会把主要精力浪费在服务治理与部署编排上。
 
 ### 4.3 基础服务层模块划分
