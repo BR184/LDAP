@@ -1,6 +1,7 @@
 package com.company.idm.application.rbac;
 
 import com.company.idm.common.exception.BizException;
+import com.company.idm.common.enums.MenuType;
 import com.company.idm.domain.audit.AuditLog;
 import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.rbac.Menu;
@@ -12,6 +13,8 @@ import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +63,14 @@ public class RbacApplicationService {
      */
     public List<Menu> listAllMenus() {
         return menuRepository.findAllEnabled();
+    }
+
+    /**
+     * 查询菜单详情。
+     */
+    public Menu getMenu(Long menuId) {
+        return menuRepository.findById(menuId)
+            .orElseThrow(() -> new BizException("MENU_NOT_FOUND", "菜单不存在"));
     }
 
     /**
@@ -201,13 +212,14 @@ public class RbacApplicationService {
             throw new BizException("MENU_NOT_FOUND", "部分菜单不存在");
         }
         permissionLevelRuleService.checkCanBindMenus(command.operator(), role, menus);
-        roleRepository.bindMenus(command.roleId(), command.menuIds());
+        List<Long> normalizedMenuIds = expandMenuIdsWithAncestors(menus);
+        roleRepository.bindMenus(command.roleId(), normalizedMenuIds);
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
             .operationType("ROLE_MENU_BIND")
             .bizType("ROLE")
             .bizId(String.valueOf(command.roleId()))
-            .afterJson(String.valueOf(command.menuIds()))
+            .afterJson(String.valueOf(normalizedMenuIds))
             .result("SUCCESS")
             .build());
     }
@@ -234,5 +246,195 @@ public class RbacApplicationService {
             .afterJson(String.valueOf(command.roleIds()))
             .result("SUCCESS")
             .build());
+    }
+
+    /**
+     * 创建菜单并自动绑定到管理员角色。
+     */
+    @Transactional
+    public Menu createMenu(CreateMenuCommand command, String operator) {
+        permissionLevelRuleService.checkCanManageMenu(operator);
+        menuRepository.findByCode(command.menuCode())
+            .ifPresent(menu -> {
+                throw new BizException("MENU_CODE_DUPLICATE", "菜单编码已存在");
+            });
+        Long parentId = normalizeParentId(command.parentId());
+        validateMenuPayload(parentId, command.menuType(), command.path(), command.component(), null);
+        Menu menu = menuRepository.save(Menu.builder()
+            .menuCode(command.menuCode())
+            .menuName(command.menuName())
+            .parentId(parentId)
+            .menuType(command.menuType())
+            .path(command.path())
+            .component(resolveComponent(command.menuType(), command.component()))
+            .icon(command.icon())
+            .sortNo(defaultSortNo(command.sortNo()))
+            .status(1)
+            .visible(1)
+            .minPermissionLevel(command.minPermissionLevel())
+            .remark(command.remark())
+            .build());
+        bindMenuToAdmin(menu.getId());
+        auditLogRepository.save(AuditLog.builder()
+            .operator(operator)
+            .operationType("MENU_CREATE")
+            .bizType("MENU")
+            .bizId(String.valueOf(menu.getId()))
+            .afterJson(menu.getMenuCode())
+            .result("SUCCESS")
+            .build());
+        return menu;
+    }
+
+    /**
+     * 更新菜单基础信息并保持现有绑定约束合法。
+     */
+    @Transactional
+    public Menu updateMenu(UpdateMenuCommand command, String operator) {
+        permissionLevelRuleService.checkCanManageMenu(operator);
+        Menu existing = menuRepository.findById(command.menuId())
+            .orElseThrow(() -> new BizException("MENU_NOT_FOUND", "菜单不存在"));
+        Long parentId = normalizeParentId(command.parentId());
+        validateMenuPayload(parentId, command.menuType(), command.path(), command.component(), existing.getId());
+        if (command.menuType() == MenuType.MENU && menuRepository.existsChildren(existing.getId())) {
+            throw new BizException("MENU_TYPE_INVALID", "存在子菜单时不允许将当前菜单调整为 MENU");
+        }
+        if (menuRepository.existsRoleBindingConflict(existing.getId(), command.minPermissionLevel())) {
+            throw new BizException("MENU_PERMISSION_CONFLICT", "当前菜单已绑定更低权限角色，无法收紧可绑定等级");
+        }
+        Menu updated = menuRepository.save(Menu.builder()
+            .id(existing.getId())
+            .menuCode(existing.getMenuCode())
+            .menuName(command.menuName())
+            .parentId(parentId)
+            .menuType(command.menuType())
+            .path(command.path())
+            .component(resolveComponent(command.menuType(), command.component()))
+            .icon(command.icon())
+            .sortNo(defaultSortNo(command.sortNo()))
+            .status(existing.getStatus())
+            .visible(existing.getVisible())
+            .minPermissionLevel(command.minPermissionLevel())
+            .remark(command.remark())
+            .build());
+        auditLogRepository.save(AuditLog.builder()
+            .operator(operator)
+            .operationType("MENU_UPDATE")
+            .bizType("MENU")
+            .bizId(String.valueOf(updated.getId()))
+            .afterJson(updated.getMenuCode())
+            .result("SUCCESS")
+            .build());
+        return updated;
+    }
+
+    /**
+     * 删除菜单，同时清理角色与菜单关系。
+     */
+    @Transactional
+    public void deleteMenu(DeleteMenuCommand command) {
+        permissionLevelRuleService.checkCanManageMenu(command.operator());
+        Menu menu = menuRepository.findById(command.menuId())
+            .orElseThrow(() -> new BizException("MENU_NOT_FOUND", "菜单不存在"));
+        if (menuRepository.existsChildren(command.menuId())) {
+            throw new BizException("MENU_DELETE_FORBIDDEN", "当前菜单存在子菜单，不能直接删除");
+        }
+        menuRepository.removeRoleBindings(command.menuId());
+        menuRepository.delete(command.menuId());
+        auditLogRepository.save(AuditLog.builder()
+            .operator(command.operator())
+            .operationType("MENU_DELETE")
+            .bizType("MENU")
+            .bizId(String.valueOf(command.menuId()))
+            .afterJson(menu.getMenuCode())
+            .result("SUCCESS")
+            .build());
+    }
+
+    /**
+     * 自动补齐祖先菜单，避免前端菜单树渲染时出现孤立叶子节点。
+     */
+    private List<Long> expandMenuIdsWithAncestors(List<Menu> menus) {
+        LinkedHashSet<Long> menuIds = new LinkedHashSet<>();
+        for (Menu menu : menus) {
+            collectMenuWithAncestors(menu, menuIds);
+        }
+        return new ArrayList<>(menuIds);
+    }
+
+    private void collectMenuWithAncestors(Menu menu, LinkedHashSet<Long> menuIds) {
+        if (menu.getParentId() != null && menu.getParentId() > 0) {
+            Menu parent = menuRepository.findById(menu.getParentId())
+                .orElseThrow(() -> new BizException("MENU_PARENT_NOT_FOUND", "菜单父节点不存在"));
+            collectMenuWithAncestors(parent, menuIds);
+        }
+        menuIds.add(menu.getId());
+    }
+
+    private void bindMenuToAdmin(Long menuId) {
+        Role adminRole = roleRepository.findByCode("ADMIN")
+            .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "管理员角色不存在"));
+        menuRepository.bindRole(adminRole.getId(), menuId);
+    }
+
+    private void validateMenuPayload(
+        Long parentId,
+        MenuType menuType,
+        String path,
+        String component,
+        Long selfMenuId
+    ) {
+        if (menuType == null) {
+            throw new BizException("MENU_TYPE_REQUIRED", "菜单类型不能为空");
+        }
+        if (path == null || path.isBlank()) {
+            throw new BizException("MENU_PATH_REQUIRED", "菜单路由不能为空");
+        }
+        if (menuType == MenuType.MENU && (component == null || component.isBlank())) {
+            throw new BizException("MENU_COMPONENT_REQUIRED", "菜单组件路径不能为空");
+        }
+        if (parentId == null || parentId <= 0) {
+            return;
+        }
+        if (selfMenuId != null && selfMenuId.equals(parentId)) {
+            throw new BizException("MENU_PARENT_INVALID", "父菜单不能选择自身");
+        }
+        Menu parent = menuRepository.findById(parentId)
+            .orElseThrow(() -> new BizException("MENU_PARENT_NOT_FOUND", "父菜单不存在"));
+        if (parent.getMenuType() != MenuType.CATALOG) {
+            throw new BizException("MENU_PARENT_INVALID", "仅目录类型菜单允许挂载子菜单");
+        }
+        validateParentCycle(parent, selfMenuId);
+    }
+
+    private void validateParentCycle(Menu parent, Long selfMenuId) {
+        if (selfMenuId == null) {
+            return;
+        }
+        Menu current = parent;
+        while (current != null && current.getParentId() != null && current.getParentId() > 0) {
+            if (selfMenuId.equals(current.getId())) {
+                throw new BizException("MENU_PARENT_INVALID", "父菜单不能选择当前菜单的下级节点");
+            }
+            current = menuRepository.findById(current.getParentId()).orElse(null);
+        }
+        if (current != null && selfMenuId.equals(current.getId())) {
+            throw new BizException("MENU_PARENT_INVALID", "父菜单不能选择当前菜单的下级节点");
+        }
+    }
+
+    private Long normalizeParentId(Long parentId) {
+        return parentId == null ? 0L : parentId;
+    }
+
+    private Integer defaultSortNo(Integer sortNo) {
+        return sortNo == null ? 0 : sortNo;
+    }
+
+    private String resolveComponent(MenuType menuType, String component) {
+        if (menuType == MenuType.CATALOG && (component == null || component.isBlank())) {
+            return "Layout";
+        }
+        return component;
     }
 }

@@ -72,9 +72,9 @@
 
 - 平台管理员登录、登出、令牌续期
 - 用户新增、编辑、查询、禁用、启用、重置密码
-- 用户与 LDAP 目录信息双向映射
+- 用户、部门与分组信息由 MySQL 向 LDAP 单向投影
 - 角色管理、菜单授权、用户角色分配
-- 基于 Casbin 的接口级和按钮级授权
+- 基于 Casbin 的接口级授权与基于角色菜单的菜单树渲染
 - 为后续 API 网关、消息管理、调度引擎、流程中心、插件管理预留清晰的领域边界与扩展接口
 - 审计日志、基础单元测试、集成测试
 
@@ -85,6 +85,8 @@
 - 飞书 API 直连采集
 - 组织架构全量同步
 - 租户管理能力正式启用
+- 菜单多语言、菜单多租户隔离、菜单版本发布
+- 按钮级资源模型与按钮权限管理
 - API 网关统一路由与流控
 - 消息中心统一事件投递
 - 流程审批与编排引擎
@@ -342,6 +344,13 @@ corp-idm-platform
 - MySQL 保存：账号状态、展示信息、手机号、邮箱、员工编号、角色关系、审计信息、来源标记
 - LDAP 保存：用户名、显示名、邮箱、手机号、员工编号、部门编码、密码散列值、启用状态
 
+当前阶段同步原则补充：
+
+- MySQL 是主数据源，LDAP 是目录投影
+- 当前仅支持 **MySQL -> LDAP** 单向同步
+- 不支持 LDAP 回写 MySQL
+- 当前仅对接飞书导入场景，因此采用固定映射规则，不引入动态字段映射引擎
+
 ### 5.3 用户管理模块设计
 
 #### 5.3.1 功能范围
@@ -583,9 +592,26 @@ m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
 - `ADMIN` 默认绑定全部菜单
 - `NORMAL_USER` 默认不绑定后台管理菜单
 - 自定义角色菜单由管理员手工绑定
+- 角色绑定叶子菜单时，系统自动补齐祖先目录菜单，确保前端可稳定渲染菜单树
 - 菜单可预留 `min_permission_level` 字段，用于限制低等级角色绑定高风险菜单
 
-#### 5.4.6 当前原型落地说明
+#### 5.4.6 菜单管理规则
+
+当前菜单管理规则如下：
+
+- 菜单节点当前仅支持 `CATALOG`、`MENU` 两种类型
+- 菜单 CRUD 范围为：树查询、详情、创建、更新、删除，不提供菜单启停接口
+- 当前不做菜单多语言、多租户隔离、菜单版本发布、按钮资源管理
+- `menu_code` 全局唯一，创建后不允许修改
+- 创建、更新、删除菜单仅允许管理员执行
+- `parent_id = 0` 表示根节点；非根节点父菜单必须存在且必须为 `CATALOG`
+- 菜单不允许挂载到自身或自身下级节点之下
+- `MENU` 类型必须提供前端组件路径；`CATALOG` 类型若未显式指定组件，默认使用 `Layout`
+- 新建菜单后系统自动将该菜单绑定到 `ADMIN`，确保管理员始终拥有完整菜单树
+- 删除菜单前必须校验无子菜单；删除成功后自动清理 `sys_role_menu` 关系
+- 若菜单已绑定给低权限角色，则不允许将 `min_permission_level` 收紧到与现有绑定冲突的范围
+
+#### 5.4.7 当前原型落地说明
 
 当前原型已实现以下角色权限管理能力：
 
@@ -597,6 +623,10 @@ m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
 - 角色删除
 - 角色菜单绑定
 - 用户分配角色
+- 菜单详情
+- 菜单创建
+- 菜单更新
+- 菜单删除
 - 全量菜单树查询
 - 当前用户菜单树查询
 - 基于 `permission_level` 的基础对象操作规则服务
@@ -661,7 +691,69 @@ userPassword: {SSHA}******
 - `findByEmployeeNumber`
 - `existsByUid`
 
-#### 5.5.4 第三方认证方式
+#### 5.5.4 LDAP 分组同步设计
+
+当前阶段 LDAP 不作为业务权限中心，而是作为第三方系统认证目录。
+
+从 MySQL 单向同步到 LDAP 的数据主要包括：
+
+- 用户基础数据
+- 部门 / 分组数据
+- 用户与分组的关联关系
+
+职责边界如下：
+
+- MySQL：管理项目业务，承载用户、角色、菜单、部门等业务主数据
+- LDAP：管理第三方系统登录目录，承载用户目录与分组目录
+
+当前阶段固定映射规则如下：
+
+用户基础字段映射：
+
+| MySQL 字段 | LDAP 属性 | 说明 |
+| --- | --- | --- |
+| `username` | `uid` | 登录账号 |
+| `real_name` | `cn` | 显示姓名 |
+| `real_name` | `sn` | 简化姓氏属性 |
+| `email` | `mail` | 邮箱 |
+| `mobile` | `mobile` | 手机号 |
+| `employee_no` | `employeeNumber` | 员工编号 |
+| `dept_code` | `departmentNumber` | 主部门编码 |
+| `status` | `employeeType` | 目录启停状态 |
+| 密码输入值 | `userPassword` | 登录密码 |
+
+部门 / 分组映射：
+
+- MySQL 中的 `Department.deptCode` 固定映射为 LDAP group 的 `cn`
+- `Department.deptName` 固定映射为 LDAP group 的 `description`
+- 当前 group 目录放在 `ou=groups`
+
+建议组条目示例：
+
+```ldif
+dn: cn=D001,ou=groups,dc=corp,dc=local
+objectClass: top
+objectClass: groupOfNames
+cn: D001
+description: 研发中心
+member: uid=zhangsan,ou=people,dc=corp,dc=local
+```
+
+当前原型实现说明：
+
+- 已实现用户基础数据同步到 LDAP 用户条目
+- 已实现按部门编码将用户同步加入 LDAP group
+- 已实现用户部门变更时更新 LDAP group 成员关系
+- 已实现删除用户前先移出所有 LDAP group，再删除 LDAP 用户条目
+- 当前尚未实现 LDAP -> MySQL 回写
+- 当前尚未将业务角色或菜单权限直接同步为 LDAP 组权限模型
+
+建议服务拆分：
+
+- `LdapDirectoryService`：负责用户条目增删改查、启停、改密
+- `LdapGroupService`：负责分组条目与成员关系同步
+
+#### 5.5.5 第三方认证方式
 
 GitLab 等系统直接配置 LDAP 参数连接 OpenLDAP：
 
@@ -688,7 +780,7 @@ flowchart LR
     C --> D[内网同步模块]
     D --> E[差异比对]
     E --> F[更新 MySQL]
-    F --> G[同步 OpenLDAP]
+    F --> G[按固定映射同步 OpenLDAP 用户与分组]
 ```
 
 #### 5.6.2 同步模式
@@ -711,6 +803,7 @@ flowchart LR
 - 外部系统主键字段 `external_id`
 - 同步状态字段 `sync_status`
 - 同步任务与批次日志表
+- 固定映射规则由代码维护，后续如接入更多第三方来源再考虑映射配置化
 
 ### 5.7 API 网关模块设计（后续预留）
 
@@ -846,12 +939,17 @@ flowchart LR
 | component | varchar(256) | 前端组件路径 |
 | icon | varchar(64) | 图标 |
 | sort_no | int | 排序 |
-| status | tinyint | 状态 |
-| visible | tinyint | 是否可见 |
+| status | tinyint | 预留字段，当前固定为 1，不开放菜单启停管理 |
+| visible | tinyint | 预留字段，当前固定为 1，不开放独立菜单显隐管理 |
 | min_permission_level | int | 允许绑定该菜单的最低角色等级 |
 | remark | varchar(256) | 备注 |
 | gmt_create | datetime | 创建时间 |
 | gmt_modified | datetime | 修改时间 |
+
+说明：
+
+- 当前菜单模型仅覆盖 `CATALOG` 与 `MENU` 两类节点，满足后台菜单树渲染需求
+- 按钮、多语言、多租户菜单隔离、菜单版本发布不纳入当前设计与实现范围
 
 #### 6.1.4 权限表 `sys_permission`
 
@@ -869,6 +967,11 @@ flowchart LR
 | remark | varchar(256) | 备注 |
 | gmt_create | datetime | 创建时间 |
 | gmt_modified | datetime | 修改时间 |
+
+说明：
+
+- 当前原型实际落地的权限类型为 `API`
+- `BUTTON` 与更细粒度前端资源权限不纳入当前实现范围
 
 #### 6.1.5 关系表
 
@@ -986,6 +1089,10 @@ flowchart LR
 - `DELETE /api/v1/roles/{id}`
 - `PUT /api/v1/roles/{id}/status`
 - `PUT /api/v1/roles/{id}/menus`
+- `GET /api/v1/menus/{id}`
+- `POST /api/v1/menus`
+- `PUT /api/v1/menus/{id}`
+- `DELETE /api/v1/menus/{id}`
 - `GET /api/v1/menus/tree`
 - `GET /api/v1/menus/self/tree`
 
@@ -1032,7 +1139,7 @@ flowchart LR
 ### 8.2 授权设计
 
 - 控制器或接口层通过注解或统一切面调用 Casbin 授权
-- 菜单与按钮权限由前端根据权限码进行渲染控制
+- 后台菜单由前端根据当前用户菜单树进行渲染控制
 - 接口权限必须由后端再次校验，不能仅依赖前端隐藏
 
 ### 8.3 密码与敏感数据处理

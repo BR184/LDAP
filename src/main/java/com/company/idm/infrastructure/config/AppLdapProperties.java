@@ -16,6 +16,7 @@ public class AppLdapProperties {
     private String bindDn;
     private String bindPassword;
     private String peopleOu = "ou=people";
+    private String groupsOu = "ou=groups";
     private Map<String, String> stubUsers = new HashMap<>();
 
     public String getMode() {
@@ -64,6 +65,14 @@ public class AppLdapProperties {
 
     public void setPeopleOu(String peopleOu) {
         this.peopleOu = peopleOu;
+    }
+
+    public String getGroupsOu() {
+        return groupsOu;
+    }
+
+    public void setGroupsOu(String groupsOu) {
+        this.groupsOu = groupsOu;
     }
 
     public Map<String, String> getStubUsers() {

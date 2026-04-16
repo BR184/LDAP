@@ -328,6 +328,84 @@ class PrototypeIntegrationTest {
             .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void shouldCreateUpdateAndDeleteMenu() throws Exception {
+        String adminToken = loginAsAdmin();
+        long systemManagementId = findMenuIdByCode(adminToken, "SYSTEM_MANAGEMENT");
+        assertThat(systemManagementId).isPositive();
+
+        MvcResult createResult = mockMvc.perform(post("/api/v1/menus")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "menuCode": "DATA_SYNC_%s",
+                      "menuName": "数据同步",
+                      "parentId": %d,
+                      "menuType": "MENU",
+                      "path": "/system/data-sync-%s",
+                      "component": "system/data-sync/index",
+                      "icon": "sync",
+                      "sortNo": 9,
+                      "minPermissionLevel": 1,
+                      "remark": "菜单管理集成测试"
+                    }
+                    """.formatted(System.nanoTime(), systemManagementId, System.nanoTime())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.menuName").value("数据同步"))
+            .andReturn();
+
+        JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
+        long menuId = created.path("id").asLong();
+        String menuCode = created.path("menuCode").asText();
+        assertThat(menuId).isPositive();
+
+        mockMvc.perform(get("/api/v1/menus/{id}", menuId)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.menuCode").value(menuCode));
+
+        mockMvc.perform(put("/api/v1/menus/{id}", menuId)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "menuName": "数据同步中心",
+                      "parentId": %d,
+                      "menuType": "MENU",
+                      "path": "/system/data-sync-center",
+                      "component": "system/data-sync/center",
+                      "icon": "sync",
+                      "sortNo": 10,
+                      "minPermissionLevel": 1,
+                      "remark": "菜单管理更新测试"
+                    }
+                    """.formatted(systemManagementId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.menuName").value("数据同步中心"))
+            .andExpect(jsonPath("$.data.path").value("/system/data-sync-center"));
+
+        MvcResult selfTreeResult = mockMvc.perform(get("/api/v1/menus/self/tree")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode selfTree = objectMapper.readTree(selfTreeResult.getResponse().getContentAsString()).path("data");
+        assertThat(findMenuNodeByCode(selfTree, menuCode)).isNotNull();
+
+        mockMvc.perform(delete("/api/v1/menus/{id}", menuId)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+
+        MvcResult treeAfterDelete = mockMvc.perform(get("/api/v1/menus/tree")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode allMenus = objectMapper.readTree(treeAfterDelete.getResponse().getContentAsString()).path("data");
+        assertThat(findMenuNodeByCode(allMenus, menuCode)).isNull();
+    }
+
     private String loginAsAdmin() throws Exception {
         return login("admin", "admin123456");
     }
@@ -347,5 +425,32 @@ class PrototypeIntegrationTest {
 
         JsonNode jsonNode = objectMapper.readTree(result.getResponse().getContentAsString());
         return jsonNode.path("data").path("accessToken").asText();
+    }
+
+    private long findMenuIdByCode(String token, String menuCode) throws Exception {
+        MvcResult treeResult = mockMvc.perform(get("/api/v1/menus/tree")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode root = objectMapper.readTree(treeResult.getResponse().getContentAsString()).path("data");
+        JsonNode target = findMenuNodeByCode(root, menuCode);
+        assertThat(target).isNotNull();
+        return target.path("id").asLong();
+    }
+
+    private JsonNode findMenuNodeByCode(JsonNode nodes, String menuCode) {
+        if (nodes == null || !nodes.isArray()) {
+            return null;
+        }
+        for (JsonNode node : nodes) {
+            if (menuCode.equals(node.path("menuCode").asText())) {
+                return node;
+            }
+            JsonNode child = findMenuNodeByCode(node.path("children"), menuCode);
+            if (child != null) {
+                return child;
+            }
+        }
+        return null;
     }
 }

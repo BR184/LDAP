@@ -6,8 +6,10 @@ import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.audit.AuditLog;
 import com.company.idm.domain.audit.AuditLogRepository;
+import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.domain.ldap.LdapDirectoryService;
+import com.company.idm.domain.ldap.LdapGroupService;
 import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
@@ -29,6 +31,7 @@ public class UserApplicationService {
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final LdapDirectoryService ldapDirectoryService;
+    private final LdapGroupService ldapGroupService;
     private final AuditLogRepository auditLogRepository;
     private final PolicyRefreshService policyRefreshService;
     private final PasswordPolicyValidator passwordPolicyValidator;
@@ -48,12 +51,13 @@ public class UserApplicationService {
     @Transactional
     public User createUser(CreateUserCommand command) {
         passwordPolicyValidator.validate(command.initialPassword());
+        Department department = null;
         userRepository.findByUsername(command.username())
             .ifPresent(user -> {
                 throw new BizException("USER_DUPLICATE", "用户名已存在");
             });
         if (command.deptCode() != null && !command.deptCode().isBlank()) {
-            departmentRepository.findByDeptCode(command.deptCode())
+            department = departmentRepository.findByDeptCode(command.deptCode())
                 .orElseThrow(() -> new BizException("DEPT_NOT_FOUND", "部门不存在"));
         }
         if (ldapDirectoryService.existsByUid(command.username())) {
@@ -72,6 +76,7 @@ public class UserApplicationService {
             .build());
         String ldapDn = ldapDirectoryService.createUser(saved, command.initialPassword());
         saved = userRepository.save(saved.toBuilder().ldapDn(ldapDn).build());
+        syncUserDepartmentGroup(saved, department);
         userRepository.assignRoles(saved.getId(), command.roleIds());
         policyRefreshService.refresh();
         auditLogRepository.save(AuditLog.builder()
@@ -94,8 +99,9 @@ public class UserApplicationService {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         permissionLevelRuleService.checkCanModifyBasicUser(command.operator(), user);
+        Department department = null;
         if (command.deptCode() != null && !command.deptCode().isBlank()) {
-            departmentRepository.findByDeptCode(command.deptCode())
+            department = departmentRepository.findByDeptCode(command.deptCode())
                 .orElseThrow(() -> new BizException("DEPT_NOT_FOUND", "部门不存在"));
         }
         User updated = user.toBuilder()
@@ -107,6 +113,7 @@ public class UserApplicationService {
             .build();
         userRepository.updateProfile(updated);
         ldapDirectoryService.updateUser(updated);
+        syncUserDepartmentMembership(user, updated, department);
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
             .operationType("USER_UPDATE")
@@ -153,6 +160,7 @@ public class UserApplicationService {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
+        ldapGroupService.removeUserFromAllGroups(user.getUsername());
         // 目录侧先删条目，避免逻辑删除后仍可通过 LDAP 认证。
         ldapDirectoryService.deleteUser(user.getUsername());
         // 业务库只做逻辑删除，保留审计和后续恢复基础。
@@ -226,5 +234,35 @@ public class UserApplicationService {
      */
     private int nextTokenVersion(User user) {
         return user.getTokenVersion() == null ? 1 : user.getTokenVersion() + 1;
+    }
+
+    /**
+     * 按固定映射规则同步用户所属部门到 LDAP 分组。
+     */
+    private void syncUserDepartmentGroup(User user, Department department) {
+        if (department == null) {
+            return;
+        }
+        ldapGroupService.createGroup(department.getDeptCode(), department.getDeptName());
+        ldapGroupService.addUserToGroup(user.getUsername(), department.getDeptCode());
+    }
+
+    /**
+     * 在用户部门变更时同步更新 LDAP 分组成员关系。
+     */
+    private void syncUserDepartmentMembership(User originalUser, User updatedUser, Department newDepartment) {
+        String oldDeptCode = originalUser.getDeptCode();
+        String newDeptCode = updatedUser.getDeptCode();
+        if (oldDeptCode != null && !oldDeptCode.isBlank() && !oldDeptCode.equals(newDeptCode)) {
+            ldapGroupService.removeUserFromGroup(updatedUser.getUsername(), oldDeptCode);
+        }
+        if (newDepartment != null) {
+            ldapGroupService.createGroup(newDepartment.getDeptCode(), newDepartment.getDeptName());
+        }
+        if (newDeptCode != null && !newDeptCode.isBlank()) {
+            ldapGroupService.addUserToGroup(updatedUser.getUsername(), newDeptCode);
+        } else if (oldDeptCode != null && !oldDeptCode.isBlank()) {
+            ldapGroupService.removeUserFromAllGroups(updatedUser.getUsername());
+        }
     }
 }

@@ -16,5 +16,18 @@ public interface MenuRepository {
     List<Menu> findByIds(List<Long> menuIds);
 
     Optional<Menu> findById(Long id);
-}
 
+    Optional<Menu> findByCode(String menuCode);
+
+    Menu save(Menu menu);
+
+    boolean existsChildren(Long parentId);
+
+    boolean existsRoleBindingConflict(Long menuId, Integer minPermissionLevel);
+
+    void bindRole(Long roleId, Long menuId);
+
+    void removeRoleBindings(Long menuId);
+
+    void delete(Long id);
+}

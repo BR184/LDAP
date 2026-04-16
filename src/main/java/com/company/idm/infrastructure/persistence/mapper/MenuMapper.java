@@ -30,5 +30,13 @@ public interface MenuMapper extends BaseMapper<MenuDO> {
         </script>
         """)
     List<MenuDO> selectByRoleCodes(@Param("roleCodes") Set<String> roleCodes);
-}
 
+    @Select("""
+        SELECT COUNT(1)
+        FROM sys_role_menu rm
+        INNER JOIN sys_role r ON rm.role_id = r.id
+        WHERE rm.menu_id = #{menuId}
+          AND r.permission_level > #{minPermissionLevel}
+        """)
+    long countRoleBindingConflict(@Param("menuId") Long menuId, @Param("minPermissionLevel") Integer minPermissionLevel);
+}

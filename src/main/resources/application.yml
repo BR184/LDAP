@@ -53,5 +53,6 @@ app:
     mode: stub
     base-dn: dc=corp,dc=local
     people-ou: ou=people
+    groups-ou: ou=groups
     stub-users:
       admin: admin123456

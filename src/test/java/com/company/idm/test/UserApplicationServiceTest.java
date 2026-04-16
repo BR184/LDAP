@@ -11,6 +11,7 @@ import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.domain.ldap.LdapDirectoryService;
+import com.company.idm.domain.ldap.LdapGroupService;
 import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
@@ -48,6 +49,9 @@ class UserApplicationServiceTest {
 
     @Mock
     private LdapDirectoryService ldapDirectoryService;
+
+    @Mock
+    private LdapGroupService ldapGroupService;
 
     @Mock
     private AuditLogRepository auditLogRepository;
@@ -92,6 +96,8 @@ class UserApplicationServiceTest {
 
         assertThat(created.getLdapDn()).isEqualTo("uid=zhangsan,ou=people,dc=corp,dc=local");
         verify(passwordPolicyValidator).validate("Password@123");
+        verify(ldapGroupService).createGroup("D001", "研发中心");
+        verify(ldapGroupService).addUserToGroup("zhangsan", "D001");
         verify(userRepository).assignRoles(2L, List.of(1L));
         verify(policyRefreshService).refresh();
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
@@ -116,6 +122,9 @@ class UserApplicationServiceTest {
         verify(permissionLevelRuleService).checkCanModifyBasicUser("admin", existing);
         verify(userRepository).updateProfile(any(User.class));
         verify(ldapDirectoryService).updateUser(any(User.class));
+        verify(ldapGroupService).removeUserFromGroup("zhangsan", "D001");
+        verify(ldapGroupService).createGroup("D002", "运维部");
+        verify(ldapGroupService).addUserToGroup("zhangsan", "D002");
     }
 
     @Test
@@ -161,6 +170,7 @@ class UserApplicationServiceTest {
         userApplicationService.deleteUser(new com.company.idm.application.user.DeleteUserCommand(2L, "admin"));
 
         verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", existing);
+        verify(ldapGroupService).removeUserFromAllGroups("zhangsan");
         verify(ldapDirectoryService).deleteUser("zhangsan");
         verify(userRepository).logicalDelete(2L, 3);
     }

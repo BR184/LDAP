@@ -125,4 +125,11 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
             throw new BizException("ROLE_MENU_BIND_FORBIDDEN", "角色权限等级不足以绑定目标菜单");
         }
     }
+
+    @Override
+    public void checkCanManageMenu(String operatorUsername) {
+        if (!isAdmin(operatorUsername)) {
+            throw new BizException("AUTH_FORBIDDEN", "仅管理员允许维护菜单");
+        }
+    }
 }
