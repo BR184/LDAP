@@ -42,7 +42,7 @@ class PrototypeIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.username").value("admin"))
-            .andExpect(jsonPath("$.data.roleCodes[0]").value("SUPER_ADMIN"));
+            .andExpect(jsonPath("$.data.roleCodes[0]").value("ADMIN"));
     }
 
     @Test
@@ -176,6 +176,7 @@ class PrototypeIntegrationTest {
                     {
                       "roleCode": "%s",
                       "roleName": "访客角色",
+                      "permissionLevel": 5,
                       "remark": "仅用于异常处理测试"
                     }
                     """.formatted(roleCode)))

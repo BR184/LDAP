@@ -73,7 +73,7 @@
 - 平台管理员登录、登出、令牌续期
 - 用户新增、编辑、查询、禁用、启用、重置密码
 - 用户与 LDAP 目录信息双向映射
-- 角色管理、权限点管理、用户角色分配
+- 角色管理、菜单授权、用户角色分配
 - 基于 Casbin 的接口级和按钮级授权
 - 为后续 API 网关、消息管理、调度引擎、流程中心、插件管理预留清晰的领域边界与扩展接口
 - 审计日志、基础单元测试、集成测试
@@ -271,7 +271,7 @@ corp-idm-platform
 | --- | --- | --- |
 | 认证鉴权模块 | 一期实现 | 平台登录、JWT、Casbin 授权 |
 | 用户管理模块 | 一期实现 | 用户增删改查、启停用、密码重置、LDAP 映射 |
-| 角色权限管理模块 | 一期实现 | 角色、权限点、用户角色绑定、资源授权 |
+| 角色权限管理模块 | 一期实现 | 角色、菜单、用户角色绑定、资源授权与权限等级控制 |
 | LDAP 目录服务模块 | 一期实现 | LDAP 查询、写入、更新、密码修改 |
 | 审计日志模块 | 一期实现简版 | 记录登录、用户变更、角色变更、权限变更 |
 | API 网关模块 | 后续预留 | 统一 API 接入、鉴权透传、接口治理、限流与审计接入 |
@@ -309,8 +309,10 @@ corp-idm-platform
 - 部门 `Department`
 - LDAP 账户映射 `LdapAccount`
 - 角色 `Role`
+- 菜单 `Menu`
 - 权限 `Permission`
 - 用户角色关系 `UserRole`
+- 角色菜单关系 `RoleMenu`
 - 角色权限关系 `RolePermission`
 - 审计日志 `AuditLog`
 
@@ -452,7 +454,7 @@ sequenceDiagram
 
 管理员重置密码规则：
 
-- 仅拥有 `SUPER_ADMIN` 角色的管理员允许执行
+- 仅拥有 `ADMIN` 角色的管理员允许执行
 - 当前阶段固定重置密码为 `123456`
 - 不开启首次登录强制改密
 - 重置成功后递增 `token_version`
@@ -480,20 +482,35 @@ sequenceDiagram
 
 #### 5.4.1 模型选择
 
-平台采用 RBAC 模型，并结合 Casbin 实现策略判定：
+平台当前采用“用户-角色-菜单”作为主关系模型，并以 `permission_level` 作为对象级操作边界控制字段：
 
 - 用户 `User`
 - 角色 `Role`
-- 权限 `Permission`
+- 菜单 `Menu`
 - 用户与角色关系 `UserRole`
-- 角色与权限关系 `RolePermission`
+- 角色与菜单关系 `RoleMenu`
+- 接口权限 `Permission`（用于 Casbin 的运行时接口鉴权）
 
-权限粒度建议支持：
+当前阶段设计约束如下：
 
-- 菜单级
-- 页面级
-- 按钮级
-- 接口级
+- 系统初始化自动生成两个默认角色：`ADMIN`、`NORMAL_USER`
+- `ADMIN.permission_level = 1`
+- `NORMAL_USER.permission_level = 3`
+- 第三方导入用户默认绑定 `NORMAL_USER`
+- 当前允许创建、更新、删除自定义角色，并在创建和更新角色时手动指定 `permission_level`
+- 菜单授权默认只给 `ADMIN` 绑定全部菜单
+- `NORMAL_USER` 默认不绑定任何后台管理菜单，仅保留查看个人信息、修改本人密码等基础功能接口
+
+多角色用户的权限计算规则：
+
+- 用户生效权限等级 = 其所拥有角色中最小的 `permission_level`
+- 用户可见菜单 = 其所有角色绑定菜单的并集
+
+对象级权限控制规则：
+
+- 对用户基础信息修改：仅允许修改 `permission_level` 低于自己的用户
+- 对密码重置、状态控制、删除等敏感操作：仅管理员允许执行
+- 对角色、菜单授权等后台高风险操作：通过接口准入 + `permission_level` 规则双重控制
 
 #### 5.4.2 Casbin 模型建议
 
@@ -522,26 +539,67 @@ m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
 - `obj` 表示资源标识，例如 `/api/v1/users`
 - `act` 表示动作，例如 `GET`、`POST`、`EXPORT`
 - 用户与角色的归属关系可映射为 Casbin 中的 `g` 规则
+- Casbin 在当前方案中主要负责接口级准入，而不是代替 `permission_level` 做对象级操作判断
 
 #### 5.4.3 权限数据维护策略
 
 推荐采用“双层模型”：
 
-- 业务展示层使用 `sys_role`、`sys_permission`、`sys_user_role`、`sys_role_permission`
+- 业务展示层使用 `sys_role`、`sys_menu`、`sys_user_role`、`sys_role_menu`
 - 运行授权层使用 Casbin 策略数据进行快速判定
 
 权限变更时的处理流程：
 
-1. 更新业务关系表
-2. 生成或刷新 Casbin 策略
-3. 刷新本地权限缓存
-4. 记录审计日志
+1. 更新角色、菜单或用户角色关系
+2. 角色菜单关系用于前端菜单树渲染
+3. 角色与接口权限关系用于刷新 Casbin 策略
+4. 权限等级规则服务负责“谁能改谁”的业务判断
+5. 记录审计日志
 
 这样可以兼顾：
 
 - 管理界面的可维护性
 - Casbin 的高效运行时判定
-- 后续支持数据权限或多应用权限模型扩展
+- 基于 `permission_level` 的对象级控制
+- 后续支持自定义角色、多角色扩展或更细粒度数据权限模型
+
+#### 5.4.4 角色管理规则
+
+当前角色管理规则如下：
+
+- 角色支持创建、更新、删除
+- `role_code` 全局唯一，创建后不允许修改
+- 创建、更新角色时允许手动设置 `permission_level`
+- 系统初始化内置角色 `ADMIN` 与 `NORMAL_USER`
+- 删除角色前必须校验是否仍被用户绑定
+- 被用户绑定的角色不允许直接删除
+
+#### 5.4.5 菜单授权规则
+
+菜单授权用于前端菜单树渲染，不直接承担对象级权限判断。
+
+当前规则如下：
+
+- `ADMIN` 默认绑定全部菜单
+- `NORMAL_USER` 默认不绑定后台管理菜单
+- 自定义角色菜单由管理员手工绑定
+- 菜单可预留 `min_permission_level` 字段，用于限制低等级角色绑定高风险菜单
+
+#### 5.4.6 当前原型落地说明
+
+当前原型已实现以下角色权限管理能力：
+
+- 角色列表
+- 角色详情
+- 角色创建
+- 角色更新
+- 角色状态更新
+- 角色删除
+- 角色菜单绑定
+- 用户分配角色
+- 全量菜单树查询
+- 当前用户菜单树查询
+- 基于 `permission_level` 的基础对象操作规则服务
 
 ### 5.5 LDAP 目录服务设计
 
@@ -766,6 +824,8 @@ flowchart LR
 | id | bigint | 主键 |
 | role_code | varchar(64) | 角色编码，唯一 |
 | role_name | varchar(64) | 角色名称 |
+| permission_level | int | 权限等级，最小为 1，数值越小权限越高 |
+| built_in | tinyint | 是否系统内置角色 |
 | status | tinyint | 状态 |
 | remark | varchar(256) | 备注 |
 | creator | varchar(64) | 创建人 |
@@ -773,7 +833,27 @@ flowchart LR
 | gmt_create | datetime | 创建时间 |
 | gmt_modified | datetime | 修改时间 |
 
-#### 6.1.3 权限表 `sys_permission`
+#### 6.1.3 菜单表 `sys_menu`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | bigint | 主键 |
+| menu_code | varchar(64) | 菜单编码，唯一 |
+| menu_name | varchar(128) | 菜单名称 |
+| parent_id | bigint | 父菜单 ID |
+| menu_type | varchar(32) | CATALOG、MENU |
+| path | varchar(256) | 前端路由路径 |
+| component | varchar(256) | 前端组件路径 |
+| icon | varchar(64) | 图标 |
+| sort_no | int | 排序 |
+| status | tinyint | 状态 |
+| visible | tinyint | 是否可见 |
+| min_permission_level | int | 允许绑定该菜单的最低角色等级 |
+| remark | varchar(256) | 备注 |
+| gmt_create | datetime | 创建时间 |
+| gmt_modified | datetime | 修改时间 |
+
+#### 6.1.4 权限表 `sys_permission`
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -790,12 +870,13 @@ flowchart LR
 | gmt_create | datetime | 创建时间 |
 | gmt_modified | datetime | 修改时间 |
 
-#### 6.1.4 关系表
+#### 6.1.5 关系表
 
 - `sys_user_role(user_id, role_id, gmt_create, creator)`
+- `sys_role_menu(role_id, menu_id, gmt_create, creator)`
 - `sys_role_permission(role_id, permission_id, gmt_create, creator)`
 
-#### 6.1.5 审计表 `sys_audit_log`
+#### 6.1.6 审计表 `sys_audit_log`
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -811,7 +892,7 @@ flowchart LR
 | error_msg | varchar(512) | 错误信息 |
 | gmt_create | datetime | 创建时间 |
 
-#### 6.1.6 Casbin 表
+#### 6.1.7 Casbin 表
 
 若采用 JDBC Adapter，可直接使用标准 `casbin_rule` 表。
 
@@ -825,7 +906,7 @@ flowchart LR
 - `v4`
 - `v5`
 
-#### 6.1.7 后续预留表
+#### 6.1.8 后续预留表
 
 为匹配基础服务层红框模块，建议按需预留如下表设计：
 
@@ -846,8 +927,10 @@ flowchart LR
 - `sys_user.uk_mobile`
 - `sys_user.idx_employee_no`
 - `sys_role.uk_role_code`
+- `sys_menu.uk_menu_code`
 - `sys_permission.uk_permission_code`
 - `sys_user_role.uk_user_role`
+- `sys_role_menu.uk_role_menu`
 - `sys_role_permission.uk_role_permission`
 
 ### 6.3 表设计规范
@@ -885,22 +968,30 @@ flowchart LR
 - `PUT /api/v1/users/me/password`
 - `PUT /api/v1/users/{id}/status`
 - `PUT /api/v1/users/{id}/password/reset`
+- `PUT /api/v1/users/{id}/roles`
 
 后续预留：
 
 - `GET /api/v1/users/{id}`
-- `PUT /api/v1/users/{id}/roles`
 - `POST /api/v1/users/{id}/sync-ldap`
 
-### 7.3 角色权限接口
+### 7.3 角色与菜单接口
+
+当前已落地：
 
 - `GET /api/v1/roles`
+- `GET /api/v1/roles/{id}`
 - `POST /api/v1/roles`
 - `PUT /api/v1/roles/{id}`
+- `DELETE /api/v1/roles/{id}`
 - `PUT /api/v1/roles/{id}/status`
+- `PUT /api/v1/roles/{id}/menus`
+- `GET /api/v1/menus/tree`
+- `GET /api/v1/menus/self/tree`
+
+保留的接口权限原型能力：
+
 - `GET /api/v1/permissions/tree`
-- `POST /api/v1/permissions`
-- `PUT /api/v1/permissions/{id}`
 - `PUT /api/v1/roles/{id}/permissions`
 
 ### 7.4 未来预留接口

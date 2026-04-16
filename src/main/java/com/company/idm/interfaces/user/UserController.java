@@ -7,6 +7,8 @@ import com.company.idm.application.user.ResetPasswordCommand;
 import com.company.idm.application.user.UpdateUserCommand;
 import com.company.idm.application.user.UpdateUserStatusCommand;
 import com.company.idm.application.user.UserApplicationService;
+import com.company.idm.application.rbac.AssignUserRolesCommand;
+import com.company.idm.application.rbac.RbacApplicationService;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.domain.user.User;
 import jakarta.validation.Valid;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserApplicationService userApplicationService;
+    private final RbacApplicationService rbacApplicationService;
 
     @GetMapping
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'GET')")
@@ -124,6 +127,17 @@ public class UserController {
     ) {
         String resetPassword = userApplicationService.resetPassword(new ResetPasswordCommand(id, username));
         return ApiResponse.success(new ResetPasswordResponse(resetPassword));
+    }
+
+    @PutMapping("/{id}/roles")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/roles', 'PUT')")
+    public ApiResponse<Void> assignRoles(
+        @PathVariable Long id,
+        @Valid @RequestBody AssignUserRolesRequest request,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        rbacApplicationService.assignUserRoles(new AssignUserRolesCommand(id, request.roleIds(), username));
+        return ApiResponse.success();
     }
 
     private UserResponse toResponse(User user) {

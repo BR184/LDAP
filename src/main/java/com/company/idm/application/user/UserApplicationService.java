@@ -8,6 +8,7 @@ import com.company.idm.domain.audit.AuditLog;
 import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.domain.ldap.LdapDirectoryService;
+import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
@@ -23,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserApplicationService {
 
-    private static final String SUPER_ADMIN_ROLE_CODE = "SUPER_ADMIN";
     private static final String DEFAULT_RESET_PASSWORD = "123456";
 
     private final UserRepository userRepository;
@@ -32,6 +32,7 @@ public class UserApplicationService {
     private final AuditLogRepository auditLogRepository;
     private final PolicyRefreshService policyRefreshService;
     private final PasswordPolicyValidator passwordPolicyValidator;
+    private final PermissionLevelRuleService permissionLevelRuleService;
 
     /**
      * 查询当前所有未逻辑删除的用户，用于后台用户列表展示。
@@ -92,6 +93,7 @@ public class UserApplicationService {
     public User updateUser(UpdateUserCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        permissionLevelRuleService.checkCanModifyBasicUser(command.operator(), user);
         if (command.deptCode() != null && !command.deptCode().isBlank()) {
             departmentRepository.findByDeptCode(command.deptCode())
                 .orElseThrow(() -> new BizException("DEPT_NOT_FOUND", "部门不存在"));
@@ -124,6 +126,7 @@ public class UserApplicationService {
     public void updateStatus(UpdateUserStatusCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
         int nextTokenVersion = nextTokenVersion(user);
         userRepository.updateStatus(command.userId(), command.statusCode(), nextTokenVersion);
         if (command.statusCode() == UserStatus.ENABLED.getCode()) {
@@ -149,6 +152,7 @@ public class UserApplicationService {
     public void deleteUser(DeleteUserCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
         // 目录侧先删条目，避免逻辑删除后仍可通过 LDAP 认证。
         ldapDirectoryService.deleteUser(user.getUsername());
         // 业务库只做逻辑删除，保留审计和后续恢复基础。
@@ -199,11 +203,9 @@ public class UserApplicationService {
      */
     @Transactional
     public String resetPassword(ResetPasswordCommand command) {
-        if (!userRepository.findRoleCodesByUsername(command.operator()).contains(SUPER_ADMIN_ROLE_CODE)) {
-            throw new BizException("AUTH_FORBIDDEN", "仅管理员允许重置密码");
-        }
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
         passwordPolicyValidator.validate(DEFAULT_RESET_PASSWORD);
         ldapDirectoryService.resetPassword(user.getUsername(), DEFAULT_RESET_PASSWORD);
         userRepository.bumpTokenVersion(user.getId(), nextTokenVersion(user));

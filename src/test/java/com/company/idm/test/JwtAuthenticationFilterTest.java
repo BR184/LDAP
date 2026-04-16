@@ -64,10 +64,10 @@ class JwtAuthenticationFilterTest {
             .status(UserStatus.ENABLED)
             .sourceType(SourceType.MANUAL)
             .tokenVersion(2)
-            .roleCodes(Set.of("SUPER_ADMIN"))
+            .roleCodes(Set.of("ADMIN"))
             .build();
 
-        when(tokenService.parse("token")).thenReturn(new ParsedToken(1L, "admin", 2, Set.of("SUPER_ADMIN"), java.time.Instant.now()));
+        when(tokenService.parse("token")).thenReturn(new ParsedToken(1L, "admin", 2, Set.of("ADMIN"), java.time.Instant.now()));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
 
         jwtAuthenticationFilter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
@@ -78,4 +78,3 @@ class JwtAuthenticationFilterTest {
         assertThat(((AuthenticatedUser) authentication.getPrincipal()).username()).isEqualTo("admin");
     }
 }
-

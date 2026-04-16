@@ -51,12 +51,12 @@ class AuthApplicationServiceTest {
     @Test
     void shouldLoginSuccessfully() {
         User user = buildUser(UserStatus.ENABLED, 0);
-        LoginResult expected = new LoginResult(1L, "admin", Set.of("SUPER_ADMIN"), "token", Instant.now());
+        LoginResult expected = new LoginResult(1L, "admin", Set.of("ADMIN"), "token", Instant.now());
 
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
         when(ldapDirectoryService.authenticate("admin", "admin123")).thenReturn(true);
-        when(userRepository.findRoleCodesByUsername("admin")).thenReturn(Set.of("SUPER_ADMIN"));
-        when(tokenService.generate(org.mockito.ArgumentMatchers.any(User.class), org.mockito.ArgumentMatchers.eq(Set.of("SUPER_ADMIN"))))
+        when(userRepository.findRoleCodesByUsername("admin")).thenReturn(Set.of("ADMIN"));
+        when(tokenService.generate(org.mockito.ArgumentMatchers.any(User.class), org.mockito.ArgumentMatchers.eq(Set.of("ADMIN"))))
             .thenReturn(expected);
 
         LoginResult actual = authApplicationService.login(new LoginCommand("admin", "admin123"));
@@ -91,11 +91,11 @@ class AuthApplicationServiceTest {
     void shouldLoadProfileWithRoleCodes() {
         User user = buildUser(UserStatus.ENABLED, 0);
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
-        when(userRepository.findRoleCodesByUsername("admin")).thenReturn(Set.of("SUPER_ADMIN"));
+        when(userRepository.findRoleCodesByUsername("admin")).thenReturn(Set.of("ADMIN"));
 
         User profile = authApplicationService.loadProfile("admin");
 
-        assertThat(profile.getRoleCodes()).containsExactly("SUPER_ADMIN");
+        assertThat(profile.getRoleCodes()).containsExactly("ADMIN");
     }
 
     private User buildUser(UserStatus status, int tokenVersion) {
@@ -115,4 +115,3 @@ class AuthApplicationServiceTest {
             .build();
     }
 }
-

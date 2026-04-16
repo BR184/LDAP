@@ -34,7 +34,7 @@ class CasbinAccessServiceTest {
 
     @Test
     void shouldDelegateToEnforcer() {
-        AuthenticatedUser principal = new AuthenticatedUser(1L, "admin", 0, Set.of("SUPER_ADMIN"));
+        AuthenticatedUser principal = new AuthenticatedUser(1L, "admin", 0, Set.of("ADMIN"));
         UsernamePasswordAuthenticationToken authentication =
             new UsernamePasswordAuthenticationToken(principal, null, List.of());
         when(enforcer.enforce("admin", "/api/v1/users", "GET")).thenReturn(true);
@@ -42,4 +42,3 @@ class CasbinAccessServiceTest {
         assertThat(casbinAccessService.check(authentication, "/api/v1/users", "GET")).isTrue();
     }
 }
-

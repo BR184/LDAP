@@ -4,12 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.infrastructure.persistence.dataobject.RoleDO;
+import com.company.idm.infrastructure.persistence.dataobject.RoleMenuDO;
 import com.company.idm.infrastructure.persistence.dataobject.RolePermissionDO;
+import com.company.idm.infrastructure.persistence.dataobject.UserRoleDO;
 import com.company.idm.infrastructure.persistence.mapper.RoleMapper;
+import com.company.idm.infrastructure.persistence.mapper.RoleMenuMapper;
 import com.company.idm.infrastructure.persistence.mapper.RolePermissionMapper;
+import com.company.idm.infrastructure.persistence.mapper.UserRoleMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -22,6 +27,8 @@ public class MybatisRoleRepository implements RoleRepository {
 
     private final RoleMapper roleMapper;
     private final RolePermissionMapper rolePermissionMapper;
+    private final RoleMenuMapper roleMenuMapper;
+    private final UserRoleMapper userRoleMapper;
 
     @Override
     public Optional<Role> findById(Long id) {
@@ -38,9 +45,31 @@ public class MybatisRoleRepository implements RoleRepository {
     @Override
     public List<Role> findAll() {
         return roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getStatus, 1)
                 .orderByAsc(RoleDO::getId))
             .stream()
+            .map(this::toDomain)
+            .toList();
+    }
+
+    @Override
+    public List<Role> findByCodes(Set<String> roleCodes) {
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            return List.of();
+        }
+        return roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
+                .in(RoleDO::getRoleCode, roleCodes)
+                .eq(RoleDO::getStatus, 1))
+            .stream()
+            .map(this::toDomain)
+            .toList();
+    }
+
+    @Override
+    public List<Role> findByIds(List<Long> roleIds) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            return List.of();
+        }
+        return roleMapper.selectBatchIds(roleIds).stream()
             .map(this::toDomain)
             .toList();
     }
@@ -60,6 +89,21 @@ public class MybatisRoleRepository implements RoleRepository {
     }
 
     @Override
+    public void updateStatus(Long id, Integer status) {
+        RoleDO dataObject = new RoleDO();
+        dataObject.setId(id);
+        dataObject.setStatus(status);
+        dataObject.setModifier("system");
+        dataObject.setGmtModified(LocalDateTime.now());
+        roleMapper.updateById(dataObject);
+    }
+
+    @Override
+    public void delete(Long id) {
+        roleMapper.deleteById(id);
+    }
+
+    @Override
     public void assignPermissions(Long roleId, List<Long> permissionIds) {
         rolePermissionMapper.delete(new LambdaQueryWrapper<RolePermissionDO>().eq(RolePermissionDO::getRoleId, roleId));
         for (Long permissionId : permissionIds) {
@@ -72,11 +116,31 @@ public class MybatisRoleRepository implements RoleRepository {
         }
     }
 
+    @Override
+    public void bindMenus(Long roleId, List<Long> menuIds) {
+        roleMenuMapper.delete(new LambdaQueryWrapper<RoleMenuDO>().eq(RoleMenuDO::getRoleId, roleId));
+        for (Long menuId : menuIds) {
+            RoleMenuDO relation = new RoleMenuDO();
+            relation.setRoleId(roleId);
+            relation.setMenuId(menuId);
+            relation.setCreator("system");
+            relation.setGmtCreate(LocalDateTime.now());
+            roleMenuMapper.insert(relation);
+        }
+    }
+
+    @Override
+    public boolean existsUserBinding(Long roleId) {
+        return userRoleMapper.selectCount(new LambdaQueryWrapper<UserRoleDO>().eq(UserRoleDO::getRoleId, roleId)) > 0;
+    }
+
     private Role toDomain(RoleDO dataObject) {
         return Role.builder()
             .id(dataObject.getId())
             .roleCode(dataObject.getRoleCode())
             .roleName(dataObject.getRoleName())
+            .permissionLevel(dataObject.getPermissionLevel())
+            .builtIn(dataObject.getBuiltIn())
             .status(dataObject.getStatus())
             .remark(dataObject.getRemark())
             .build();
@@ -87,6 +151,8 @@ public class MybatisRoleRepository implements RoleRepository {
         dataObject.setId(role.getId());
         dataObject.setRoleCode(role.getRoleCode());
         dataObject.setRoleName(role.getRoleName());
+        dataObject.setPermissionLevel(role.getPermissionLevel());
+        dataObject.setBuiltIn(role.getBuiltIn());
         dataObject.setStatus(role.getStatus());
         dataObject.setRemark(role.getRemark());
         dataObject.setCreator("system");

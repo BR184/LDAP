@@ -2,6 +2,7 @@ package com.company.idm.domain.rbac;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 定义角色领域仓储接口与授权关系维护能力。
@@ -14,8 +15,20 @@ public interface RoleRepository {
 
     List<Role> findAll();
 
+    List<Role> findByCodes(Set<String> roleCodes);
+
+    List<Role> findByIds(List<Long> roleIds);
+
     Role save(Role role);
 
+    void updateStatus(Long id, Integer status);
+
+    void delete(Long id);
+
     void assignPermissions(Long roleId, List<Long> permissionIds);
+
+    void bindMenus(Long roleId, List<Long> menuIds);
+
+    boolean existsUserBinding(Long roleId);
 }
 

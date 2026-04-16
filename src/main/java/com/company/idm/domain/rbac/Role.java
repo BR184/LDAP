@@ -17,6 +17,8 @@ public class Role {
     private Long id;
     private String roleCode;
     private String roleName;
+    private Integer permissionLevel;
+    private Integer builtIn;
     private Integer status;
     private String remark;
 }

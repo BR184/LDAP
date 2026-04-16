@@ -30,16 +30,15 @@ class JwtTokenServiceTest {
             .status(UserStatus.ENABLED)
             .sourceType(SourceType.MANUAL)
             .tokenVersion(3)
-            .roleCodes(Set.of("SUPER_ADMIN"))
+            .roleCodes(Set.of("ADMIN"))
             .build();
 
-        LoginResult result = jwtTokenService.generate(user, Set.of("SUPER_ADMIN"));
+        LoginResult result = jwtTokenService.generate(user, Set.of("ADMIN"));
         ParsedToken parsedToken = jwtTokenService.parse(result.accessToken());
 
         assertThat(parsedToken.userId()).isEqualTo(1L);
         assertThat(parsedToken.username()).isEqualTo("admin");
         assertThat(parsedToken.tokenVersion()).isEqualTo(3);
-        assertThat(parsedToken.roleCodes()).containsExactly("SUPER_ADMIN");
+        assertThat(parsedToken.roleCodes()).containsExactly("ADMIN");
     }
 }
-

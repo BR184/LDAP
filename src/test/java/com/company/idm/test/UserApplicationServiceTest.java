@@ -11,6 +11,7 @@ import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.domain.ldap.LdapDirectoryService;
+import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
@@ -56,6 +57,9 @@ class UserApplicationServiceTest {
 
     @Mock
     private PasswordPolicyValidator passwordPolicyValidator;
+
+    @Mock
+    private PermissionLevelRuleService permissionLevelRuleService;
 
     @InjectMocks
     private UserApplicationService userApplicationService;
@@ -109,6 +113,7 @@ class UserApplicationServiceTest {
 
         assertThat(updated.getRealName()).isEqualTo("张三-更新");
         assertThat(updated.getDeptCode()).isEqualTo("D002");
+        verify(permissionLevelRuleService).checkCanModifyBasicUser("admin", existing);
         verify(userRepository).updateProfile(any(User.class));
         verify(ldapDirectoryService).updateUser(any(User.class));
     }
@@ -131,6 +136,7 @@ class UserApplicationServiceTest {
 
         userApplicationService.updateStatus(new UpdateUserStatusCommand(2L, UserStatus.DISABLED.getCode(), "admin"));
 
+        verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", existing);
         verify(userRepository).updateStatus(2L, UserStatus.DISABLED.getCode(), 6);
         verify(ldapDirectoryService).disableUser("zhangsan");
     }
@@ -142,6 +148,7 @@ class UserApplicationServiceTest {
 
         userApplicationService.updateStatus(new UpdateUserStatusCommand(2L, UserStatus.ENABLED.getCode(), "admin"));
 
+        verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", existing);
         verify(userRepository).updateStatus(2L, UserStatus.ENABLED.getCode(), 1);
         verify(ldapDirectoryService).enableUser("zhangsan");
     }
@@ -153,6 +160,7 @@ class UserApplicationServiceTest {
 
         userApplicationService.deleteUser(new com.company.idm.application.user.DeleteUserCommand(2L, "admin"));
 
+        verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", existing);
         verify(ldapDirectoryService).deleteUser("zhangsan");
         verify(userRepository).logicalDelete(2L, 3);
     }
@@ -186,12 +194,12 @@ class UserApplicationServiceTest {
     @Test
     void shouldResetPasswordWithDefaultPasswordForAdmin() {
         User existing = buildUser(2L, "zhangsan", UserStatus.ENABLED, 2);
-        when(userRepository.findRoleCodesByUsername("admin")).thenReturn(Set.of("SUPER_ADMIN"));
         when(userRepository.findById(2L)).thenReturn(Optional.of(existing));
 
         String password = userApplicationService.resetPassword(new com.company.idm.application.user.ResetPasswordCommand(2L, "admin"));
 
         assertThat(password).isEqualTo("123456");
+        verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", existing);
         verify(passwordPolicyValidator).validate("123456");
         verify(ldapDirectoryService).resetPassword("zhangsan", "123456");
         verify(userRepository).bumpTokenVersion(2L, 3);
@@ -199,11 +207,14 @@ class UserApplicationServiceTest {
 
     @Test
     void shouldRejectResetPasswordWhenOperatorNotAdmin() {
-        when(userRepository.findRoleCodesByUsername("zhangsan")).thenReturn(Set.of("EMPLOYEE"));
+        User existing = buildUser(2L, "zhangsan", UserStatus.ENABLED, 2);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(existing));
+        org.mockito.Mockito.doThrow(new BizException("AUTH_FORBIDDEN", "仅管理员允许执行敏感操作"))
+            .when(permissionLevelRuleService).checkCanModifySensitiveUser("zhangsan", existing);
 
         assertThatThrownBy(() -> userApplicationService.resetPassword(new com.company.idm.application.user.ResetPasswordCommand(2L, "zhangsan")))
             .isInstanceOf(BizException.class)
-            .hasMessage("仅管理员允许重置密码");
+            .hasMessage("仅管理员允许执行敏感操作");
     }
 
     private User buildUser(Long id, String username, UserStatus status, Integer tokenVersion) {
@@ -219,7 +230,7 @@ class UserApplicationServiceTest {
             .sourceType(SourceType.MANUAL)
             .ldapDn("uid=" + username + ",ou=people,dc=corp,dc=local")
             .tokenVersion(tokenVersion)
-            .roleCodes(Set.of("SUPER_ADMIN"))
+            .roleCodes(Set.of("ADMIN"))
             .build();
     }
 }

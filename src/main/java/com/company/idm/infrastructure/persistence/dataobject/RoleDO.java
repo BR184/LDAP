@@ -15,6 +15,8 @@ public class RoleDO {
     private Long id;
     private String roleCode;
     private String roleName;
+    private Integer permissionLevel;
+    private Integer builtIn;
     private Integer status;
     private String remark;
     private String creator;
@@ -52,6 +54,22 @@ public class RoleDO {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public Integer getPermissionLevel() {
+        return permissionLevel;
+    }
+
+    public void setPermissionLevel(Integer permissionLevel) {
+        this.permissionLevel = permissionLevel;
+    }
+
+    public Integer getBuiltIn() {
+        return builtIn;
+    }
+
+    public void setBuiltIn(Integer builtIn) {
+        this.builtIn = builtIn;
     }
 
     public String getRemark() {
