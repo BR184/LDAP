@@ -66,6 +66,10 @@ public class SqlLogInterceptor implements Interceptor {
         return Plugin.wrap(target, this);
     }
 
+    /**
+     * 统一输出 SQL 执行日志。
+     * 根据执行耗时和异常结果决定日志级别，并在日志中附带格式化后的 SQL、参数摘要和结果摘要。
+     */
     private void writeSqlLog(Invocation invocation, Object result, Throwable throwable, long costNanos) {
         Object[] args = invocation.getArgs();
         MappedStatement mappedStatement = (MappedStatement) args[0];
@@ -93,6 +97,10 @@ public class SqlLogInterceptor implements Interceptor {
             mappedStatement.getId(), mappedStatement.getSqlCommandType(), costMs, sql, params, resultSummary);
     }
 
+    /**
+     * 从 BoundSql 与参数对象中提取可记录的参数值。
+     * 提取过程尽量兼容普通对象、额外参数以及 MyBatis-Plus Wrapper 生成的参数结构。
+     */
     private Map<String, Object> extractParameters(Configuration configuration, BoundSql boundSql, Object parameterObject) {
         Map<String, Object> parameters = new LinkedHashMap<>();
         if (boundSql.getParameterMappings() == null || boundSql.getParameterMappings().isEmpty()) {
@@ -128,4 +136,3 @@ public class SqlLogInterceptor implements Interceptor {
         return parameters;
     }
 }
-

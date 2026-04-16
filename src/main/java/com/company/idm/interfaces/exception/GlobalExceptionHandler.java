@@ -158,6 +158,10 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status).body(ApiResponse.failure(code, message));
     }
 
+    /**
+     * 根据业务错误码推导控制层 HTTP 状态码。
+     * 该映射保持最小集实现，未显式声明的业务异常统一按 400 处理。
+     */
     private HttpStatus resolveBizStatus(String code) {
         if (code == null || code.isBlank()) {
             return HttpStatus.BAD_REQUEST;
@@ -172,6 +176,9 @@ public class GlobalExceptionHandler {
         };
     }
 
+    /**
+     * 统一兜底参数异常消息，避免出现空消息或不稳定输出。
+     */
     private String extractBindingMessage(String message) {
         if (message == null || message.isBlank()) {
             return "请求参数错误";

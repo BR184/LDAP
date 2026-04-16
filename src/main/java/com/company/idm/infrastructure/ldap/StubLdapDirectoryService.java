@@ -46,6 +46,11 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
     }
 
     @Override
+    public void updateUser(User user) {
+        entries.computeIfPresent(user.getUsername(), (key, value) -> value);
+    }
+
+    @Override
     public void enableUser(String username) {
         entries.computeIfPresent(username, (key, value) -> value.withEnabled(true));
     }
@@ -53,6 +58,11 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
     @Override
     public void disableUser(String username) {
         entries.computeIfPresent(username, (key, value) -> value.withEnabled(false));
+    }
+
+    @Override
+    public void deleteUser(String username) {
+        entries.remove(username);
     }
 
     @Override

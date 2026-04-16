@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -213,6 +214,117 @@ class PrototypeIntegrationTest {
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.success").value(false))
             .andExpect(jsonPath("$.code").value("AUTH_FORBIDDEN"));
+    }
+
+    @Test
+    void shouldUpdateDeleteChangeAndResetPasswordForUserManagement() throws Exception {
+        String adminToken = loginAsAdmin();
+        String username = "worker" + System.nanoTime();
+
+        MvcResult createResult = mockMvc.perform(post("/api/v1/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "realName": "员工用户",
+                      "email": "%s@corp.local",
+                      "mobile": "13500000000",
+                      "employeeNo": "E%s",
+                      "deptCode": "D001",
+                      "initialPassword": "123456",
+                      "roleIds": [1]
+                    }
+                    """.formatted(username, username, System.nanoTime())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andReturn();
+
+        long userId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+            .path("data")
+            .path("id")
+            .asLong();
+
+        mockMvc.perform(put("/api/v1/users/{id}", userId)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "realName": "员工用户-更新",
+                      "email": "%s-updated@corp.local",
+                      "mobile": "13511111111",
+                      "employeeNo": "E20002",
+                      "deptCode": "D001"
+                    }
+                    """.formatted(username)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.realName").value("员工用户-更新"))
+            .andExpect(jsonPath("$.data.mobile").value("13511111111"));
+
+        String userToken = login(username, "123456");
+
+        mockMvc.perform(put("/api/v1/users/me/password")
+                .header("Authorization", "Bearer " + userToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "oldPassword": "123456",
+                      "newPassword": "654321",
+                      "confirmPassword": "654321"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "password": "123456"
+                    }
+                    """.formatted(username)))
+            .andExpect(status().isUnauthorized());
+
+        String newToken = login(username, "654321");
+        assertThat(newToken).isNotBlank();
+
+        mockMvc.perform(put("/api/v1/users/{id}/password/reset", userId)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.resetPassword").value("123456"));
+
+        String resetToken = login(username, "123456");
+        assertThat(resetToken).isNotBlank();
+
+        mockMvc.perform(delete("/api/v1/users/{id}", userId)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+
+        MvcResult listResult = mockMvc.perform(get("/api/v1/users")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode users = objectMapper.readTree(listResult.getResponse().getContentAsString()).path("data");
+        boolean exists = false;
+        for (JsonNode user : users) {
+            if (username.equals(user.path("username").asText())) {
+                exists = true;
+                break;
+            }
+        }
+        assertThat(exists).isFalse();
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "password": "123456"
+                    }
+                    """.formatted(username)))
+            .andExpect(status().isUnauthorized());
     }
 
     private String loginAsAdmin() throws Exception {

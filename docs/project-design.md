@@ -116,6 +116,7 @@
 
 - 一期建议引入 Spring Security，负责 JWT 过滤器、登录会话上下文与接口访问拦截。
 - Casbin 负责“是否有权访问资源”，Spring Security 负责“你是谁以及请求是否合法”。
+- 原型阶段可使用 H2 内存库快速联调，并通过 `MODE=MySQL` 保持 SQL 语义尽量贴近 MySQL；测试与生产目标数据库仍应以 MySQL 8.0 为准。
 
 ### 3.2 架构形态选择
 
@@ -344,11 +345,13 @@ corp-idm-platform
 #### 5.3.1 功能范围
 
 - 用户列表查询
+- 用户详情查询
 - 按用户名、姓名、手机号、邮箱、状态筛选
 - 用户新增
 - 用户编辑
 - 用户禁用 / 启用
 - 用户删除逻辑控制
+- 用户本人修改密码
 - 用户密码重置
 - 用户角色分配
 - 同步到 LDAP
@@ -359,9 +362,12 @@ corp-idm-platform
 1. 用户名全局唯一，建议与 LDAP `uid` 一致
 2. 邮箱、手机号可配置是否唯一，默认唯一
 3. 禁用用户后，平台 JWT 登录失效，LDAP 账户同步设置为不可用
-4. 删除用户默认采用逻辑删除，不直接删除 LDAP 条目；应提供“冻结后归档”的运维策略
+4. 删除用户时，在 LDAP 中执行物理删除，在 MySQL 中执行逻辑删除，以便员工再次入职时可恢复业务数据
 5. 密码不落库，不保存明文，不记录日志
-6. 用户创建成功后，必须保证 MySQL 与 LDAP 至少最终一致
+6. 当前密码策略按业务要求执行最小限制：长度不少于 6 位，允许弱口令，允许纯数字口令
+7. 用户修改本人密码时必须校验旧密码，新旧密码不能相同，且修改成功后需使历史 token 失效
+8. 管理员重置用户密码时，当前阶段统一重置为 `123456`，且不启用首次登录强制改密逻辑
+9. 用户创建成功后，必须保证 MySQL 与 LDAP 至少最终一致
 
 #### 5.3.3 用户创建流程
 
@@ -386,6 +392,89 @@ sequenceDiagram
 - 优先本地事务保存业务数据，再调用 LDAP 创建条目
 - 若 LDAP 创建失败，则将用户状态标记为“待同步”，由补偿任务重试
 - 不建议将 LDAP 操作纳入分布式事务，一期采用“本地事务 + 补偿重试”更稳妥
+
+#### 5.3.4 用户更新流程
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理后台
+    participant APP as 应用服务
+    participant DB as MySQL
+    participant LDAP as OpenLDAP
+
+    UI->>APP: 提交更新用户请求
+    APP->>DB: 校验用户存在性
+    APP->>DB: 校验部门等引用数据
+    APP->>DB: 更新用户基础资料
+    APP->>LDAP: 更新 LDAP 条目属性
+    APP->>DB: 写入审计日志
+    APP-->>UI: 返回更新结果
+```
+
+说明：
+
+- 用户更新接口仅维护基础资料，不修改 `username`、`source_type`、`external_id`、`token_version` 等身份主键属性。
+- 用户资料更新后，LDAP 同步更新 `cn`、`mail`、`mobile`、`employeeNumber`、`departmentNumber` 等字段。
+
+#### 5.3.5 用户删除流程
+
+```mermaid
+sequenceDiagram
+    participant UI as 管理后台
+    participant APP as 应用服务
+    participant DB as MySQL
+    participant LDAP as OpenLDAP
+
+    UI->>APP: 提交删除用户请求
+    APP->>DB: 校验用户存在性
+    APP->>LDAP: 物理删除 LDAP 条目
+    APP->>DB: 逻辑删除用户并递增 tokenVersion
+    APP->>DB: 写入审计日志
+    APP-->>UI: 返回删除结果
+```
+
+说明：
+
+- 删除后平台侧通过 `deleted=1` 标记逻辑删除，并同步将用户视为不可登录。
+- 再次入职时可基于 MySQL 中的历史业务数据进行恢复或重建。
+
+#### 5.3.6 密码管理设计
+
+密码管理区分“本人修改密码”和“管理员重置密码”两类场景。
+
+本人修改密码规则：
+
+- 当前登录用户发起
+- 必须校验旧密码
+- 新旧密码不能相同
+- 两次新密码必须一致
+- 修改成功后递增 `token_version`，使旧 token 失效
+
+管理员重置密码规则：
+
+- 仅拥有 `SUPER_ADMIN` 角色的管理员允许执行
+- 当前阶段固定重置密码为 `123456`
+- 不开启首次登录强制改密
+- 重置成功后递增 `token_version`
+
+密码校验规则：
+
+- 密码不能为空
+- 密码长度至少 6 位
+- 不要求大写字母、小写字母、数字、特殊字符的复杂度组合
+
+#### 5.3.7 当前原型落地说明
+
+当前原型已实现以下用户管理能力：
+
+- 用户列表查询
+- 用户新增
+- 用户编辑
+- 用户状态更新
+- 用户删除
+- 用户本人修改密码
+- 管理员重置密码
+- 与 LDAP 的创建、更新、启停、删除、改密联动
 
 ### 5.4 角色权限管理模块设计
 
@@ -506,6 +595,7 @@ userPassword: {SSHA}******
 
 - `createUser`
 - `updateUser`
+- `deleteUser`
 - `disableUser`
 - `enableUser`
 - `resetPassword`
@@ -661,6 +751,7 @@ flowchart LR
 | source_type | varchar(32) | MANUAL、FEISHU |
 | external_id | varchar(128) | 外部系统唯一标识 |
 | ldap_dn | varchar(256) | LDAP 条目 DN |
+| token_version | int | token 版本号，用于使历史 token 失效 |
 | remark | varchar(256) | 备注 |
 | deleted | tinyint | 逻辑删除标记 |
 | creator | varchar(64) | 创建人 |
@@ -773,19 +864,31 @@ flowchart LR
 
 ### 7.1 认证接口
 
+当前已落地：
+
 - `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
+
+后续预留：
+
 - `POST /api/v1/auth/logout`
 - `POST /api/v1/auth/refresh`
-- `GET /api/v1/auth/me`
 
 ### 7.2 用户管理接口
 
+当前已落地：
+
 - `GET /api/v1/users`
-- `GET /api/v1/users/{id}`
 - `POST /api/v1/users`
 - `PUT /api/v1/users/{id}`
+- `DELETE /api/v1/users/{id}`
+- `PUT /api/v1/users/me/password`
 - `PUT /api/v1/users/{id}/status`
 - `PUT /api/v1/users/{id}/password/reset`
+
+后续预留：
+
+- `GET /api/v1/users/{id}`
 - `PUT /api/v1/users/{id}/roles`
 - `POST /api/v1/users/{id}/sync-ldap`
 
@@ -844,10 +947,12 @@ flowchart LR
 ### 8.3 密码与敏感数据处理
 
 - 平台不保存明文密码
-- LDAP 中密码使用安全散列算法
+- LDAP 中密码应使用安全散列算法；原型环境中的 stub LDAP 仅用于联调，不代表生产密码存储方案
+- 当前业务密码策略为最少 6 位，不强制复杂度组合
+- 当前原型重置密码固定为 `123456`
 - 日志中脱敏手机号、邮箱、DN、token
 - JWT 建议设置较短过期时间，例如 30 分钟
-- 支持 token 黑名单或版本号失效机制，用于禁用用户后的即时失效
+- 支持 token 黑名单或版本号失效机制，用于禁用、删除、改密、重置密码后的即时失效
 
 ### 8.4 审计要求
 
@@ -883,6 +988,24 @@ flowchart LR
 - Token 中只保存必要信息，例如用户 ID、用户名、角色摘要、版本号
 - 不在 JWT 中放置敏感个人信息
 - 配置统一签名密钥与过期时间
+
+### 9.5 SQL 日志与链路追踪建议
+
+为满足内网系统联调、排障和审计追踪需求，建议建设统一的 SQL 日志与 traceId 能力。
+
+建议实现点如下：
+
+- 通过 MyBatis 拦截器统一记录 SQL 执行日志
+- 日志中输出 `sqlId`、SQL 类型、耗时、参数摘要、结果摘要
+- 对密码、token、secret 等敏感参数自动脱敏
+- 通过慢 SQL 阈值将普通 SQL 与慢 SQL 分级输出
+- 通过 `traceId` 贯穿控制层日志、SQL 日志和审计日志
+
+当前原型已按该思路落地：
+
+- 基于自定义 MyBatis `Interceptor` 输出 SQL 日志
+- 基于 MDC 和 `X-Trace-Id` 响应头实现链路追踪
+- 审计日志落库时自动补齐 traceId
 
 ## 10. 代码规范与工程规范
 
@@ -948,6 +1071,10 @@ flowchart LR
 - 新增用户成功并写入 LDAP
 - LDAP 用户已存在时的失败处理
 - 禁用用户后 JWT 访问失效
+- 更新用户资料并同步 LDAP
+- 删除用户时 LDAP 物理删除与 MySQL 逻辑删除
+- 用户本人修改密码成功与失败分支
+- 管理员重置密码成功与非管理员重置失败
 - 用户绑定多个角色后的权限合并
 - 角色权限变更后 Casbin 策略刷新生效
 - 非授权用户访问受限接口被正确拒绝
@@ -977,6 +1104,12 @@ flowchart LR
 - `dev`
 - `test`
 - `prod`
+
+建议环境划分如下：
+
+- 原型默认环境可使用 H2 内存库快速联调
+- `dev/test/prod` 正式环境统一切换为 MySQL
+- LDAP 可通过 `stub` 与 `spring` 两种模式切换，以支持本地开发与真实目录联调
 
 敏感配置应通过环境变量或内网密钥管理系统注入：
 

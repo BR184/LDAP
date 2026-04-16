@@ -17,7 +17,13 @@ public interface UserRepository {
 
     User save(User user);
 
+    void updateProfile(User user);
+
     void updateStatus(Long id, Integer statusCode, Integer tokenVersion);
+
+    void logicalDelete(Long id, Integer tokenVersion);
+
+    void bumpTokenVersion(Long id, Integer tokenVersion);
 
     void assignRoles(Long userId, List<Long> roleIds);
 

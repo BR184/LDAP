@@ -72,6 +72,18 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
     }
 
     @Override
+    public void updateUser(User user) {
+        DirContextAdapter context = lookup(user.getUsername());
+        context.setAttributeValue("cn", user.getRealName());
+        context.setAttributeValue("sn", user.getRealName());
+        context.setAttributeValue("mail", user.getEmail());
+        context.setAttributeValue("mobile", user.getMobile());
+        context.setAttributeValue("employeeNumber", user.getEmployeeNo());
+        context.setAttributeValue("departmentNumber", user.getDeptCode());
+        ldapTemplate.modifyAttributes(context);
+    }
+
+    @Override
     public void enableUser(String username) {
         updateUserAttribute(username, "employeeType", "ENABLED");
     }
@@ -79,6 +91,12 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
     @Override
     public void disableUser(String username) {
         updateUserAttribute(username, "employeeType", "DISABLED");
+    }
+
+    @Override
+    public void deleteUser(String username) {
+        DirContextAdapter context = lookup(username);
+        ldapTemplate.unbind(context.getDn());
     }
 
     @Override

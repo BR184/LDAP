@@ -1,6 +1,10 @@
 package com.company.idm.interfaces.user;
 
+import com.company.idm.application.user.ChangePasswordCommand;
 import com.company.idm.application.user.CreateUserCommand;
+import com.company.idm.application.user.DeleteUserCommand;
+import com.company.idm.application.user.ResetPasswordCommand;
+import com.company.idm.application.user.UpdateUserCommand;
 import com.company.idm.application.user.UpdateUserStatusCommand;
 import com.company.idm.application.user.UserApplicationService;
 import com.company.idm.common.api.ApiResponse;
@@ -10,6 +14,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 提供用户查询、创建和状态变更接口。
+ * 提供用户查询、创建、更新、删除、状态变更和密码管理接口。
  */
 @RestController
 @RequestMapping("/api/v1/users")
@@ -57,6 +62,25 @@ public class UserController {
         return ApiResponse.success(toResponse(user));
     }
 
+    @PutMapping("/{id}")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id, 'PUT')")
+    public ApiResponse<UserResponse> update(
+        @PathVariable Long id,
+        @Valid @RequestBody UpdateUserRequest request,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        User user = userApplicationService.updateUser(new UpdateUserCommand(
+            id,
+            request.realName(),
+            request.email(),
+            request.mobile(),
+            request.employeeNo(),
+            request.deptCode(),
+            username
+        ));
+        return ApiResponse.success(toResponse(user));
+    }
+
     @PutMapping("/{id}/status")
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/status', 'PUT')")
     public ApiResponse<Void> updateStatus(
@@ -66,6 +90,40 @@ public class UserController {
     ) {
         userApplicationService.updateStatus(new UpdateUserStatusCommand(id, request.statusCode(), username));
         return ApiResponse.success();
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id, 'DELETE')")
+    public ApiResponse<Void> delete(
+        @PathVariable Long id,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        userApplicationService.deleteUser(new DeleteUserCommand(id, username));
+        return ApiResponse.success();
+    }
+
+    @PutMapping("/me/password")
+    public ApiResponse<Void> changePassword(
+        @Valid @RequestBody ChangePasswordRequest request,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        userApplicationService.changePassword(new ChangePasswordCommand(
+            username,
+            request.oldPassword(),
+            request.newPassword(),
+            request.confirmPassword()
+        ));
+        return ApiResponse.success();
+    }
+
+    @PutMapping("/{id}/password/reset")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/password/reset', 'PUT')")
+    public ApiResponse<ResetPasswordResponse> resetPassword(
+        @PathVariable Long id,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        String resetPassword = userApplicationService.resetPassword(new ResetPasswordCommand(id, username));
+        return ApiResponse.success(new ResetPasswordResponse(resetPassword));
     }
 
     private UserResponse toResponse(User user) {

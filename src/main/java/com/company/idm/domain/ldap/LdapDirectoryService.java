@@ -13,9 +13,13 @@ public interface LdapDirectoryService {
 
     String createUser(User user, String rawPassword);
 
+    void updateUser(User user);
+
     void enableUser(String username);
 
     void disableUser(String username);
+
+    void deleteUser(String username);
 
     void resetPassword(String username, String rawPassword);
 }

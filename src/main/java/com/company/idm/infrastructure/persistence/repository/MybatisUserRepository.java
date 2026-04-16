@@ -70,10 +70,46 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
+    public void updateProfile(User user) {
+        UserDO dataObject = new UserDO();
+        dataObject.setId(user.getId());
+        dataObject.setRealName(user.getRealName());
+        dataObject.setEmail(user.getEmail());
+        dataObject.setMobile(user.getMobile());
+        dataObject.setEmployeeNo(user.getEmployeeNo());
+        dataObject.setDeptCode(user.getDeptCode());
+        dataObject.setModifier("system");
+        dataObject.setGmtModified(LocalDateTime.now());
+        userMapper.updateById(dataObject);
+    }
+
+    @Override
     public void updateStatus(Long id, Integer statusCode, Integer tokenVersion) {
         UserDO dataObject = new UserDO();
         dataObject.setId(id);
         dataObject.setStatus(statusCode);
+        dataObject.setTokenVersion(tokenVersion);
+        dataObject.setModifier("system");
+        dataObject.setGmtModified(LocalDateTime.now());
+        userMapper.updateById(dataObject);
+    }
+
+    @Override
+    public void logicalDelete(Long id, Integer tokenVersion) {
+        UserDO dataObject = new UserDO();
+        dataObject.setId(id);
+        dataObject.setDeleted(1);
+        dataObject.setStatus(UserStatus.DISABLED.getCode());
+        dataObject.setTokenVersion(tokenVersion);
+        dataObject.setModifier("system");
+        dataObject.setGmtModified(LocalDateTime.now());
+        userMapper.updateById(dataObject);
+    }
+
+    @Override
+    public void bumpTokenVersion(Long id, Integer tokenVersion) {
+        UserDO dataObject = new UserDO();
+        dataObject.setId(id);
         dataObject.setTokenVersion(tokenVersion);
         dataObject.setModifier("system");
         dataObject.setGmtModified(LocalDateTime.now());
