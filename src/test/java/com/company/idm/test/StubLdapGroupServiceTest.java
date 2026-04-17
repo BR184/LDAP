@@ -23,7 +23,7 @@ class StubLdapGroupServiceTest {
         StubLdapGroupService service = new StubLdapGroupService(properties);
 
         String groupDn = service.createGroup("D001", "研发中心");
-        assertThat(groupDn).isEqualTo("cn=D001,ou=groups,dc=corp,dc=local");
+        assertThat(groupDn).isEqualTo("cn=D001_研发中心,ou=groups,dc=corp,dc=local");
 
         service.addUserToGroup("zhangsan", "D001");
         service.addUserToGroup("lisi", "D001");
@@ -44,5 +44,9 @@ class StubLdapGroupServiceTest {
         service.removeUserFromAllGroups("wangwu");
         assertThat(service.snapshotMembers().get("D001")).doesNotContain("uid=wangwu,ou=people,dc=corp,dc=local");
         assertThat(service.snapshotMembers().get("D002")).doesNotContain("uid=wangwu,ou=people,dc=corp,dc=local");
+
+        String renamedDn = service.updateGroup("D001", "研发平台部");
+        assertThat(renamedDn).isEqualTo("cn=D001_研发平台部,ou=groups,dc=corp,dc=local");
+        assertThat(service.snapshotDns().get("D001")).isEqualTo("cn=D001_研发平台部,ou=groups,dc=corp,dc=local");
     }
 }

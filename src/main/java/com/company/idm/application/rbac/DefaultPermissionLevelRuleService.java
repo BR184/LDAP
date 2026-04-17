@@ -132,4 +132,11 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
             throw new BizException("AUTH_FORBIDDEN", "仅管理员允许维护菜单");
         }
     }
+
+    @Override
+    public void checkCanManageDepartment(String operatorUsername) {
+        if (!isAdmin(operatorUsername)) {
+            throw new BizException("AUTH_FORBIDDEN", "仅管理员允许维护部门");
+        }
+    }
 }

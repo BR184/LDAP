@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
  * 部门领域实体，描述组织节点的基础属性。
  */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class Department {
@@ -19,8 +19,11 @@ public class Department {
     private String deptCode;
     private String deptName;
     private String parentDeptCode;
+    private String ancestorPath;
+    private Integer deptLevel;
     private SourceType sourceType;
     private String externalId;
+    private String ldapDn;
     private Integer status;
 }
 

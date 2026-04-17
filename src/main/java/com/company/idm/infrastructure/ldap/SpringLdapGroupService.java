@@ -33,13 +33,14 @@ public class SpringLdapGroupService implements LdapGroupService {
     public String createGroup(String groupCode, String groupName) {
         if (existsGroup(groupCode)) {
             updateGroup(groupCode, groupName);
-            return buildGroupDn(groupCode).toString();
+            return buildGroupDn(groupCode, groupName).toString();
         }
-        Name dn = buildGroupDn(groupCode);
+        Name dn = buildGroupDn(groupCode, groupName);
         BasicAttributes attributes = new BasicAttributes();
         attributes.put("objectClass", "groupOfNames");
-        attributes.put(new BasicAttribute("cn", groupCode));
+        attributes.put(new BasicAttribute("cn", buildGroupCn(groupCode, groupName)));
         attributes.put(new BasicAttribute("description", groupName));
+        attributes.put(new BasicAttribute("businessCategory", groupCode));
         // groupOfNames 要求至少存在一个 member，这里先使用占位 DN，待首次加人后会保留或覆盖。
         attributes.put(new BasicAttribute("member", buildPlaceholderMemberDn()));
         ldapTemplate.bind(dn, null, attributes);
@@ -47,14 +48,27 @@ public class SpringLdapGroupService implements LdapGroupService {
     }
 
     @Override
-    public void updateGroup(String groupCode, String groupName) {
+    public String updateGroup(String groupCode, String groupName) {
+        if (!existsGroup(groupCode)) {
+            return createGroup(groupCode, groupName);
+        }
         DirContextAdapter context = lookupGroup(groupCode);
+        Name expectedDn = buildGroupDn(groupCode, groupName);
+        if (!context.getDn().equals(expectedDn)) {
+            ldapTemplate.rename(context.getDn(), expectedDn);
+            context = lookupGroup(groupCode);
+        }
+        context.setAttributeValue("cn", buildGroupCn(groupCode, groupName));
         context.setAttributeValue("description", groupName);
         ldapTemplate.modifyAttributes(context);
+        return expectedDn.toString();
     }
 
     @Override
     public void deleteGroup(String groupCode) {
+        if (!existsGroup(groupCode)) {
+            return;
+        }
         DirContextAdapter context = lookupGroup(groupCode);
         ldapTemplate.unbind(context.getDn());
     }
@@ -117,7 +131,7 @@ public class SpringLdapGroupService implements LdapGroupService {
 
     private boolean existsGroup(String groupCode) {
         return !ldapTemplate.search(
-            LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("cn").is(groupCode),
+            LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("businessCategory").is(groupCode),
             (AttributesMapper<String>) attributes -> attributes.get("cn") == null ? null : attributes.get("cn").get().toString()
         ).isEmpty();
     }
@@ -125,7 +139,7 @@ public class SpringLdapGroupService implements LdapGroupService {
     private DirContextAdapter lookupGroup(String groupCode) {
         try {
             return ldapTemplate.search(
-                LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("cn").is(groupCode),
+                LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("businessCategory").is(groupCode),
                 (ContextMapper<DirContextAdapter>) ctx -> (DirContextAdapter) ctx
             ).stream().findFirst().orElseThrow(() -> new BizException("LDAP_GROUP_NOT_FOUND", "LDAP 分组不存在"));
         } catch (NameNotFoundException exception) {
@@ -142,11 +156,11 @@ public class SpringLdapGroupService implements LdapGroupService {
         return (int) java.util.Arrays.stream(members).filter(member -> !placeholder.equals(member)).count();
     }
 
-    private Name buildGroupDn(String groupCode) {
+    private Name buildGroupDn(String groupCode, String groupName) {
         String groupsOuValue = ldapProperties.getGroupsOu().replace("ou=", "");
         return LdapNameBuilder.newInstance(ldapProperties.getBaseDn())
             .add("ou", groupsOuValue)
-            .add("cn", groupCode)
+            .add("cn", buildGroupCn(groupCode, groupName))
             .build();
     }
 
@@ -156,5 +170,9 @@ public class SpringLdapGroupService implements LdapGroupService {
 
     private String buildPlaceholderMemberDn() {
         return "uid=placeholder," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
+    }
+
+    private String buildGroupCn(String groupCode, String groupName) {
+        return groupCode + "_" + groupName;
     }
 }

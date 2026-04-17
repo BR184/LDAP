@@ -16,8 +16,11 @@ public class DepartmentDO {
     private String deptCode;
     private String deptName;
     private String parentDeptCode;
+    private String ancestorPath;
+    private Integer deptLevel;
     private String sourceType;
     private String externalId;
+    private String ldapDn;
     private Integer status;
     private LocalDateTime gmtCreate;
     private LocalDateTime gmtModified;
@@ -54,6 +57,22 @@ public class DepartmentDO {
         this.parentDeptCode = parentDeptCode;
     }
 
+    public String getAncestorPath() {
+        return ancestorPath;
+    }
+
+    public void setAncestorPath(String ancestorPath) {
+        this.ancestorPath = ancestorPath;
+    }
+
+    public Integer getDeptLevel() {
+        return deptLevel;
+    }
+
+    public void setDeptLevel(Integer deptLevel) {
+        this.deptLevel = deptLevel;
+    }
+
     public String getSourceType() {
         return sourceType;
     }
@@ -68,6 +87,14 @@ public class DepartmentDO {
 
     public void setExternalId(String externalId) {
         this.externalId = externalId;
+    }
+
+    public String getLdapDn() {
+        return ldapDn;
+    }
+
+    public void setLdapDn(String ldapDn) {
+        this.ldapDn = ldapDn;
     }
 
     public Integer getStatus() {

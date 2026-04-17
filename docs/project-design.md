@@ -281,13 +281,13 @@ corp-idm-platform
 | 流程中心模块 | 后续预留 | 高风险操作审批、变更编排、流程回调 |
 | 调度引擎模块 | 后续预留 | 自动同步、补偿重试、定时扫描、策略刷新 |
 | 插件管理模块 | 后续预留 | 飞书导入插件、第三方平台适配器、扩展点管理 |
-| 组织架构模块 | 后续预留 | 部门树、上下级关系、负责人等 |
+| 组织架构模块 | 一期实现简版 | 部门树、部门 CRUD、外部部门 ID 与 LDAP DN 映射 |
 | 飞书同步模块 | 后续预留 | 全量导入、增量导入、任务调度、差异比对 |
 | 第三方应用接入模块 | 后续预留 | GitLab 等接入参数管理与联调信息留档 |
 
 补充说明：
 
-- 图中红框模块是基础服务层的重点建设对象，其中一期只落地 `用户管理` 与 `角色权限管理`。
+- 图中红框模块是基础服务层的重点建设对象，当前原型已落地 `用户管理`、`角色权限管理`，并补充实现了支撑用户与 LDAP 映射的 `组织架构模块` 简版能力。
 - 图中的 `租户管理`、`运营数据`、`组件管理`、`环境管理`、`元数据管理` 可视为平台级相邻模块，当前系统通过接口或数据边界兼容，但不在本次详细设计与实施范围内。
 
 ### 4.4 红框模块依赖关系
@@ -350,6 +350,107 @@ corp-idm-platform
 - 当前仅支持 **MySQL -> LDAP** 单向同步
 - 不支持 LDAP 回写 MySQL
 - 当前仅对接飞书导入场景，因此采用固定映射规则，不引入动态字段映射引擎
+
+#### 5.2.1 部门主数据与组织架构设计
+
+部门模块当前不仅承担“用户合法部门引用”“前端部门树渲染”“LDAP group 同步源”三个职责，还需要同时承载：
+
+- 业务组织架构的树形主数据
+- 飞书部门 `external_id` 的落库映射
+- 当前 LDAP group `ldap_dn` 的持久化映射
+
+部门模块职责边界建议如下：
+
+- MySQL 中的 `Department` 是组织架构与同步映射的主数据源
+- LDAP 中的 group 是第三方系统登录授权目录的组织投影
+- 飞书部门 ID 只作为外部来源定位键，不替代内部 `dept_code`
+
+#### 5.2.2 部门模型设计
+
+部门实体建议包含以下核心字段：
+
+- `dept_code`：内部稳定业务编码，创建后不允许修改
+- `dept_name`：部门名称
+- `parent_dept_code`：父部门编码，根部门为空
+- `ancestor_path`：祖先路径，例如 `/D001/D001002`
+- `dept_level`：组织层级深度
+- `source_type`：`MANUAL`、`FEISHU`
+- `external_id`：飞书部门外部主键
+- `ldap_dn`：当前 LDAP group 的真实 DN
+- `status`：启停状态
+
+字段职责说明：
+
+- `dept_code` 用于平台内部业务引用、用户归属和稳定主键定位
+- `external_id` 用于飞书导入场景下的幂等更新和映射追踪
+- `ldap_dn` 用于记录当前 LDAP 节点位置，支撑节点重命名后的回写
+- `ancestor_path` 与 `dept_level` 用于部门树查询、层级渲染和防循环校验
+
+#### 5.2.3 部门 CRUD 规则
+
+部门管理建议提供：
+
+- 部门树查询
+- 部门详情查询
+- 部门创建
+- 部门更新
+- 部门删除
+
+业务规则如下：
+
+1. `dept_code` 全局唯一，创建后不允许修改
+2. 非根部门的 `parent_dept_code` 必须存在
+3. 部门不能挂到自身或自身下级节点之下
+4. 部门移动时需同步更新本节点及全部子孙节点的 `ancestor_path` 与 `dept_level`
+5. 删除部门前必须校验无子部门、无用户引用
+6. 用户侧引用部门时，只允许选择启用中的部门
+7. `external_id` 与 `source_type` 作为来源识别字段，不在普通编辑接口中修改
+
+#### 5.2.4 部门与 LDAP group 映射规则
+
+部门同步到 LDAP 时，建议采用“稳定编码 + 可变名称”的组合模型：
+
+- `dept_code` 固定映射到 LDAP group 的业务标识属性，例如 `businessCategory`
+- `dept_name` 固定映射到 LDAP group 的 `description`
+- LDAP group 的 RDN 建议采用 `cn=${dept_code}_${dept_name}`
+- `ldap_dn` 作为当前目录节点位置回写到 `sys_department`
+
+因此，当部门名称变更时：
+
+1. 需要先根据旧 `ldap_dn` 或业务标识定位原 LDAP group
+2. 通过 LDAP `rename / modifyDN` 重命名节点
+3. 获取新的 DN
+4. 回写 `sys_department.ldap_dn`
+
+这样可以保留 group 成员关系，避免采用“删旧建新”带来的成员丢失风险。
+
+#### 5.2.5 部门与飞书导入映射规则
+
+当前仅考虑飞书导入场景，因此映射规则固定化：
+
+- 飞书部门 ID -> `sys_department.external_id`
+- 飞书父部门 ID -> 解析为 `parent_dept_code`
+- 当前 LDAP DN -> `sys_department.ldap_dn`
+
+导入策略建议：
+
+- 以 `external_id` 作为飞书部门幂等更新主键
+- 以 `dept_code` 作为平台内部稳定业务编码
+- 以 `ldap_dn` 作为 LDAP 节点重命名后的结果映射
+
+#### 5.2.6 当前原型落地说明
+
+当前原型已实现以下部门管理能力：
+
+- 部门树查询
+- 部门详情查询
+- 部门创建
+- 部门更新
+- 部门删除
+- 部门层级路径 `ancestor_path` 与层级深度 `dept_level` 维护
+- 部门名称变更时 LDAP group 节点重命名与 `ldap_dn` 回写
+- 删除部门前对子部门与用户引用关系校验
+- 用户流程首次补建 LDAP group 时对部门 `ldap_dn` 回写补偿
 
 ### 5.3 用户管理模块设计
 
@@ -724,27 +825,38 @@ userPassword: {SSHA}******
 
 部门 / 分组映射：
 
-- MySQL 中的 `Department.deptCode` 固定映射为 LDAP group 的 `cn`
+- MySQL 中的 `Department.deptCode` 固定映射为 LDAP group 的业务标识属性，例如 `businessCategory`
 - `Department.deptName` 固定映射为 LDAP group 的 `description`
+- `Department.ldapDn` 保存当前 LDAP group 的真实 DN
+- LDAP group 的 `cn` 建议采用 `${deptCode}_${deptName}`
 - 当前 group 目录放在 `ou=groups`
 
 建议组条目示例：
 
 ```ldif
-dn: cn=D001,ou=groups,dc=corp,dc=local
+dn: cn=D001_研发中心,ou=groups,dc=corp,dc=local
 objectClass: top
 objectClass: groupOfNames
-cn: D001
+cn: D001_研发中心
+businessCategory: D001
 description: 研发中心
 member: uid=zhangsan,ou=people,dc=corp,dc=local
 ```
 
+部门名称变更时的处理规则：
+
+- 若 `dept_name` 发生变化，则 LDAP group 的 RDN 也会变化
+- 更新流程中应执行 LDAP 节点重命名，而不是删除后重建
+- 重命名成功后，需要将新的 DN 回写到 `sys_department.ldap_dn`
+
 当前原型实现说明：
 
 - 已实现用户基础数据同步到 LDAP 用户条目
+- 已实现部门 group 创建、更新、删除
 - 已实现按部门编码将用户同步加入 LDAP group
 - 已实现用户部门变更时更新 LDAP group 成员关系
 - 已实现删除用户前先移出所有 LDAP group，再删除 LDAP 用户条目
+- 已实现部门名称变更时 LDAP group 节点重命名并更新 `ldap_dn`
 - 当前尚未实现 LDAP -> MySQL 回写
 - 当前尚未将业务角色或菜单权限直接同步为 LDAP 组权限模型
 
@@ -910,7 +1022,31 @@ flowchart LR
 | gmt_create | datetime | 创建时间 |
 | gmt_modified | datetime | 修改时间 |
 
-#### 6.1.2 角色表 `sys_role`
+#### 6.1.2 部门表 `sys_department`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | bigint | 主键 |
+| dept_code | varchar(64) | 部门编码，平台内部稳定业务主键 |
+| dept_name | varchar(128) | 部门名称 |
+| parent_dept_code | varchar(64) | 父部门编码 |
+| ancestor_path | varchar(512) | 祖先路径，例如 `/D001/D001002` |
+| dept_level | int | 部门层级深度 |
+| source_type | varchar(32) | MANUAL、FEISHU |
+| external_id | varchar(128) | 飞书部门外部 ID |
+| ldap_dn | varchar(512) | 当前 LDAP group DN |
+| status | tinyint | 1 启用，0 禁用 |
+| gmt_create | datetime | 创建时间 |
+| gmt_modified | datetime | 修改时间 |
+
+说明：
+
+- `dept_code` 用于平台内部主键定位，不随组织树调整而变化
+- `external_id` 用于飞书导入幂等更新
+- `ldap_dn` 用于保存 LDAP 节点重命名后的最新目录位置
+- `ancestor_path` 与 `dept_level` 用于部门树快速查询、层级渲染和防循环校验
+
+#### 6.1.3 角色表 `sys_role`
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -926,7 +1062,7 @@ flowchart LR
 | gmt_create | datetime | 创建时间 |
 | gmt_modified | datetime | 修改时间 |
 
-#### 6.1.3 菜单表 `sys_menu`
+#### 6.1.4 菜单表 `sys_menu`
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -951,7 +1087,7 @@ flowchart LR
 - 当前菜单模型仅覆盖 `CATALOG` 与 `MENU` 两类节点，满足后台菜单树渲染需求
 - 按钮、多语言、多租户菜单隔离、菜单版本发布不纳入当前设计与实现范围
 
-#### 6.1.4 权限表 `sys_permission`
+#### 6.1.5 权限表 `sys_permission`
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -973,13 +1109,13 @@ flowchart LR
 - 当前原型实际落地的权限类型为 `API`
 - `BUTTON` 与更细粒度前端资源权限不纳入当前实现范围
 
-#### 6.1.5 关系表
+#### 6.1.6 关系表
 
 - `sys_user_role(user_id, role_id, gmt_create, creator)`
 - `sys_role_menu(role_id, menu_id, gmt_create, creator)`
 - `sys_role_permission(role_id, permission_id, gmt_create, creator)`
 
-#### 6.1.6 审计表 `sys_audit_log`
+#### 6.1.7 审计表 `sys_audit_log`
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -995,7 +1131,7 @@ flowchart LR
 | error_msg | varchar(512) | 错误信息 |
 | gmt_create | datetime | 创建时间 |
 
-#### 6.1.7 Casbin 表
+#### 6.1.8 Casbin 表
 
 若采用 JDBC Adapter，可直接使用标准 `casbin_rule` 表。
 
@@ -1009,7 +1145,7 @@ flowchart LR
 - `v4`
 - `v5`
 
-#### 6.1.8 后续预留表
+#### 6.1.9 后续预留表
 
 为匹配基础服务层红框模块，建议按需预留如下表设计：
 
@@ -1029,6 +1165,10 @@ flowchart LR
 - `sys_user.uk_email`
 - `sys_user.uk_mobile`
 - `sys_user.idx_employee_no`
+- `sys_department.uk_dept_code`
+- `sys_department.uk_external_id`
+- `sys_department.uk_ldap_dn`
+- `sys_department.idx_parent_dept_code`
 - `sys_role.uk_role_code`
 - `sys_menu.uk_menu_code`
 - `sys_permission.uk_permission_code`
@@ -1078,7 +1218,22 @@ flowchart LR
 - `GET /api/v1/users/{id}`
 - `POST /api/v1/users/{id}/sync-ldap`
 
-### 7.3 角色与菜单接口
+### 7.3 部门管理接口
+
+当前已落地：
+
+- `GET /api/v1/departments/tree`
+- `GET /api/v1/departments/{deptCode}`
+- `POST /api/v1/departments`
+- `PUT /api/v1/departments/{deptCode}`
+- `DELETE /api/v1/departments/{deptCode}`
+
+说明：
+
+- `deptCode` 作为部门接口的主路径参数，保持与用户资料、飞书映射和 LDAP group 映射口径一致
+- 部门树接口用于后台组织架构树和部门选择组件渲染
+
+### 7.4 角色与菜单接口
 
 当前已落地：
 
@@ -1101,7 +1256,7 @@ flowchart LR
 - `GET /api/v1/permissions/tree`
 - `PUT /api/v1/roles/{id}/permissions`
 
-### 7.4 未来预留接口
+### 7.5 未来预留接口
 
 - `GET /api/v1/gateway/routes`
 - `POST /api/v1/gateway/routes`
@@ -1158,6 +1313,7 @@ flowchart LR
 
 - 登录成功、登录失败、退出登录
 - 用户新增、编辑、禁用、启用、密码重置
+- 部门新增、编辑、删除、组织树调整
 - 角色新增、编辑、权限变更
 - LDAP 同步执行结果
 
@@ -1368,4 +1524,4 @@ flowchart LR
 
 该方案以“模块化单体 + OpenLDAP + MySQL”为核心，并已与基础服务层架构图中的红框模块完成对齐。整体上围绕 `用户管理`、`角色权限管理`、`API 网关`、`消息管理`、`流程中心`、`调度引擎`、`插件管理` 建立统一的基础服务能力版图。
 
-其中，一期优先完成用户管理与角色权限管理，并通过 Spring LDAP、Spring Security、JWT、Casbin、MyBatis-Plus 建立统一身份底座；后续再平滑扩展飞书导入、组织同步、API 网关、流程与插件体系，而无需推翻一期的整体架构。
+其中，一期优先完成用户管理与角色权限管理，并同步补充部门树、部门 CRUD 与 LDAP group 映射等组织架构基础能力，通过 Spring LDAP、Spring Security、JWT、Casbin、MyBatis-Plus 建立统一身份底座；后续再平滑扩展飞书导入、组织同步、API 网关、流程与插件体系，而无需推翻一期的整体架构。

@@ -27,4 +27,6 @@ public interface PermissionLevelRuleService {
     void checkCanBindMenus(String operatorUsername, Role targetRole, List<Menu> menus);
 
     void checkCanManageMenu(String operatorUsername);
+
+    void checkCanManageDepartment(String operatorUsername);
 }

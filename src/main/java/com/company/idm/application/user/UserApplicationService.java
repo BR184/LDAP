@@ -57,8 +57,7 @@ public class UserApplicationService {
                 throw new BizException("USER_DUPLICATE", "用户名已存在");
             });
         if (command.deptCode() != null && !command.deptCode().isBlank()) {
-            department = departmentRepository.findByDeptCode(command.deptCode())
-                .orElseThrow(() -> new BizException("DEPT_NOT_FOUND", "部门不存在"));
+            department = loadEnabledDepartment(command.deptCode());
         }
         if (ldapDirectoryService.existsByUid(command.username())) {
             throw new BizException("LDAP_UID_DUPLICATE", "LDAP 用户已存在");
@@ -101,8 +100,7 @@ public class UserApplicationService {
         permissionLevelRuleService.checkCanModifyBasicUser(command.operator(), user);
         Department department = null;
         if (command.deptCode() != null && !command.deptCode().isBlank()) {
-            department = departmentRepository.findByDeptCode(command.deptCode())
-                .orElseThrow(() -> new BizException("DEPT_NOT_FOUND", "部门不存在"));
+            department = loadEnabledDepartment(command.deptCode());
         }
         User updated = user.toBuilder()
             .realName(command.realName())
@@ -243,7 +241,8 @@ public class UserApplicationService {
         if (department == null) {
             return;
         }
-        ldapGroupService.createGroup(department.getDeptCode(), department.getDeptName());
+        String ldapDn = ldapGroupService.createGroup(department.getDeptCode(), department.getDeptName());
+        updateDepartmentLdapDn(department, ldapDn);
         ldapGroupService.addUserToGroup(user.getUsername(), department.getDeptCode());
     }
 
@@ -257,12 +256,35 @@ public class UserApplicationService {
             ldapGroupService.removeUserFromGroup(updatedUser.getUsername(), oldDeptCode);
         }
         if (newDepartment != null) {
-            ldapGroupService.createGroup(newDepartment.getDeptCode(), newDepartment.getDeptName());
+            String ldapDn = ldapGroupService.createGroup(newDepartment.getDeptCode(), newDepartment.getDeptName());
+            updateDepartmentLdapDn(newDepartment, ldapDn);
         }
         if (newDeptCode != null && !newDeptCode.isBlank()) {
             ldapGroupService.addUserToGroup(updatedUser.getUsername(), newDeptCode);
         } else if (oldDeptCode != null && !oldDeptCode.isBlank()) {
             ldapGroupService.removeUserFromAllGroups(updatedUser.getUsername());
         }
+    }
+
+    /**
+     * 当 LDAP group 由用户流程首次补建或重新映射时，回写部门的当前 LDAP DN。
+     */
+    private void updateDepartmentLdapDn(Department department, String ldapDn) {
+        if (department == null || ldapDn == null || ldapDn.isBlank()) {
+            return;
+        }
+        if (ldapDn.equals(department.getLdapDn())) {
+            return;
+        }
+        departmentRepository.save(department.toBuilder().ldapDn(ldapDn).build());
+    }
+
+    private Department loadEnabledDepartment(String deptCode) {
+        Department department = departmentRepository.findByDeptCode(deptCode)
+            .orElseThrow(() -> new BizException("DEPT_NOT_FOUND", "部门不存在"));
+        if (department.getStatus() == null || department.getStatus() != 1) {
+            throw new BizException("DEPT_DISABLED", "部门已停用");
+        }
+        return department;
     }
 }

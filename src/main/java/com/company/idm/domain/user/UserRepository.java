@@ -30,5 +30,7 @@ public interface UserRepository {
     Set<String> findRoleCodesByUsername(String username);
 
     List<UserRoleBinding> listUserRoleBindings();
+
+    boolean existsDeptBinding(String deptCode);
 }
 

@@ -145,6 +145,13 @@ public class MybatisUserRepository implements UserRepository {
             .toList();
     }
 
+    @Override
+    public boolean existsDeptBinding(String deptCode) {
+        return userMapper.selectCount(new LambdaQueryWrapper<UserDO>()
+            .eq(UserDO::getDeptCode, deptCode)
+            .eq(UserDO::getDeleted, 0)) > 0;
+    }
+
     private User toDomain(UserDO dataObject, Set<String> roleCodes) {
         return User.builder()
             .id(dataObject.getId())

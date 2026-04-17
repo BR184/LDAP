@@ -406,6 +406,111 @@ class PrototypeIntegrationTest {
         assertThat(findMenuNodeByCode(allMenus, menuCode)).isNull();
     }
 
+    @Test
+    void shouldCreateUpdateAndDeleteDepartment() throws Exception {
+        String adminToken = loginAsAdmin();
+        String suffix = String.valueOf(System.nanoTime());
+        String rootDeptCode = "DROOT" + suffix;
+        String targetParentCode = "DPARENT" + suffix;
+        String childDeptCode = "DCHILD" + suffix;
+
+        mockMvc.perform(post("/api/v1/departments")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "deptCode": "%s",
+                      "deptName": "一级部门A",
+                      "externalId": "ou_root_%s"
+                    }
+                    """.formatted(rootDeptCode, suffix)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.deptCode").value(rootDeptCode))
+            .andExpect(jsonPath("$.data.ancestorPath").value("/" + rootDeptCode))
+            .andExpect(jsonPath("$.data.ldapDn").value("cn=%s_%s,ou=groups,dc=corp,dc=local".formatted(rootDeptCode, "一级部门A")));
+
+        mockMvc.perform(post("/api/v1/departments")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "deptCode": "%s",
+                      "deptName": "一级部门B",
+                      "externalId": "ou_parent_%s"
+                    }
+                    """.formatted(targetParentCode, suffix)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.deptCode").value(targetParentCode));
+
+        mockMvc.perform(post("/api/v1/departments")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "deptCode": "%s",
+                      "deptName": "二级部门",
+                      "parentDeptCode": "%s",
+                      "externalId": "ou_child_%s"
+                    }
+                    """.formatted(childDeptCode, rootDeptCode, suffix)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.parentDeptCode").value(rootDeptCode))
+            .andExpect(jsonPath("$.data.deptLevel").value(2))
+            .andExpect(jsonPath("$.data.ancestorPath").value("/%s/%s".formatted(rootDeptCode, childDeptCode)));
+
+        mockMvc.perform(get("/api/v1/departments/{deptCode}", childDeptCode)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.deptCode").value(childDeptCode))
+            .andExpect(jsonPath("$.data.parentDeptCode").value(rootDeptCode));
+
+        mockMvc.perform(put("/api/v1/departments/{deptCode}", childDeptCode)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "deptName": "二级部门-更新",
+                      "parentDeptCode": "%s",
+                      "status": 1
+                    }
+                    """.formatted(targetParentCode)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.parentDeptCode").value(targetParentCode))
+            .andExpect(jsonPath("$.data.ancestorPath").value("/%s/%s".formatted(targetParentCode, childDeptCode)))
+            .andExpect(jsonPath("$.data.ldapDn").value("cn=%s_%s,ou=groups,dc=corp,dc=local".formatted(childDeptCode, "二级部门-更新")));
+
+        MvcResult treeResult = mockMvc.perform(get("/api/v1/departments/tree")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode tree = objectMapper.readTree(treeResult.getResponse().getContentAsString()).path("data");
+        JsonNode childNode = findDepartmentNodeByCode(tree, childDeptCode);
+        assertThat(childNode).isNotNull();
+        assertThat(childNode.path("parentDeptCode").asText()).isEqualTo(targetParentCode);
+
+        mockMvc.perform(delete("/api/v1/departments/{deptCode}", childDeptCode)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(delete("/api/v1/departments/{deptCode}", rootDeptCode)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/v1/departments/{deptCode}", targetParentCode)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk());
+
+        MvcResult treeAfterDelete = mockMvc.perform(get("/api/v1/departments/tree")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode departments = objectMapper.readTree(treeAfterDelete.getResponse().getContentAsString()).path("data");
+        assertThat(findDepartmentNodeByCode(departments, childDeptCode)).isNull();
+        assertThat(findDepartmentNodeByCode(departments, rootDeptCode)).isNull();
+        assertThat(findDepartmentNodeByCode(departments, targetParentCode)).isNull();
+    }
+
     private String loginAsAdmin() throws Exception {
         return login("admin", "admin123456");
     }
@@ -447,6 +552,22 @@ class PrototypeIntegrationTest {
                 return node;
             }
             JsonNode child = findMenuNodeByCode(node.path("children"), menuCode);
+            if (child != null) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    private JsonNode findDepartmentNodeByCode(JsonNode nodes, String deptCode) {
+        if (nodes == null || !nodes.isArray()) {
+            return null;
+        }
+        for (JsonNode node : nodes) {
+            if (deptCode.equals(node.path("deptCode").asText())) {
+                return node;
+            }
+            JsonNode child = findDepartmentNodeByCode(node.path("children"), deptCode);
             if (child != null) {
                 return child;
             }

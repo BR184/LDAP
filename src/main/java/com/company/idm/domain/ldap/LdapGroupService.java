@@ -9,7 +9,7 @@ public interface LdapGroupService {
 
     String createGroup(String groupCode, String groupName);
 
-    void updateGroup(String groupCode, String groupName);
+    String updateGroup(String groupCode, String groupName);
 
     void deleteGroup(String groupCode);
 

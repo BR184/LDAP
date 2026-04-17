@@ -26,17 +26,20 @@ public class StubLdapGroupService implements LdapGroupService {
 
     @Override
     public String createGroup(String groupCode, String groupName) {
-        StubGroup group = groups.computeIfAbsent(groupCode, code -> new StubGroup(code, groupName, buildGroupDn(code)));
+        StubGroup group = groups.computeIfAbsent(groupCode, code -> new StubGroup(code, groupName, buildGroupDn(code, groupName)));
         group.groupName = groupName;
+        group.dn = buildGroupDn(groupCode, groupName);
         return group.dn;
     }
 
     @Override
-    public void updateGroup(String groupCode, String groupName) {
+    public String updateGroup(String groupCode, String groupName) {
         groups.computeIfPresent(groupCode, (code, group) -> {
             group.groupName = groupName;
+            group.dn = buildGroupDn(code, groupName);
             return group;
         });
+        return groups.containsKey(groupCode) ? groups.get(groupCode).dn : createGroup(groupCode, groupName);
     }
 
     @Override
@@ -46,7 +49,7 @@ public class StubLdapGroupService implements LdapGroupService {
 
     @Override
     public void addUserToGroup(String username, String groupCode) {
-        groups.computeIfAbsent(groupCode, code -> new StubGroup(code, code, buildGroupDn(code)))
+        groups.computeIfAbsent(groupCode, code -> new StubGroup(code, code, buildGroupDn(code, code)))
             .members.add(buildUserDn(username));
     }
 
@@ -84,18 +87,31 @@ public class StubLdapGroupService implements LdapGroupService {
         return snapshot;
     }
 
-    private String buildGroupDn(String groupCode) {
-        return "cn=" + groupCode + "," + ldapProperties.getGroupsOu() + "," + ldapProperties.getBaseDn();
+    /**
+     * 返回当前桩环境中的分组 DN 快照，供测试断言使用。
+     */
+    public Map<String, String> snapshotDns() {
+        Map<String, String> snapshot = new LinkedHashMap<>();
+        groups.forEach((groupCode, group) -> snapshot.put(groupCode, group.dn));
+        return snapshot;
+    }
+
+    private String buildGroupDn(String groupCode, String groupName) {
+        return "cn=" + buildGroupCn(groupCode, groupName) + "," + ldapProperties.getGroupsOu() + "," + ldapProperties.getBaseDn();
     }
 
     private String buildUserDn(String username) {
         return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
     }
 
+    private String buildGroupCn(String groupCode, String groupName) {
+        return groupCode + "_" + groupName;
+    }
+
     private static class StubGroup {
         private final String groupCode;
         private String groupName;
-        private final String dn;
+        private String dn;
         private final Set<String> members = new LinkedHashSet<>();
 
         private StubGroup(String groupCode, String groupName, String dn) {
@@ -105,4 +121,3 @@ public class StubLdapGroupService implements LdapGroupService {
         }
     }
 }
-
