@@ -7,6 +7,10 @@ import java.util.List;
  */
 public interface LdapGroupService {
 
+    boolean existsGroup(String groupCode);
+
+    String findGroupDn(String groupCode);
+
     String createGroup(String groupCode, String groupName);
 
     String updateGroup(String groupCode, String groupName);

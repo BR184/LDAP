@@ -25,6 +25,17 @@ public class StubLdapGroupService implements LdapGroupService {
     private final Map<String, StubGroup> groups = new ConcurrentHashMap<>();
 
     @Override
+    public boolean existsGroup(String groupCode) {
+        return groups.containsKey(groupCode);
+    }
+
+    @Override
+    public String findGroupDn(String groupCode) {
+        StubGroup group = groups.get(groupCode);
+        return group == null ? null : group.dn;
+    }
+
+    @Override
     public String createGroup(String groupCode, String groupName) {
         StubGroup group = groups.computeIfAbsent(groupCode, code -> new StubGroup(code, groupName, buildGroupDn(code, groupName)));
         group.groupName = groupName;

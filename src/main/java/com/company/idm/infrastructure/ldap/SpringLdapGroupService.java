@@ -30,6 +30,22 @@ public class SpringLdapGroupService implements LdapGroupService {
     private final AppLdapProperties ldapProperties;
 
     @Override
+    public boolean existsGroup(String groupCode) {
+        return !ldapTemplate.search(
+            LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("businessCategory").is(groupCode),
+            (AttributesMapper<String>) attributes -> attributes.get("cn") == null ? null : attributes.get("cn").get().toString()
+        ).isEmpty();
+    }
+
+    @Override
+    public String findGroupDn(String groupCode) {
+        if (!existsGroup(groupCode)) {
+            return null;
+        }
+        return lookupGroup(groupCode).getDn().toString();
+    }
+
+    @Override
     public String createGroup(String groupCode, String groupName) {
         if (existsGroup(groupCode)) {
             updateGroup(groupCode, groupName);
@@ -125,15 +141,8 @@ public class SpringLdapGroupService implements LdapGroupService {
         String userDn = buildUserDn(username);
         ldapTemplate.search(
             LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("member").is(userDn),
-            (AttributesMapper<String>) attributes -> attributes.get("cn").get().toString()
+            (AttributesMapper<String>) attributes -> attributes.get("businessCategory").get().toString()
         ).forEach(groupCode -> removeUserFromGroup(username, groupCode));
-    }
-
-    private boolean existsGroup(String groupCode) {
-        return !ldapTemplate.search(
-            LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("businessCategory").is(groupCode),
-            (AttributesMapper<String>) attributes -> attributes.get("cn") == null ? null : attributes.get("cn").get().toString()
-        ).isEmpty();
     }
 
     private DirContextAdapter lookupGroup(String groupCode) {

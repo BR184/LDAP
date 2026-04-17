@@ -511,6 +511,64 @@ class PrototypeIntegrationTest {
         assertThat(findDepartmentNodeByCode(departments, targetParentCode)).isNull();
     }
 
+    @Test
+    void shouldPreviewExecuteAndQuerySyncBatches() throws Exception {
+        String adminToken = loginAsAdmin();
+
+        MvcResult previewResult = mockMvc.perform(post("/api/v1/sync/feishu/preview")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "sourceFileName": "feishu-export.json",
+                      "sourceFileHash": "hash-preview"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.batch.batchType").value("FEISHU_IMPORT"))
+            .andExpect(jsonPath("$.data.jobs.length()").value(2))
+            .andReturn();
+        String previewBatchNo = objectMapper.readTree(previewResult.getResponse().getContentAsString())
+            .path("data").path("batch").path("batchNo").asText();
+        assertThat(previewBatchNo).isNotBlank();
+
+        mockMvc.perform(get("/api/v1/sync/batches/{batchNo}", previewBatchNo)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.batch.batchNo").value(previewBatchNo));
+
+        MvcResult reconcileResult = mockMvc.perform(post("/api/v1/sync/reconcile/execute")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "autoRepair": true
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.batch.batchType").value("LDAP_RECONCILE"))
+            .andReturn();
+        String reconcileBatchNo = objectMapper.readTree(reconcileResult.getResponse().getContentAsString())
+            .path("data").path("batch").path("batchNo").asText();
+        assertThat(reconcileBatchNo).isNotBlank();
+
+        MvcResult jobsResult = mockMvc.perform(get("/api/v1/sync/jobs")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andReturn();
+        JsonNode jobs = objectMapper.readTree(jobsResult.getResponse().getContentAsString()).path("data");
+        assertThat(jobs.isArray()).isTrue();
+        assertThat(jobs.size()).isGreaterThanOrEqualTo(4);
+
+        mockMvc.perform(get("/api/v1/sync/batches/{batchNo}", reconcileBatchNo)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.batch.batchNo").value(reconcileBatchNo))
+            .andExpect(jsonPath("$.data.jobs.length()").value(2));
+    }
+
     private String loginAsAdmin() throws Exception {
         return login("admin", "admin123456");
     }

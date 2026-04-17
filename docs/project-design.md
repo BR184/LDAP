@@ -941,6 +941,41 @@ flowchart LR
 - 同步任务与批次日志表
 - 固定映射规则由代码维护，后续如接入更多第三方来源再考虑映射配置化
 
+#### 5.6.6 同步公共模型与触发框架设计
+
+为同时支撑飞书导入、LDAP 双写补偿和 MySQL 与 LDAP 对账，建议采用统一同步模型：
+
+- 同步批次 `SyncBatch`
+- 同步任务 `SyncJob`
+- 同步差异 `SyncDiff`
+
+模型职责如下：
+
+- `SyncBatch`：描述一次导入、对账或重试的执行批次
+- `SyncJob`：描述批次中的具体执行步骤，例如部门导入、用户导入、部门对账、用户对账
+- `SyncDiff`：描述预览差异或对账扫描结果，用于后续修复或回溯
+
+触发模式支持两类：
+
+- `MANUAL`：管理员手工触发，适用于首次初始化、紧急同步和人工重试
+- `SCHEDULED`：系统定时触发，适用于凌晨低峰的静默维护
+
+设计原则：
+
+- 手工触发和定时触发共用同一套应用服务编排
+- 先把同步逻辑做成可手工执行，再接入定时任务
+- 同类型同步批次同一时刻仅允许一个 `RUNNING`
+- 差异扫描与执行修复使用同一套计算逻辑
+
+当前原型已落地说明：
+
+- 已落地 `sys_sync_batch`、`sys_sync_job`、`sys_sync_diff`
+- 已落地同步应用服务 `SyncApplicationService`
+- 已落地手工触发接口
+- 已落地轻量定时触发器 `SyncScheduleLauncher`
+- 已落地基础 LDAP 对账处理器，当前覆盖部门与用户维度
+- 已落地飞书导入公共处理器框架，真实数据包解析逻辑将在后续子任务补齐
+
 ### 5.7 API 网关模块设计（后续预留）
 
 根据基础服务层架构图，API 网关是后续统一门户与统一 API 接入的重要入口，但不建议在一期与身份管理核心强耦合。
@@ -1155,7 +1190,51 @@ flowchart LR
 | error_msg | varchar(512) | 错误信息 |
 | gmt_create | datetime | 创建时间 |
 
-#### 6.1.8 Casbin 表
+#### 6.1.8 同步表
+
+同步框架当前已实际落地以下表：
+
+- `sys_sync_batch`
+- `sys_sync_job`
+- `sys_sync_diff`
+
+`sys_sync_batch` 核心字段建议：
+
+- `batch_no`
+- `batch_type`
+- `source_type`
+- `trigger_mode`
+- `file_name`
+- `file_hash`
+- `status`
+- `summary_json`
+- `operator`
+- `correlation_batch_no`
+
+`sys_sync_job` 核心字段建议：
+
+- `batch_no`
+- `job_type`
+- `target_type`
+- `status`
+- `request_json`
+- `result_json`
+- `error_message`
+- `retry_count`
+
+`sys_sync_diff` 核心字段建议：
+
+- `batch_no`
+- `job_id`
+- `target_type`
+- `target_key`
+- `diff_type`
+- `source_snapshot`
+- `target_snapshot`
+- `repairable`
+- `status`
+
+#### 6.1.9 Casbin 表
 
 若采用 JDBC Adapter，可直接使用标准 `casbin_rule` 表。
 
@@ -1169,7 +1248,7 @@ flowchart LR
 - `v4`
 - `v5`
 
-#### 6.1.9 后续预留表
+#### 6.1.10 后续预留表
 
 为匹配基础服务层红框模块，建议按需预留如下表设计：
 
@@ -1193,6 +1272,10 @@ flowchart LR
 - `sys_department.uk_external_id`
 - `sys_department.uk_ldap_dn`
 - `sys_department.idx_parent_dept_code`
+- `sys_sync_batch.uk_batch_no`
+- `sys_sync_job.idx_batch_no`
+- `sys_sync_diff.idx_batch_no`
+- `sys_sync_diff.idx_job_id`
 - `sys_role.uk_role_code`
 - `sys_menu.uk_menu_code`
 - `sys_permission.uk_permission_code`
@@ -1280,7 +1363,25 @@ flowchart LR
 - `GET /api/v1/permissions/tree`
 - `PUT /api/v1/roles/{id}/permissions`
 
-### 7.5 未来预留接口
+### 7.5 同步接口
+
+当前已落地：
+
+- `POST /api/v1/sync/feishu/preview`
+- `POST /api/v1/sync/feishu/execute`
+- `POST /api/v1/sync/reconcile/preview`
+- `POST /api/v1/sync/reconcile/execute`
+- `POST /api/v1/sync/jobs/{id}/retry`
+- `GET /api/v1/sync/jobs`
+- `GET /api/v1/sync/batches/{batchNo}`
+
+说明：
+
+- 当前已支持管理员手工触发同步批次
+- 当前已支持轻量定时任务框架，作为第二期前置能力
+- 飞书导入接口当前已落地公共框架，真实文件解析逻辑将在后续子任务继续补齐
+
+### 7.6 未来预留接口
 
 - `GET /api/v1/gateway/routes`
 - `POST /api/v1/gateway/routes`
@@ -1293,9 +1394,6 @@ flowchart LR
 - `GET /api/v1/plugins`
 - `POST /api/v1/plugins`
 - `POST /api/v1/sync/feishu/upload`
-- `POST /api/v1/sync/feishu/preview`
-- `POST /api/v1/sync/feishu/execute`
-- `GET /api/v1/sync/jobs`
 
 ## 8. 安全设计
 
@@ -1477,9 +1575,9 @@ flowchart LR
 
 当前原型已落地的测试类型包括：
 
-- 应用服务单元测试：认证、用户、角色权限、部门
+- 应用服务单元测试：认证、用户、角色权限、部门、同步编排
 - 基础设施单元测试：JWT、过滤器、SQL 日志、LDAP stub、Casbin、统一异常处理
-- 集成测试：认证、用户管理、角色菜单管理、部门管理全链路
+- 集成测试：认证、用户管理、角色菜单管理、部门管理、同步接口全链路
 
 当前已落地的典型测试文件包括：
 
@@ -1488,6 +1586,10 @@ flowchart LR
 - `RbacApplicationServiceTest`
 - `DepartmentApplicationServiceTest`
 - `DefaultPermissionLevelRuleServiceTest`
+- `EnvironmentStartupVerifierTest`
+- `SyncApplicationServiceTest`
+- `LdapReconcileDepartmentHandlerTest`
+- `SyncScheduleLauncherTest`
 - `PrototypeIntegrationTest`
 - `CasbinPolicyServiceTest`
 - `StubLdapDirectoryServiceTest`
@@ -1501,7 +1603,7 @@ flowchart LR
 当前全量测试执行结果：
 
 - 测试命令：`.tools\apache-maven-3.9.6\bin\mvn.cmd test`
-- Tests run：`70`
+- Tests run：`79`
 - Failures：`0`
 - Errors：`0`
 
@@ -1527,6 +1629,7 @@ flowchart LR
 
 建议通过 `application-{profile}.yml` 管理不同环境配置：
 
+- `local`
 - `dev`
 - `test`
 - `prod`
@@ -1542,6 +1645,39 @@ flowchart LR
 - LDAP 管理员密码
 - JWT 签名密钥
 - 数据库账号密码
+
+当前原型已落地的真环境准备能力：
+
+- `application.yml`：仅保留通用配置，并将默认 profile 设为 `local`
+- `application-local.yml`：使用 `H2 + LDAP stub`
+- `application-dev.yml`：使用 `MySQL + OpenLDAP`
+- `application-test.yml`：使用 `MySQL + OpenLDAP`
+- `application-prod.yml`：使用 `MySQL + OpenLDAP`，并关闭 H2 console 与 Swagger 文档暴露
+- JWT、数据库账号密码、LDAP bind 账号密码支持通过环境变量注入
+- 新增 `app.startup-check.*` 配置，用于控制真实环境启动校验
+
+#### 12.2.1 启动校验与部署辅助能力
+
+为降低从原型环境迁移到真实环境的切换风险，当前已补充以下底座能力：
+
+- `EnvironmentStartupVerifier`
+  - 在启用 `app.startup-check.enabled=true` 时校验数据库连通性
+  - 当 LDAP 模式为 `spring` 时校验 `people-ou`、`groups-ou` 可访问
+  - 可校验占位用户 `uid=placeholder` 是否存在
+
+- `LdapDirectoryHealthIndicator`
+  - 将 LDAP 目录健康状态纳入 Actuator 健康检查
+  - 输出 `baseDn`、`peopleOu`、`groupsOu` 等基础信息
+
+- `deploy/docker-compose-dev.yml`
+  - 提供 `MySQL + OpenLDAP` 的开发联调容器模板
+
+- `deploy/openldap/bootstrap/01-base.ldif`
+  - 预置 `ou=people`
+  - 预置 `ou=groups`
+  - 预置 `uid=placeholder`
+
+这些能力用于保证第二期第一步“真环境配置与现有功能迁移”具备可重复部署和可验证基础。
 
 ### 12.3 监控与告警
 
@@ -1600,6 +1736,16 @@ flowchart LR
 - 验证当前一期功能在 `MySQL + OpenLDAP` 环境中的可运行性
 - 输出环境部署说明、初始化说明和联调说明
 
+当前已完成的真环境准备项包括：
+
+- 增加 `application-local.yml`、`application-dev.yml`、`application-test.yml`、`application-prod.yml`
+- 新增 MySQL 驱动依赖
+- 将 Flyway 初始化脚本调整为兼容 MySQL 的建表写法
+- 增加真实环境启动校验器
+- 增加 LDAP 健康检查
+- 增加 OpenLDAP 基础目录 LDIF 模板
+- 增加 `MySQL + OpenLDAP` 容器联调模板
+
 2. 同步公共底座
 
 - 抽象飞书导入批次模型
@@ -1607,6 +1753,15 @@ flowchart LR
 - 抽象差异对象、补偿对象和审计对象
 - 提供可手工触发的同步执行入口
 - 保证业务逻辑先能手工运行，再接调度
+
+当前已完成的同步公共底座项包括：
+
+- 落地 `SyncBatch`、`SyncJob`、`SyncDiff` 三类核心模型
+- 落地同步批次、任务、差异三张持久化表
+- 落地 `SyncApplicationService`
+- 落地手工触发同步接口
+- 落地轻量定时触发器 `SyncScheduleLauncher`
+- 落地基础 LDAP 对账处理器
 
 3. 飞书部门导入
 

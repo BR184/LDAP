@@ -1,0 +1,39 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: corp-idm-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: corp_idm
+      MYSQL_USER: corp_idm
+      MYSQL_PASSWORD: corp_idm
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: corp-idm-openldap
+    restart: unless-stopped
+    environment:
+      LDAP_ORGANISATION: corp
+      LDAP_DOMAIN: corp.local
+      LDAP_ADMIN_PASSWORD: admin
+      LDAP_TLS: "false"
+    ports:
+      - "389:389"
+    volumes:
+      - openldap-data:/var/lib/ldap
+      - openldap-config:/etc/ldap/slapd.d
+      - ./openldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
+
+volumes:
+  mysql-data:
+  openldap-data:
+  openldap-config:

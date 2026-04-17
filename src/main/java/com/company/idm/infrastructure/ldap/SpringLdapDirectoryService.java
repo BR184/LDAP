@@ -62,10 +62,11 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
         attributes.put(new BasicAttribute("uid", user.getUsername()));
         attributes.put(new BasicAttribute("cn", user.getRealName()));
         attributes.put(new BasicAttribute("sn", user.getRealName()));
-        attributes.put(new BasicAttribute("mail", user.getEmail()));
-        attributes.put(new BasicAttribute("mobile", user.getMobile()));
-        attributes.put(new BasicAttribute("employeeNumber", user.getEmployeeNo()));
-        attributes.put(new BasicAttribute("departmentNumber", user.getDeptCode()));
+        putIfPresent(attributes, "mail", user.getEmail());
+        putIfPresent(attributes, "mobile", user.getMobile());
+        putIfPresent(attributes, "employeeNumber", user.getEmployeeNo());
+        putIfPresent(attributes, "departmentNumber", user.getDeptCode());
+        attributes.put(new BasicAttribute("employeeType", "ENABLED"));
         attributes.put(new BasicAttribute("userPassword", rawPassword));
         ldapTemplate.bind(dn, null, attributes);
         return dn.toString();
@@ -76,10 +77,10 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
         DirContextAdapter context = lookup(user.getUsername());
         context.setAttributeValue("cn", user.getRealName());
         context.setAttributeValue("sn", user.getRealName());
-        context.setAttributeValue("mail", user.getEmail());
-        context.setAttributeValue("mobile", user.getMobile());
-        context.setAttributeValue("employeeNumber", user.getEmployeeNo());
-        context.setAttributeValue("departmentNumber", user.getDeptCode());
+        setOrRemoveAttribute(context, "mail", user.getEmail());
+        setOrRemoveAttribute(context, "mobile", user.getMobile());
+        setOrRemoveAttribute(context, "employeeNumber", user.getEmployeeNo());
+        setOrRemoveAttribute(context, "departmentNumber", user.getDeptCode());
         ldapTemplate.modifyAttributes(context);
     }
 
@@ -119,5 +120,20 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
         } catch (NameNotFoundException exception) {
             throw new BizException("LDAP_USER_NOT_FOUND", "LDAP 用户不存在");
         }
+    }
+
+    private void putIfPresent(BasicAttributes attributes, String attributeName, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        attributes.put(new BasicAttribute(attributeName, value));
+    }
+
+    private void setOrRemoveAttribute(DirContextAdapter context, String attributeName, String value) {
+        if (value == null || value.isBlank()) {
+            context.setAttributeValues(attributeName, new String[0]);
+            return;
+        }
+        context.setAttributeValue(attributeName, value);
     }
 }
