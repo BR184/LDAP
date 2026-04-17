@@ -29,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -91,6 +92,7 @@ class UserApplicationServiceTest {
         when(ldapDirectoryService.existsByUid("zhangsan")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(firstSaved, secondSaved);
         when(ldapDirectoryService.createUser(firstSaved, "Password@123")).thenReturn("uid=zhangsan,ou=people,dc=corp,dc=local");
+        when(ldapGroupService.createGroup("D001", "研发中心")).thenReturn("cn=D001_研发中心,ou=groups,dc=corp,dc=local");
 
         User created = userApplicationService.createUser(command);
 
@@ -104,6 +106,10 @@ class UserApplicationServiceTest {
         verify(userRepository, times(2)).save(userCaptor.capture());
         assertThat(userCaptor.getAllValues().get(0).getSourceType()).isEqualTo(SourceType.MANUAL);
         assertThat(userCaptor.getAllValues().get(1).getLdapDn()).isEqualTo("uid=zhangsan,ou=people,dc=corp,dc=local");
+        verify(departmentRepository).save(argThat(savedDepartment ->
+            "D001".equals(savedDepartment.getDeptCode())
+                && "cn=D001_研发中心,ou=groups,dc=corp,dc=local".equals(savedDepartment.getLdapDn())
+        ));
     }
 
     @Test
@@ -112,6 +118,7 @@ class UserApplicationServiceTest {
         Department department = Department.builder().id(1L).deptCode("D002").deptName("运维部").sourceType(SourceType.MANUAL).status(1).build();
         when(userRepository.findById(2L)).thenReturn(Optional.of(existing));
         when(departmentRepository.findByDeptCode("D002")).thenReturn(Optional.of(department));
+        when(ldapGroupService.createGroup("D002", "运维部")).thenReturn("cn=D002_运维部,ou=groups,dc=corp,dc=local");
 
         User updated = userApplicationService.updateUser(new com.company.idm.application.user.UpdateUserCommand(
             2L, "张三-更新", "new@corp.local", "13911111111", "E10002", "D002", "admin"
@@ -125,6 +132,29 @@ class UserApplicationServiceTest {
         verify(ldapGroupService).removeUserFromGroup("zhangsan", "D001");
         verify(ldapGroupService).createGroup("D002", "运维部");
         verify(ldapGroupService).addUserToGroup("zhangsan", "D002");
+        verify(departmentRepository).save(argThat(savedDepartment ->
+            "D002".equals(savedDepartment.getDeptCode())
+                && "cn=D002_运维部,ou=groups,dc=corp,dc=local".equals(savedDepartment.getLdapDn())
+        ));
+    }
+
+    @Test
+    void shouldRejectCreateUserWhenDepartmentDisabled() {
+        Department disabledDepartment = Department.builder()
+            .id(1L)
+            .deptCode("D009")
+            .deptName("停用部门")
+            .sourceType(SourceType.MANUAL)
+            .status(0)
+            .build();
+        when(userRepository.findByUsername("zhangsan")).thenReturn(Optional.empty());
+        when(departmentRepository.findByDeptCode("D009")).thenReturn(Optional.of(disabledDepartment));
+
+        assertThatThrownBy(() -> userApplicationService.createUser(new CreateUserCommand(
+            "zhangsan", "张三", "zhangsan@corp.local", "13900000000", "E10001", "D009", "Password@123", List.of(1L), "admin"
+        )))
+            .isInstanceOf(BizException.class)
+            .hasMessage("部门已停用");
     }
 
     @Test

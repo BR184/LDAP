@@ -1408,7 +1408,20 @@ flowchart LR
 - 集成测试：验证 MySQL、LDAP、JWT、Casbin 之间的协同
 - 接口测试：验证 REST API 入参校验、鉴权、返回码
 
-### 11.2 测试工具建议
+### 11.2 单元测试规范
+
+参考阿里巴巴 Java 开发手册，当前项目单元测试遵循以下约束：
+
+- 单元测试只验证单一职责，避免一个测试同时覆盖多个无关业务点
+- 正常分支与异常分支分开编写，名称直接表达业务意图
+- 优先使用 `Given-When-Then` 的思维组织测试数据、动作和断言
+- 禁止依赖真实时间、随机结果、线程睡眠等不稳定因素
+- Mock 只用于隔离外部依赖，不替代核心业务断言
+- 核心规则类必须显式断言错误码或错误信息，不只校验抛异常
+- 新功能优先补到原有测试文件，避免重复造轮子和测试分散
+- 修复缺陷时，优先补回归测试，再修业务代码
+
+### 11.3 测试工具建议
 
 - `JUnit 5`
 - `Mockito`
@@ -1420,7 +1433,7 @@ flowchart LR
 - MySQL 容器
 - OpenLDAP 容器
 
-### 11.3 一期重点测试场景
+### 11.4 一期重点测试场景
 
 - 新增用户成功并写入 LDAP
 - LDAP 用户已存在时的失败处理
@@ -1429,11 +1442,46 @@ flowchart LR
 - 删除用户时 LDAP 物理删除与 MySQL 逻辑删除
 - 用户本人修改密码成功与失败分支
 - 管理员重置密码成功与非管理员重置失败
+- 部门树创建、移动、删除与防循环校验
+- 部门名称变更触发 LDAP group 重命名与 `ldap_dn` 回写
+- 菜单创建、更新、删除与祖先菜单自动补齐
 - 用户绑定多个角色后的权限合并
 - 角色权限变更后 Casbin 策略刷新生效
 - 非授权用户访问受限接口被正确拒绝
 
-### 11.4 质量门禁
+### 11.5 当前原型测试落地说明
+
+当前原型已落地的测试类型包括：
+
+- 应用服务单元测试：认证、用户、角色权限、部门
+- 基础设施单元测试：JWT、过滤器、SQL 日志、LDAP stub、Casbin、统一异常处理
+- 集成测试：认证、用户管理、角色菜单管理、部门管理全链路
+
+当前已落地的典型测试文件包括：
+
+- `AuthApplicationServiceTest`
+- `UserApplicationServiceTest`
+- `RbacApplicationServiceTest`
+- `DepartmentApplicationServiceTest`
+- `DefaultPermissionLevelRuleServiceTest`
+- `PrototypeIntegrationTest`
+- `CasbinPolicyServiceTest`
+- `StubLdapDirectoryServiceTest`
+- `StubLdapGroupServiceTest`
+- `GlobalExceptionHandlerTest`
+- `JwtAuthenticationFilterTest`
+- `JwtTokenServiceTest`
+- `SqlLogFormatterTest`
+- `TraceIdFilterTest`
+
+当前全量测试执行结果：
+
+- 测试命令：`.tools\apache-maven-3.9.6\bin\mvn.cmd test`
+- Tests run：`70`
+- Failures：`0`
+- Errors：`0`
+
+### 11.6 质量门禁
 
 建议设置如下质量目标：
 
