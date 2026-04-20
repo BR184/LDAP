@@ -29,14 +29,22 @@ public class FeishuUserImportHandler implements SyncJobHandler {
 
     @Override
     public SyncJobExecutionResult preview(SyncRequestPayload payload) {
-        FeishuUserImportResult result = importService.preview(payload);
+        FeishuUserImportResult result = hasDocumentPath(payload)
+            ? importService.previewFromDocument(payload.documentPath())
+            : importService.preview(payload);
         return buildResult(result, true, payload);
     }
 
     @Override
     public SyncJobExecutionResult execute(SyncRequestPayload payload) {
-        FeishuUserImportResult result = importService.execute(payload);
+        FeishuUserImportResult result = hasDocumentPath(payload)
+            ? importService.executeFromDocument(payload.documentPath())
+            : importService.execute(payload);
         return buildResult(result, false, payload);
+    }
+
+    private boolean hasDocumentPath(SyncRequestPayload payload) {
+        return payload.documentPath() != null && !payload.documentPath().isBlank();
     }
 
     private SyncJobExecutionResult buildResult(

@@ -17,7 +17,6 @@ import org.springframework.ldap.core.ContextMapper;
 import org.springframework.ldap.core.DirContextAdapter;
 import org.springframework.ldap.core.LdapTemplate;
 import org.springframework.ldap.query.LdapQueryBuilder;
-import org.springframework.ldap.support.LdapNameBuilder;
 import org.springframework.stereotype.Service;
 
 /**
@@ -44,7 +43,7 @@ public class SpringLdapGroupService implements LdapGroupService {
         if (!existsGroup(groupCode)) {
             return null;
         }
-        return lookupGroup(groupCode).getDn().toString();
+        return LdapDnHelper.toAbsoluteDn(ldapProperties, lookupGroup(groupCode).getDn());
     }
 
     @Override
@@ -56,7 +55,7 @@ public class SpringLdapGroupService implements LdapGroupService {
         return LdapGroupSnapshot.builder()
             .groupCode(groupCode)
             .groupName(context.getStringAttribute("description"))
-            .dn(context.getDn().toString())
+            .dn(LdapDnHelper.toAbsoluteDn(ldapProperties, context.getDn()))
             .members(extractMembers(context))
             .build();
     }
@@ -74,7 +73,7 @@ public class SpringLdapGroupService implements LdapGroupService {
 
     @Override
     public List<String> listUserGroups(String username) {
-        String userDn = buildUserDn(username);
+        String userDn = LdapDnHelper.buildUserDn(ldapProperties, username);
         return ldapTemplate.search(
             LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("member").is(userDn),
             (AttributesMapper<String>) attributes -> attributes.get("businessCategory") == null ? null : attributes.get("businessCategory").get().toString()
@@ -88,18 +87,18 @@ public class SpringLdapGroupService implements LdapGroupService {
     public String createGroup(String groupCode, String groupName) {
         if (existsGroup(groupCode)) {
             updateGroup(groupCode, groupName);
-            return buildGroupDn(groupCode, groupName).toString();
+            return LdapDnHelper.buildGroupDn(ldapProperties, groupCode, groupName);
         }
-        Name dn = buildGroupDn(groupCode, groupName);
+        Name dn = LdapDnHelper.buildRelativeGroupDn(ldapProperties, groupCode, groupName);
         BasicAttributes attributes = new BasicAttributes();
         attributes.put("objectClass", "groupOfNames");
-        attributes.put(new BasicAttribute("cn", buildGroupCn(groupCode, groupName)));
+        attributes.put(new BasicAttribute("cn", LdapDnHelper.buildGroupCn(groupCode, groupName)));
         attributes.put(new BasicAttribute("description", groupName));
         attributes.put(new BasicAttribute("businessCategory", groupCode));
         // groupOfNames 要求至少存在一个 member，这里先使用占位 DN，待首次加人后会保留或覆盖。
-        attributes.put(new BasicAttribute("member", buildPlaceholderMemberDn()));
+        attributes.put(new BasicAttribute("member", LdapDnHelper.buildPlaceholderMemberDn(ldapProperties)));
         ldapTemplate.bind(dn, null, attributes);
-        return dn.toString();
+        return LdapDnHelper.toAbsoluteDn(ldapProperties, dn);
     }
 
     @Override
@@ -108,15 +107,15 @@ public class SpringLdapGroupService implements LdapGroupService {
             return createGroup(groupCode, groupName);
         }
         DirContextAdapter context = lookupGroup(groupCode);
-        Name expectedDn = buildGroupDn(groupCode, groupName);
+        Name expectedDn = LdapDnHelper.buildRelativeGroupDn(ldapProperties, groupCode, groupName);
         if (!context.getDn().equals(expectedDn)) {
             ldapTemplate.rename(context.getDn(), expectedDn);
             context = lookupGroup(groupCode);
         }
-        context.setAttributeValue("cn", buildGroupCn(groupCode, groupName));
+        context.setAttributeValue("cn", LdapDnHelper.buildGroupCn(groupCode, groupName));
         context.setAttributeValue("description", groupName);
         ldapTemplate.modifyAttributes(context);
-        return expectedDn.toString();
+        return LdapDnHelper.toAbsoluteDn(ldapProperties, expectedDn);
     }
 
     @Override
@@ -131,8 +130,8 @@ public class SpringLdapGroupService implements LdapGroupService {
     @Override
     public void addUserToGroup(String username, String groupCode) {
         DirContextAdapter context = lookupGroup(groupCode);
-        String userDn = buildUserDn(username);
-        String placeholder = buildPlaceholderMemberDn();
+        String userDn = LdapDnHelper.buildUserDn(ldapProperties, username);
+        String placeholder = LdapDnHelper.buildPlaceholderMemberDn(ldapProperties);
         String[] members = context.getStringAttributes("member");
         boolean alreadyExists = members != null && java.util.Arrays.stream(members).anyMatch(userDn::equals);
         if (alreadyExists) {
@@ -149,14 +148,14 @@ public class SpringLdapGroupService implements LdapGroupService {
     public void removeUserFromGroup(String username, String groupCode) {
         try {
             DirContextAdapter context = lookupGroup(groupCode);
-            String userDn = buildUserDn(username);
+            String userDn = LdapDnHelper.buildUserDn(ldapProperties, username);
             String[] members = context.getStringAttributes("member");
             if (members == null || java.util.Arrays.stream(members).noneMatch(userDn::equals)) {
                 return;
             }
             context.removeAttributeValue("member", userDn);
             if (remainingMembersCount(context) == 0) {
-                context.addAttributeValue("member", buildPlaceholderMemberDn());
+                context.addAttributeValue("member", LdapDnHelper.buildPlaceholderMemberDn(ldapProperties));
             }
             ldapTemplate.modifyAttributes(context);
         } catch (BizException ignored) {
@@ -177,7 +176,7 @@ public class SpringLdapGroupService implements LdapGroupService {
 
     @Override
     public void removeUserFromAllGroups(String username) {
-        String userDn = buildUserDn(username);
+        String userDn = LdapDnHelper.buildUserDn(ldapProperties, username);
         ldapTemplate.search(
             LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("member").is(userDn),
             (AttributesMapper<String>) attributes -> attributes.get("businessCategory").get().toString()
@@ -200,28 +199,8 @@ public class SpringLdapGroupService implements LdapGroupService {
         if (members == null) {
             return 0;
         }
-        String placeholder = buildPlaceholderMemberDn();
+        String placeholder = LdapDnHelper.buildPlaceholderMemberDn(ldapProperties);
         return (int) java.util.Arrays.stream(members).filter(member -> !placeholder.equals(member)).count();
-    }
-
-    private Name buildGroupDn(String groupCode, String groupName) {
-        String groupsOuValue = ldapProperties.getGroupsOu().replace("ou=", "");
-        return LdapNameBuilder.newInstance(ldapProperties.getBaseDn())
-            .add("ou", groupsOuValue)
-            .add("cn", buildGroupCn(groupCode, groupName))
-            .build();
-    }
-
-    private String buildUserDn(String username) {
-        return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
-    }
-
-    private String buildPlaceholderMemberDn() {
-        return "uid=placeholder," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
-    }
-
-    private String buildGroupCn(String groupCode, String groupName) {
-        return groupCode + "_" + groupName;
     }
 
     private List<String> extractMembers(DirContextAdapter context) {
@@ -231,14 +210,11 @@ public class SpringLdapGroupService implements LdapGroupService {
         }
         List<String> usernames = new ArrayList<>();
         for (String member : members) {
-            if (member == null || member.contains("uid=placeholder")) {
+            String username = LdapDnHelper.extractUid(member);
+            if (username == null || "placeholder".equals(username)) {
                 continue;
             }
-            int start = member.indexOf("uid=");
-            int end = member.indexOf(',', start);
-            if (start >= 0) {
-                usernames.add(end > start ? member.substring(start + 4, end) : member.substring(start + 4));
-            }
+            usernames.add(username);
         }
         return usernames.stream().sorted().toList();
     }

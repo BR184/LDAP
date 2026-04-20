@@ -8,6 +8,7 @@ import com.company.idm.application.sync.SyncApplicationService;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.common.enums.SyncTriggerMode;
 import com.company.idm.domain.department.Department;
+import com.company.idm.interfaces.sync.FeishuFileImportRequest;
 import com.company.idm.interfaces.sync.FeishuSyncRequest;
 import com.company.idm.interfaces.sync.SyncBatchDetailResponse;
 import com.company.idm.interfaces.sync.SyncResponseAssembler;
@@ -101,6 +102,23 @@ public class DepartmentController {
     ) {
         return ApiResponse.success(syncResponseAssembler.toResponse(
             syncApplicationService.executeFeishuDepartmentSync(username, SyncTriggerMode.MANUAL)
+        ));
+    }
+
+    @PostMapping("/import/feishu-file")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/import/feishu-file', 'POST')")
+    public ApiResponse<SyncBatchDetailResponse> importFeishuFile(
+        @Valid @RequestBody FeishuFileImportRequest request,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        return ApiResponse.success(syncResponseAssembler.toResponse(
+            syncApplicationService.executeFeishuDepartmentFileImport(
+                request.documentPath(),
+                Boolean.TRUE.equals(request.forceFullSync()),
+                request.remark(),
+                username,
+                SyncTriggerMode.MANUAL
+            )
         ));
     }
 

@@ -114,7 +114,7 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
     }
 
     private String buildDn(String username) {
-        return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
+        return LdapDnHelper.buildUserDn(ldapProperties, username);
     }
 
     private record StubEntry(

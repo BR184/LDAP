@@ -138,15 +138,11 @@ public class StubLdapGroupService implements LdapGroupService {
     }
 
     private String buildGroupDn(String groupCode, String groupName) {
-        return "cn=" + buildGroupCn(groupCode, groupName) + "," + ldapProperties.getGroupsOu() + "," + ldapProperties.getBaseDn();
+        return LdapDnHelper.buildGroupDn(ldapProperties, groupCode, groupName);
     }
 
     private String buildUserDn(String username) {
-        return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
-    }
-
-    private String buildGroupCn(String groupCode, String groupName) {
-        return groupCode + "_" + groupName;
+        return LdapDnHelper.buildUserDn(ldapProperties, username);
     }
 
     private static class StubGroup {

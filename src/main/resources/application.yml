@@ -79,6 +79,11 @@ app:
       page-size: ${APP_SYNC_FEISHU_PAGE_SIZE:50}
       connect-timeout-ms: ${APP_SYNC_FEISHU_CONNECT_TIMEOUT_MS:5000}
       read-timeout-ms: ${APP_SYNC_FEISHU_READ_TIMEOUT_MS:10000}
+      file-import:
+        # 手工文件导入默认开启，用于内网开发和应急补数。
+        enabled: ${APP_SYNC_FEISHU_FILE_IMPORT_ENABLED:true}
+        root-dir: ${APP_SYNC_FEISHU_FILE_IMPORT_ROOT_DIR:docs/feishu-import}
+        max-file-size-bytes: ${APP_SYNC_FEISHU_FILE_IMPORT_MAX_SIZE:2097152}
     schedule:
       # 同步定时任务默认关闭，避免在原型环境或首次部署时误触发。
       feishu:

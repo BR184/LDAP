@@ -58,7 +58,7 @@ class LdapReconcileMembershipHandlerTest {
 
         LdapReconcileMembershipHandler handler = new LdapReconcileMembershipHandler(userRepository, departmentRepository, ldapGroupService);
 
-        SyncJobExecutionResult result = handler.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL));
+        SyncJobExecutionResult result = handler.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null));
 
         assertThat(result.diffs()).hasSize(1);
         SyncDiffPayload diff = result.diffs().get(0);
@@ -84,7 +84,7 @@ class LdapReconcileMembershipHandlerTest {
 
         LdapReconcileMembershipHandler handler = new LdapReconcileMembershipHandler(userRepository, departmentRepository, ldapGroupService);
 
-        SyncJobExecutionResult result = handler.execute(new SyncRequestPayload(false, null, true, "admin", SyncTriggerMode.MANUAL));
+        SyncJobExecutionResult result = handler.execute(new SyncRequestPayload(false, null, true, "admin", SyncTriggerMode.MANUAL, null));
 
         assertThat(result.diffs()).isEmpty();
         verify(ldapGroupService).syncUserGroups("zhangsan", List.of("D002"));

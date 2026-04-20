@@ -54,6 +54,7 @@ public class SyncApplicationService {
             triggerMode,
             List.of(SyncJobType.FEISHU_DEPARTMENT_IMPORT),
             false,
+            null,
             null
         );
     }
@@ -74,6 +75,59 @@ public class SyncApplicationService {
             triggerMode,
             List.of(SyncJobType.FEISHU_DEPARTMENT_IMPORT, SyncJobType.FEISHU_USER_IMPORT),
             false,
+            null,
+            null
+        );
+    }
+
+    /**
+     * 手工执行飞书部门标准化文件导入批次。
+     */
+    @Transactional
+    public SyncBatchDetail executeFeishuDepartmentFileImport(
+        String documentPath,
+        boolean forceFullSync,
+        String remark,
+        String operator,
+        SyncTriggerMode triggerMode
+    ) {
+        return runBatch(
+            SyncBatchType.FEISHU_IMPORT,
+            SyncSourceType.FEISHU,
+            forceFullSync,
+            remark,
+            false,
+            operator,
+            triggerMode,
+            List.of(SyncJobType.FEISHU_DEPARTMENT_IMPORT),
+            false,
+            documentPath,
+            null
+        );
+    }
+
+    /**
+     * 手工执行飞书用户标准化文件导入批次。
+     */
+    @Transactional
+    public SyncBatchDetail executeFeishuUserFileImport(
+        String documentPath,
+        boolean forceFullSync,
+        String remark,
+        String operator,
+        SyncTriggerMode triggerMode
+    ) {
+        return runBatch(
+            SyncBatchType.FEISHU_IMPORT,
+            SyncSourceType.FEISHU,
+            forceFullSync,
+            remark,
+            false,
+            operator,
+            triggerMode,
+            List.of(SyncJobType.FEISHU_USER_IMPORT),
+            false,
+            documentPath,
             null
         );
     }
@@ -97,6 +151,7 @@ public class SyncApplicationService {
                 SyncJobType.LDAP_RECONCILE_MEMBERSHIP
             ),
             true,
+            null,
             null
         );
     }
@@ -120,6 +175,7 @@ public class SyncApplicationService {
                 SyncJobType.LDAP_RECONCILE_MEMBERSHIP
             ),
             false,
+            null,
             null
         );
     }
@@ -142,6 +198,7 @@ public class SyncApplicationService {
             SyncTriggerMode.MANUAL,
             List.of(job.getJobType()),
             false,
+            payload.documentPath(),
             job.getBatchNo()
         );
     }
@@ -176,6 +233,7 @@ public class SyncApplicationService {
         SyncTriggerMode triggerMode,
         List<SyncJobType> jobTypes,
         boolean preview,
+        String documentPath,
         String correlationBatchNo
     ) {
         if (syncBatchRepository.existsRunningBatch(batchType)) {
@@ -187,7 +245,7 @@ public class SyncApplicationService {
             .batchType(batchType)
             .sourceType(sourceType)
             .triggerMode(triggerMode)
-            .fileName(remark)
+            .fileName(documentPath)
             .fileHash(forceFullSync ? "FULL_SYNC" : null)
             .status(SyncRunStatus.RUNNING)
             .operator(operator)
@@ -204,7 +262,8 @@ public class SyncApplicationService {
                 remark,
                 autoRepair,
                 operator,
-                triggerMode
+                triggerMode,
+                documentPath
             );
             SyncJob job = syncJobRepository.save(SyncJob.builder()
                 .batchNo(batchNo)

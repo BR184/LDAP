@@ -15,6 +15,7 @@ import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.AppLdapProperties;
+import com.company.idm.infrastructure.ldap.LdapDnHelper;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -348,6 +349,6 @@ public class UserApplicationService {
     }
 
     private String buildUserDn(String username) {
-        return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
+        return LdapDnHelper.buildUserDn(ldapProperties, username);
     }
 }

@@ -14,6 +14,7 @@ import com.company.idm.domain.ldap.LdapUserSnapshot;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.AppLdapProperties;
+import com.company.idm.infrastructure.ldap.LdapDnHelper;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -141,7 +142,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
     }
 
     private String buildExpectedDn(String username) {
-        return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
+        return LdapDnHelper.buildUserDn(ldapProperties, username);
     }
 
     private String expectedStatus(UserStatus status) {

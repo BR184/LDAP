@@ -1,0 +1,57 @@
+[
+    {
+        "externalId":  "5f4ad879",
+        "username":  "+8615850553970",
+        "realName":  "用户725015",
+        "email":  null,
+        "mobile":  "+8615850553970",
+        "employeeNo":  null,
+        "mainDepartmentExternalId":  "xlsx_dept_653a53fbdbae5a6bd1bba4ece153259058071514",
+        "status":  1,
+        "orderNo":  1
+    },
+    {
+        "externalId":  "276b33cd",
+        "username":  "+8613964112234",
+        "realName":  "于善鹏",
+        "email":  null,
+        "mobile":  "+8613964112234",
+        "employeeNo":  null,
+        "mainDepartmentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
+        "status":  0,
+        "orderNo":  2
+    },
+    {
+        "externalId":  "87f1g3ec",
+        "username":  "+8613964228855",
+        "realName":  "叶泽奇",
+        "email":  null,
+        "mobile":  "+8613964228855",
+        "employeeNo":  null,
+        "mainDepartmentExternalId":  "xlsx_dept_e68fe93fae43d32a5a57f088beb12b58929c40e9",
+        "status":  0,
+        "orderNo":  3
+    },
+    {
+        "externalId":  "78fe8e9b",
+        "username":  "+8613964113374",
+        "realName":  "戴佳伟",
+        "email":  null,
+        "mobile":  "+8613964113374",
+        "employeeNo":  null,
+        "mainDepartmentExternalId":  "xlsx_dept_86d99a5c47342a142acb667ef4af491024918e56",
+        "status":  0,
+        "orderNo":  4
+    },
+    {
+        "externalId":  "cab11466",
+        "username":  "+8613964885524",
+        "realName":  "陈杰斌",
+        "email":  null,
+        "mobile":  "+8613964885524",
+        "employeeNo":  null,
+        "mainDepartmentExternalId":  "xlsx_dept_86d99a5c47342a142acb667ef4af491024918e56",
+        "status":  0,
+        "orderNo":  5
+    }
+]

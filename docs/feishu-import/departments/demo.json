@@ -1,0 +1,42 @@
+[
+    {
+        "externalId":  "xlsx_dept_653a53fbdbae5a6bd1bba4ece153259058071514",
+        "departmentCode":  "FD653A53FBDBAE",
+        "departmentName":  "用户725015的组织",
+        "parentExternalId":  null,
+        "status":  1,
+        "orderNo":  1
+    },
+    {
+        "externalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
+        "departmentCode":  "FD8E088C6A4D92",
+        "departmentName":  "开发部门",
+        "parentExternalId":  "xlsx_dept_653a53fbdbae5a6bd1bba4ece153259058071514",
+        "status":  1,
+        "orderNo":  1
+    },
+    {
+        "externalId":  "xlsx_dept_e68fe93fae43d32a5a57f088beb12b58929c40e9",
+        "departmentCode":  "FDE68FE93FAE43",
+        "departmentName":  "基础开发部门",
+        "parentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
+        "status":  1,
+        "orderNo":  1
+    },
+    {
+        "externalId":  "xlsx_dept_913b50bbc404e9285c6e2b785da3d505b06c55db",
+        "departmentCode":  "FD913B50BBC404",
+        "departmentName":  "平台开发部门",
+        "parentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
+        "status":  1,
+        "orderNo":  2
+    },
+    {
+        "externalId":  "xlsx_dept_86d99a5c47342a142acb667ef4af491024918e56",
+        "departmentCode":  "FD86D99A5C4734",
+        "departmentName":  "效能平台",
+        "parentExternalId":  "xlsx_dept_913b50bbc404e9285c6e2b785da3d505b06c55db",
+        "status":  1,
+        "orderNo":  1
+    }
+]

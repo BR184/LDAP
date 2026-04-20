@@ -18,6 +18,7 @@ import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.AppLdapProperties;
+import com.company.idm.infrastructure.ldap.LdapDnHelper;
 import com.company.idm.infrastructure.feishu.FeishuDepartmentRemoteService;
 import com.company.idm.infrastructure.feishu.FeishuUserRemoteService;
 import java.util.ArrayList;
@@ -38,6 +39,7 @@ public class FeishuUserImportService {
 
     private final FeishuUserRemoteService userRemoteService;
     private final FeishuDepartmentRemoteService departmentRemoteService;
+    private final FeishuImportDocumentResolver importDocumentResolver;
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final RoleRepository roleRepository;
@@ -50,6 +52,7 @@ public class FeishuUserImportService {
     public FeishuUserImportService(
         FeishuUserRemoteService userRemoteService,
         FeishuDepartmentRemoteService departmentRemoteService,
+        FeishuImportDocumentResolver importDocumentResolver,
         UserRepository userRepository,
         DepartmentRepository departmentRepository,
         RoleRepository roleRepository,
@@ -61,6 +64,7 @@ public class FeishuUserImportService {
     ) {
         this.userRemoteService = userRemoteService;
         this.departmentRemoteService = departmentRemoteService;
+        this.importDocumentResolver = importDocumentResolver;
         this.userRepository = userRepository;
         this.departmentRepository = departmentRepository;
         this.roleRepository = roleRepository;
@@ -72,12 +76,26 @@ public class FeishuUserImportService {
     }
 
     public FeishuUserImportResult preview(SyncRequestPayload payload) {
-        ImportPlan plan = buildPlan();
+        ImportPlan plan = buildPlan(userRemoteService.fetchUsers(), true);
         return new FeishuUserImportResult(plan.newCount, plan.updateCount, plan.noChangeCount, plan.diffs);
     }
 
     public FeishuUserImportResult execute(SyncRequestPayload payload) {
-        ImportPlan plan = buildPlan();
+        ImportPlan plan = buildPlan(userRemoteService.fetchUsers(), true);
+        return executePlan(plan);
+    }
+
+    public FeishuUserImportResult previewFromDocument(String documentPath) {
+        ImportPlan plan = buildPlan(importDocumentResolver.resolveUsers(documentPath), false);
+        return new FeishuUserImportResult(plan.newCount, plan.updateCount, plan.noChangeCount, plan.diffs);
+    }
+
+    public FeishuUserImportResult executeFromDocument(String documentPath) {
+        ImportPlan plan = buildPlan(importDocumentResolver.resolveUsers(documentPath), false);
+        return executePlan(plan);
+    }
+
+    private FeishuUserImportResult executePlan(ImportPlan plan) {
         passwordPolicyValidator.validate(DEFAULT_IMPORTED_PASSWORD);
         Role normalUserRole = roleRepository.findByCode(NORMAL_USER_ROLE_CODE)
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "普通用户角色不存在"));
@@ -155,10 +173,9 @@ public class FeishuUserImportService {
         departmentRepository.save(department.toBuilder().ldapDn(ldapDn).build());
     }
 
-    private ImportPlan buildPlan() {
-        List<FeishuUserPayload> users = userRemoteService.fetchUsers();
+    private ImportPlan buildPlan(List<FeishuUserPayload> users, boolean includeRemoteDepartmentFallback) {
         validateDuplicates(users);
-        Map<String, Department> departmentByExternalId = buildDepartmentIndex();
+        Map<String, Department> departmentByExternalId = buildDepartmentIndex(includeRemoteDepartmentFallback);
 
         List<PlanItem> items = new ArrayList<>();
         List<SyncDiffPayload> allDiffs = new ArrayList<>();
@@ -191,21 +208,23 @@ public class FeishuUserImportService {
         return new ImportPlan(items, allDiffs, newCount, updateCount, noChangeCount);
     }
 
-    private Map<String, Department> buildDepartmentIndex() {
+    private Map<String, Department> buildDepartmentIndex(boolean includeRemoteDepartmentFallback) {
         Map<String, Department> departmentByExternalId = new LinkedHashMap<>();
         for (Department department : departmentRepository.findAll()) {
             if (department.getExternalId() != null && !department.getExternalId().isBlank()) {
                 departmentByExternalId.put(department.getExternalId(), department);
             }
         }
-        for (FeishuDepartmentPayload payload : departmentRemoteService.fetchDepartments()) {
-            departmentByExternalId.putIfAbsent(payload.externalId(), Department.builder()
-                .deptCode(payload.departmentCode())
-                .deptName(payload.departmentName())
-                .externalId(payload.externalId())
-                .sourceType(SourceType.FEISHU)
-                .status(payload.status() == null ? 1 : payload.status())
-                .build());
+        if (includeRemoteDepartmentFallback) {
+            for (FeishuDepartmentPayload payload : departmentRemoteService.fetchDepartments()) {
+                departmentByExternalId.putIfAbsent(payload.externalId(), Department.builder()
+                    .deptCode(payload.departmentCode())
+                    .deptName(payload.departmentName())
+                    .externalId(payload.externalId())
+                    .sourceType(SourceType.FEISHU)
+                    .status(payload.status() == null ? 1 : payload.status())
+                    .build());
+            }
         }
         return departmentByExternalId;
     }
@@ -362,7 +381,7 @@ public class FeishuUserImportService {
     }
 
     private String buildUserDn(String username) {
-        return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
+        return LdapDnHelper.buildUserDn(ldapProperties, username);
     }
 
     private String snapshotTarget(User user) {

@@ -120,6 +120,58 @@ class SyncApplicationServiceTest {
             .hasMessage("当前已有同类型同步任务正在执行");
     }
 
+    @Test
+    void shouldCreateManualFileImportBatchWithDocumentPath() {
+        List<SyncJobHandler> handlers = List.of(
+            new SuccessHandler(SyncJobType.FEISHU_DEPARTMENT_IMPORT, SyncTargetType.DEPARTMENT)
+        );
+        SyncApplicationService service = new SyncApplicationService(
+            handlers,
+            syncBatchRepository,
+            syncJobRepository,
+            syncDiffRepository,
+            auditLogRepository,
+            new ObjectMapper()
+        );
+
+        List<SyncJob> storedJobs = new ArrayList<>();
+        List<SyncDiff> storedDiffs = new ArrayList<>();
+        AtomicLong batchId = new AtomicLong(1L);
+        AtomicLong jobId = new AtomicLong(1L);
+
+        when(syncBatchRepository.existsRunningBatch(SyncBatchType.FEISHU_IMPORT)).thenReturn(false);
+        when(syncBatchRepository.save(any(SyncBatch.class))).thenAnswer(invocation -> {
+            SyncBatch batch = invocation.getArgument(0);
+            return batch.getId() == null ? batch.toBuilder().id(batchId.getAndIncrement()).build() : batch;
+        });
+        when(syncJobRepository.save(any(SyncJob.class))).thenAnswer(invocation -> {
+            SyncJob job = invocation.getArgument(0);
+            SyncJob saved = job.getId() == null ? job.toBuilder().id(jobId.getAndIncrement()).build() : job;
+            storedJobs.removeIf(item -> item.getId().equals(saved.getId()));
+            storedJobs.add(saved);
+            return saved;
+        });
+        when(syncDiffRepository.findByBatchNo(any())).thenAnswer(invocation ->
+            storedDiffs.stream().filter(item -> item.getBatchNo().equals(invocation.getArgument(0))).toList()
+        );
+        when(syncJobRepository.findByBatchNo(any())).thenAnswer(invocation ->
+            storedJobs.stream().filter(item -> item.getBatchNo().equals(invocation.getArgument(0))).toList()
+        );
+
+        SyncBatchDetail detail = service.executeFeishuDepartmentFileImport(
+            "departments/demo.json",
+            false,
+            "manual file import",
+            "admin",
+            SyncTriggerMode.MANUAL
+        );
+
+        assertThat(detail.batch().getFileName()).isEqualTo("departments/demo.json");
+        assertThat(detail.jobs()).singleElement().satisfies(job ->
+            assertThat(job.getRequestJson()).contains("departments/demo.json")
+        );
+    }
+
     private static class SuccessHandler implements SyncJobHandler {
 
         private final SyncJobType jobType;

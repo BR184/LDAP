@@ -17,7 +17,6 @@ import org.springframework.ldap.core.ContextMapper;
 import org.springframework.ldap.core.DirContextAdapter;
 import org.springframework.ldap.core.LdapTemplate;
 import org.springframework.ldap.query.LdapQueryBuilder;
-import org.springframework.ldap.support.LdapNameBuilder;
 import org.springframework.stereotype.Service;
 
 /**
@@ -63,7 +62,7 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
             .employeeNo(context.getStringAttribute("employeeNumber"))
             .deptCode(context.getStringAttribute("departmentNumber"))
             .status(context.getStringAttribute("employeeType"))
-            .dn(context.getDn().toString())
+            .dn(LdapDnHelper.toAbsoluteDn(ldapProperties, context.getDn()))
             .build();
     }
 
@@ -80,11 +79,7 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
 
     @Override
     public String createUser(User user, String rawPassword) {
-        String peopleOuValue = ldapProperties.getPeopleOu().replace("ou=", "");
-        Name dn = LdapNameBuilder.newInstance(ldapProperties.getBaseDn())
-            .add("ou", peopleOuValue)
-            .add("uid", user.getUsername())
-            .build();
+        Name dn = LdapDnHelper.buildRelativeUserDn(ldapProperties, user.getUsername());
         BasicAttributes attributes = new BasicAttributes();
         attributes.put("objectClass", "inetOrgPerson");
         attributes.put(new BasicAttribute("uid", user.getUsername()));
@@ -97,7 +92,7 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
         attributes.put(new BasicAttribute("employeeType", "ENABLED"));
         attributes.put(new BasicAttribute("userPassword", rawPassword));
         ldapTemplate.bind(dn, null, attributes);
-        return dn.toString();
+        return LdapDnHelper.toAbsoluteDn(ldapProperties, dn);
     }
 
     @Override

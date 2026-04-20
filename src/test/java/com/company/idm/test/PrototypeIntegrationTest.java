@@ -8,6 +8,8 @@ import com.company.idm.infrastructure.feishu.FeishuDepartmentRemoteService;
 import com.company.idm.infrastructure.feishu.FeishuUserRemoteService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +32,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 验证认证、用户管理与权限链路的集成测试。
  */
-@SpringBootTest(classes = IdmBootApplication.class)
+@SpringBootTest(
+    classes = IdmBootApplication.class,
+    properties = {
+        "app.sync.feishu.file-import.enabled=true",
+        "app.sync.feishu.file-import.root-dir=target/feishu-import"
+    }
+)
 @AutoConfigureMockMvc
 class PrototypeIntegrationTest {
 
@@ -39,6 +47,8 @@ class PrototypeIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    private static final Path FILE_IMPORT_ROOT = Path.of("target/feishu-import");
 
     @MockBean
     private FeishuDepartmentRemoteService feishuDepartmentRemoteService;
@@ -706,6 +716,67 @@ class PrototypeIntegrationTest {
             .andExpect(jsonPath("$.data.jobs.length()").value(3));
     }
 
+    @Test
+    void shouldImportDepartmentsAndUsersFromFeishuFiles() throws Exception {
+        String adminToken = loginAsAdmin();
+        String suffix = String.valueOf(System.nanoTime());
+        String rootDeptCode = "FDROOT" + suffix;
+        String childDeptCode = "FDCHILD" + suffix;
+        String username = "fileuser" + suffix;
+
+        writeImportDocument("departments/dept-" + suffix + ".json", List.of(
+            new FeishuDepartmentPayload("ou_root_" + suffix, rootDeptCode, "文件一级部门", null, 1, 1),
+            new FeishuDepartmentPayload("ou_child_" + suffix, childDeptCode, "文件二级部门", "ou_root_" + suffix, 1, 2)
+        ));
+        writeImportDocument("users/user-" + suffix + ".json", List.of(
+            new FeishuUserPayload("user_" + suffix, username, "文件导入用户", username + "@corp.local", "13812345678", "E" + suffix, "ou_child_" + suffix, 1, 1)
+        ));
+
+        mockMvc.perform(post("/api/v1/departments/import/feishu-file")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "documentPath": "departments/dept-%s.json",
+                      "remark": "manual-file-import"
+                    }
+                    """.formatted(suffix)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.batch.fileName").value("departments/dept-" + suffix + ".json"))
+            .andExpect(jsonPath("$.data.jobs.length()").value(1));
+
+        mockMvc.perform(post("/api/v1/users/import/feishu-file")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "documentPath": "users/user-%s.json",
+                      "remark": "manual-file-import"
+                    }
+                    """.formatted(suffix)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.batch.fileName").value("users/user-" + suffix + ".json"))
+            .andExpect(jsonPath("$.data.jobs.length()").value(1));
+
+        MvcResult usersResult = mockMvc.perform(get("/api/v1/users")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode users = objectMapper.readTree(usersResult.getResponse().getContentAsString()).path("data");
+        JsonNode importedUser = null;
+        for (JsonNode user : users) {
+            if (username.equals(user.path("username").asText())) {
+                importedUser = user;
+                break;
+            }
+        }
+        assertThat(importedUser).isNotNull();
+        assertThat(importedUser.path("deptCode").asText()).isEqualTo(childDeptCode);
+
+        String importedToken = login(username, "123456");
+        assertThat(importedToken).isNotBlank();
+    }
+
     private String loginAsAdmin() throws Exception {
         return login("admin", "admin123456");
     }
@@ -768,6 +839,12 @@ class PrototypeIntegrationTest {
             }
         }
         return null;
+    }
+
+    private void writeImportDocument(String relativePath, Object payload) throws Exception {
+        Path targetFile = FILE_IMPORT_ROOT.resolve(relativePath);
+        Files.createDirectories(targetFile.getParent());
+        objectMapper.writeValue(targetFile.toFile(), payload);
     }
 
 }

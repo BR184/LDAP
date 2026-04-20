@@ -1,6 +1,7 @@
 package com.company.idm.test;
 
 import com.company.idm.application.sync.SyncRequestPayload;
+import com.company.idm.application.sync.feishu.FeishuImportDocumentResolver;
 import com.company.idm.application.sync.feishu.FeishuDepartmentImportResult;
 import com.company.idm.application.sync.feishu.FeishuDepartmentImportService;
 import com.company.idm.application.sync.feishu.FeishuDepartmentPayload;
@@ -41,6 +42,9 @@ class FeishuDepartmentImportServiceTest {
     @Mock
     private FeishuDepartmentRemoteService departmentRemoteService;
 
+    @Mock
+    private FeishuImportDocumentResolver importDocumentResolver;
+
     @Test
     void shouldPreviewNewDepartmentsSuccessfully() {
         FeishuDepartmentImportService service = buildService();
@@ -51,7 +55,7 @@ class FeishuDepartmentImportServiceTest {
         ));
 
         FeishuDepartmentImportResult result = service.preview(new SyncRequestPayload(
-            false, null, false, "admin", SyncTriggerMode.MANUAL
+            false, null, false, "admin", SyncTriggerMode.MANUAL, null
         ));
 
         assertThat(result.newCount()).isEqualTo(2);
@@ -75,7 +79,7 @@ class FeishuDepartmentImportServiceTest {
         ));
 
         FeishuDepartmentImportResult result = service.execute(new SyncRequestPayload(
-            false, null, false, "admin", SyncTriggerMode.MANUAL
+            false, null, false, "admin", SyncTriggerMode.MANUAL, null
         ));
 
         assertThat(result.newCount()).isEqualTo(2);
@@ -106,7 +110,7 @@ class FeishuDepartmentImportServiceTest {
         ));
 
         assertThatThrownBy(() -> service.preview(new SyncRequestPayload(
-            false, null, false, "admin", SyncTriggerMode.MANUAL
+            false, null, false, "admin", SyncTriggerMode.MANUAL, null
         )))
             .isInstanceOf(BizException.class)
             .hasMessage("飞书部门父节点不存在");
@@ -131,13 +135,34 @@ class FeishuDepartmentImportServiceTest {
         ));
 
         assertThatThrownBy(() -> service.preview(new SyncRequestPayload(
-            false, null, false, "admin", SyncTriggerMode.MANUAL
+            false, null, false, "admin", SyncTriggerMode.MANUAL, null
         )))
             .isInstanceOf(BizException.class)
             .hasMessage("飞书部门 external_id 与 dept_code 映射冲突");
     }
 
+    @Test
+    void shouldPreviewDepartmentsFromDocumentPath() {
+        FeishuDepartmentImportService service = buildService();
+        when(departmentRepository.findAll()).thenReturn(List.of());
+        when(importDocumentResolver.resolveDepartments("departments/demo.json")).thenReturn(List.of(
+            new FeishuDepartmentPayload("ou_root", "D100", "研发中心", null, 1, 1)
+        ));
+
+        FeishuDepartmentImportResult result = service.previewFromDocument("departments/demo.json");
+
+        assertThat(result.newCount()).isEqualTo(1);
+        assertThat(result.diffs()).singleElement().satisfies(diff ->
+            assertThat(diff.diffType()).isEqualTo(SyncDiffType.MISSING_IN_MYSQL)
+        );
+    }
+
     private FeishuDepartmentImportService buildService() {
-        return new FeishuDepartmentImportService(departmentRemoteService, departmentRepository, ldapGroupService);
+        return new FeishuDepartmentImportService(
+            departmentRemoteService,
+            importDocumentResolver,
+            departmentRepository,
+            ldapGroupService
+        );
     }
 }

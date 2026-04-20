@@ -33,6 +33,17 @@ class SyncScheduleLauncherTest {
     }
 
     @Test
+    void shouldSkipScheduledFeishuImportWhenDisabled() {
+        SyncScheduleProperties properties = new SyncScheduleProperties();
+        properties.getFeishu().setEnabled(false);
+        SyncScheduleLauncher launcher = new SyncScheduleLauncher(syncApplicationService, properties);
+
+        launcher.runFeishuImport();
+
+        verify(syncApplicationService, never()).executeFeishuUserSync("system-scheduler", SyncTriggerMode.SCHEDULED);
+    }
+
+    @Test
     void shouldSkipScheduledReconcileWhenDisabled() {
         SyncScheduleProperties properties = new SyncScheduleProperties();
         properties.getReconcile().setEnabled(false);

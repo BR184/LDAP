@@ -26,26 +26,43 @@ import org.springframework.stereotype.Service;
 public class FeishuDepartmentImportService {
 
     private final FeishuDepartmentRemoteService departmentRemoteService;
+    private final FeishuImportDocumentResolver importDocumentResolver;
     private final DepartmentRepository departmentRepository;
     private final LdapGroupService ldapGroupService;
 
     public FeishuDepartmentImportService(
         FeishuDepartmentRemoteService departmentRemoteService,
+        FeishuImportDocumentResolver importDocumentResolver,
         DepartmentRepository departmentRepository,
         LdapGroupService ldapGroupService
     ) {
         this.departmentRemoteService = departmentRemoteService;
+        this.importDocumentResolver = importDocumentResolver;
         this.departmentRepository = departmentRepository;
         this.ldapGroupService = ldapGroupService;
     }
 
     public FeishuDepartmentImportResult preview(SyncRequestPayload payload) {
-        ImportPlan plan = buildPlan();
+        ImportPlan plan = buildPlan(departmentRemoteService.fetchDepartments());
         return new FeishuDepartmentImportResult(plan.newCount, plan.updateCount, plan.noChangeCount, plan.diffs);
     }
 
     public FeishuDepartmentImportResult execute(SyncRequestPayload payload) {
-        ImportPlan plan = buildPlan();
+        ImportPlan plan = buildPlan(departmentRemoteService.fetchDepartments());
+        return executePlan(plan);
+    }
+
+    public FeishuDepartmentImportResult previewFromDocument(String documentPath) {
+        ImportPlan plan = buildPlan(importDocumentResolver.resolveDepartments(documentPath));
+        return new FeishuDepartmentImportResult(plan.newCount, plan.updateCount, plan.noChangeCount, plan.diffs);
+    }
+
+    public FeishuDepartmentImportResult executeFromDocument(String documentPath) {
+        ImportPlan plan = buildPlan(importDocumentResolver.resolveDepartments(documentPath));
+        return executePlan(plan);
+    }
+
+    private FeishuDepartmentImportResult executePlan(ImportPlan plan) {
         List<PlanItem> executableItems = plan.items.stream()
             .filter(item -> item.changeType() != ChangeType.NO_CHANGE || item.ldapRepairRequired())
             .sorted(Comparator.comparingInt(item -> item.target().getDeptLevel()))
@@ -70,8 +87,7 @@ public class FeishuDepartmentImportService {
         return ldapGroupService.findGroupDn(item.target().getDeptCode());
     }
 
-    private ImportPlan buildPlan() {
-        List<FeishuDepartmentPayload> departments = departmentRemoteService.fetchDepartments();
+    private ImportPlan buildPlan(List<FeishuDepartmentPayload> departments) {
         validateDuplicates(departments);
         Map<String, Department> existingByExternalId = new LinkedHashMap<>();
         Map<String, Department> existingByDeptCode = new LinkedHashMap<>();

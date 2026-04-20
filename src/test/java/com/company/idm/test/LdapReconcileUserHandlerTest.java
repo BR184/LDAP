@@ -70,7 +70,7 @@ class LdapReconcileUserHandlerTest {
 
         LdapReconcileUserHandler handler = new LdapReconcileUserHandler(userRepository, ldapDirectoryService, ldapProperties);
 
-        SyncJobExecutionResult result = handler.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL));
+        SyncJobExecutionResult result = handler.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null));
 
         assertThat(result.diffs()).hasSize(1);
         SyncDiffPayload diff = result.diffs().get(0);
@@ -103,7 +103,7 @@ class LdapReconcileUserHandlerTest {
 
         LdapReconcileUserHandler handler = new LdapReconcileUserHandler(userRepository, ldapDirectoryService, ldapProperties);
 
-        SyncJobExecutionResult result = handler.execute(new SyncRequestPayload(false, null, true, "admin", SyncTriggerMode.MANUAL));
+        SyncJobExecutionResult result = handler.execute(new SyncRequestPayload(false, null, true, "admin", SyncTriggerMode.MANUAL, null));
 
         assertThat(result.diffs()).isEmpty();
         verify(ldapDirectoryService).createUser(user, "123456");

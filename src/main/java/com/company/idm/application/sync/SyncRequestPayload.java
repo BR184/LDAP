@@ -10,6 +10,7 @@ public record SyncRequestPayload(
     String remark,
     boolean autoRepair,
     String operator,
-    SyncTriggerMode triggerMode
+    SyncTriggerMode triggerMode,
+    String documentPath
 ) {
 }

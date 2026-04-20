@@ -13,6 +13,7 @@ import com.company.idm.application.sync.SyncApplicationService;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.common.enums.SyncTriggerMode;
 import com.company.idm.domain.user.User;
+import com.company.idm.interfaces.sync.FeishuFileImportRequest;
 import com.company.idm.interfaces.sync.FeishuSyncRequest;
 import com.company.idm.interfaces.sync.SyncBatchDetailResponse;
 import com.company.idm.interfaces.sync.SyncResponseAssembler;
@@ -161,6 +162,23 @@ public class UserController {
     ) {
         return ApiResponse.success(syncResponseAssembler.toResponse(
             syncApplicationService.executeFeishuUserSync(username, SyncTriggerMode.MANUAL)
+        ));
+    }
+
+    @PostMapping("/import/feishu-file")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/import/feishu-file', 'POST')")
+    public ApiResponse<SyncBatchDetailResponse> importFeishuFile(
+        @Valid @RequestBody FeishuFileImportRequest request,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        return ApiResponse.success(syncResponseAssembler.toResponse(
+            syncApplicationService.executeFeishuUserFileImport(
+                request.documentPath(),
+                Boolean.TRUE.equals(request.forceFullSync()),
+                request.remark(),
+                username,
+                SyncTriggerMode.MANUAL
+            )
         ));
     }
 
