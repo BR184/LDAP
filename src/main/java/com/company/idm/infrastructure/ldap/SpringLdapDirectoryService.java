@@ -2,8 +2,10 @@ package com.company.idm.infrastructure.ldap;
 
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.ldap.LdapDirectoryService;
+import com.company.idm.domain.ldap.LdapUserSnapshot;
 import com.company.idm.domain.user.User;
 import com.company.idm.infrastructure.config.AppLdapProperties;
+import java.util.List;
 import javax.naming.Name;
 import javax.naming.directory.BasicAttribute;
 import javax.naming.directory.BasicAttributes;
@@ -48,6 +50,32 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
             LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("uid").is(username),
             (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
         ).isEmpty();
+    }
+
+    @Override
+    public LdapUserSnapshot findUserSnapshot(String username) {
+        DirContextAdapter context = lookup(username);
+        return LdapUserSnapshot.builder()
+            .username(username)
+            .realName(context.getStringAttribute("cn"))
+            .email(context.getStringAttribute("mail"))
+            .mobile(context.getStringAttribute("mobile"))
+            .employeeNo(context.getStringAttribute("employeeNumber"))
+            .deptCode(context.getStringAttribute("departmentNumber"))
+            .status(context.getStringAttribute("employeeType"))
+            .dn(context.getDn().toString())
+            .build();
+    }
+
+    @Override
+    public List<String> listAllUsernames() {
+        return ldapTemplate.search(
+            LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("objectClass").is("inetOrgPerson"),
+            (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
+        ).stream()
+            .filter(username -> username != null && !"placeholder".equals(username))
+            .sorted()
+            .toList();
     }
 
     @Override

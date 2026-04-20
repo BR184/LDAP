@@ -643,7 +643,7 @@ class PrototypeIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.batch.batchNo").value(reconcileBatchNo))
-            .andExpect(jsonPath("$.data.jobs.length()").value(2));
+            .andExpect(jsonPath("$.data.jobs.length()").value(3));
     }
 
     private String loginAsAdmin() throws Exception {

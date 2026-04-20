@@ -1,8 +1,10 @@
 package com.company.idm.infrastructure.ldap;
 
 import com.company.idm.common.exception.BizException;
+import com.company.idm.domain.ldap.LdapGroupSnapshot;
 import com.company.idm.domain.ldap.LdapGroupService;
 import com.company.idm.infrastructure.config.AppLdapProperties;
+import java.util.ArrayList;
 import java.util.List;
 import javax.naming.Name;
 import javax.naming.directory.BasicAttribute;
@@ -43,6 +45,43 @@ public class SpringLdapGroupService implements LdapGroupService {
             return null;
         }
         return lookupGroup(groupCode).getDn().toString();
+    }
+
+    @Override
+    public LdapGroupSnapshot findGroupSnapshot(String groupCode) {
+        if (!existsGroup(groupCode)) {
+            return null;
+        }
+        DirContextAdapter context = lookupGroup(groupCode);
+        return LdapGroupSnapshot.builder()
+            .groupCode(groupCode)
+            .groupName(context.getStringAttribute("description"))
+            .dn(context.getDn().toString())
+            .members(extractMembers(context))
+            .build();
+    }
+
+    @Override
+    public List<String> listAllGroupCodes() {
+        return ldapTemplate.search(
+            LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("objectClass").is("groupOfNames"),
+            (AttributesMapper<String>) attributes -> attributes.get("businessCategory") == null ? null : attributes.get("businessCategory").get().toString()
+        ).stream()
+            .filter(code -> code != null && !code.isBlank())
+            .sorted()
+            .toList();
+    }
+
+    @Override
+    public List<String> listUserGroups(String username) {
+        String userDn = buildUserDn(username);
+        return ldapTemplate.search(
+            LdapQueryBuilder.query().base(ldapProperties.getGroupsOu()).where("member").is(userDn),
+            (AttributesMapper<String>) attributes -> attributes.get("businessCategory") == null ? null : attributes.get("businessCategory").get().toString()
+        ).stream()
+            .filter(code -> code != null && !code.isBlank())
+            .sorted()
+            .toList();
     }
 
     @Override
@@ -183,5 +222,24 @@ public class SpringLdapGroupService implements LdapGroupService {
 
     private String buildGroupCn(String groupCode, String groupName) {
         return groupCode + "_" + groupName;
+    }
+
+    private List<String> extractMembers(DirContextAdapter context) {
+        String[] members = context.getStringAttributes("member");
+        if (members == null) {
+            return List.of();
+        }
+        List<String> usernames = new ArrayList<>();
+        for (String member : members) {
+            if (member == null || member.contains("uid=placeholder")) {
+                continue;
+            }
+            int start = member.indexOf("uid=");
+            int end = member.indexOf(',', start);
+            if (start >= 0) {
+                usernames.add(end > start ? member.substring(start + 4, end) : member.substring(start + 4));
+            }
+        }
+        return usernames.stream().sorted().toList();
     }
 }

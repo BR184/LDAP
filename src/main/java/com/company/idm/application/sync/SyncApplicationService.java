@@ -91,7 +91,11 @@ public class SyncApplicationService {
             false,
             operator,
             triggerMode,
-            List.of(SyncJobType.LDAP_RECONCILE_DEPARTMENT, SyncJobType.LDAP_RECONCILE_USER),
+            List.of(
+                SyncJobType.LDAP_RECONCILE_DEPARTMENT,
+                SyncJobType.LDAP_RECONCILE_USER,
+                SyncJobType.LDAP_RECONCILE_MEMBERSHIP
+            ),
             true,
             null
         );
@@ -110,7 +114,11 @@ public class SyncApplicationService {
             autoRepair,
             operator,
             triggerMode,
-            List.of(SyncJobType.LDAP_RECONCILE_DEPARTMENT, SyncJobType.LDAP_RECONCILE_USER),
+            List.of(
+                SyncJobType.LDAP_RECONCILE_DEPARTMENT,
+                SyncJobType.LDAP_RECONCILE_USER,
+                SyncJobType.LDAP_RECONCILE_MEMBERSHIP
+            ),
             false,
             null
         );
@@ -283,14 +291,14 @@ public class SyncApplicationService {
     private SyncBatchType resolveBatchType(SyncJobType jobType) {
         return switch (jobType) {
             case FEISHU_DEPARTMENT_IMPORT, FEISHU_USER_IMPORT -> SyncBatchType.FEISHU_IMPORT;
-            case LDAP_RECONCILE_DEPARTMENT, LDAP_RECONCILE_USER -> SyncBatchType.LDAP_RECONCILE;
+            case LDAP_RECONCILE_DEPARTMENT, LDAP_RECONCILE_USER, LDAP_RECONCILE_MEMBERSHIP -> SyncBatchType.LDAP_RECONCILE;
         };
     }
 
     private SyncSourceType resolveSourceType(SyncJobType jobType) {
         return switch (jobType) {
             case FEISHU_DEPARTMENT_IMPORT, FEISHU_USER_IMPORT -> SyncSourceType.FEISHU;
-            case LDAP_RECONCILE_DEPARTMENT, LDAP_RECONCILE_USER -> SyncSourceType.SYSTEM;
+            case LDAP_RECONCILE_DEPARTMENT, LDAP_RECONCILE_USER, LDAP_RECONCILE_MEMBERSHIP -> SyncSourceType.SYSTEM;
         };
     }
 
@@ -298,6 +306,7 @@ public class SyncApplicationService {
         return switch (jobType) {
             case FEISHU_DEPARTMENT_IMPORT, LDAP_RECONCILE_DEPARTMENT -> SyncTargetType.DEPARTMENT;
             case FEISHU_USER_IMPORT, LDAP_RECONCILE_USER -> SyncTargetType.USER;
+            case LDAP_RECONCILE_MEMBERSHIP -> SyncTargetType.MEMBERSHIP;
         };
     }
 

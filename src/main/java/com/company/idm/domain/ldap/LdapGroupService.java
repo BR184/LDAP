@@ -11,6 +11,12 @@ public interface LdapGroupService {
 
     String findGroupDn(String groupCode);
 
+    LdapGroupSnapshot findGroupSnapshot(String groupCode);
+
+    List<String> listAllGroupCodes();
+
+    List<String> listUserGroups(String username);
+
     String createGroup(String groupCode, String groupName);
 
     String updateGroup(String groupCode, String groupName);

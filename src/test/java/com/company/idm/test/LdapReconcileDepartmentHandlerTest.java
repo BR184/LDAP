@@ -44,6 +44,7 @@ class LdapReconcileDepartmentHandlerTest {
             .build();
         when(departmentRepository.findAll()).thenReturn(List.of(department));
         when(ldapGroupService.existsGroup("D001")).thenReturn(false);
+        when(ldapGroupService.listAllGroupCodes()).thenReturn(List.of());
         LdapReconcileDepartmentHandler handler = new LdapReconcileDepartmentHandler(departmentRepository, ldapGroupService);
 
         SyncJobExecutionResult result = handler.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL));
@@ -66,6 +67,7 @@ class LdapReconcileDepartmentHandlerTest {
         when(departmentRepository.findAll()).thenReturn(List.of(department));
         when(ldapGroupService.existsGroup("D001")).thenReturn(false);
         when(ldapGroupService.createGroup("D001", "研发中心")).thenReturn("cn=D001_研发中心,ou=groups,dc=corp,dc=local");
+        when(ldapGroupService.listAllGroupCodes()).thenReturn(List.of());
         LdapReconcileDepartmentHandler handler = new LdapReconcileDepartmentHandler(departmentRepository, ldapGroupService);
 
         SyncJobExecutionResult result = handler.execute(new SyncRequestPayload(false, null, true, "admin", SyncTriggerMode.MANUAL));

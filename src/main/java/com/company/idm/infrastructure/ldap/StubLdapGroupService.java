@@ -1,5 +1,6 @@
 package com.company.idm.infrastructure.ldap;
 
+import com.company.idm.domain.ldap.LdapGroupSnapshot;
 import com.company.idm.domain.ldap.LdapGroupService;
 import com.company.idm.infrastructure.config.AppLdapProperties;
 import java.util.ArrayList;
@@ -33,6 +34,35 @@ public class StubLdapGroupService implements LdapGroupService {
     public String findGroupDn(String groupCode) {
         StubGroup group = groups.get(groupCode);
         return group == null ? null : group.dn;
+    }
+
+    @Override
+    public LdapGroupSnapshot findGroupSnapshot(String groupCode) {
+        StubGroup group = groups.get(groupCode);
+        if (group == null) {
+            return null;
+        }
+        return LdapGroupSnapshot.builder()
+            .groupCode(groupCode)
+            .groupName(group.groupName)
+            .dn(group.dn)
+            .members(group.members.stream().sorted().toList())
+            .build();
+    }
+
+    @Override
+    public List<String> listAllGroupCodes() {
+        return groups.keySet().stream().sorted().toList();
+    }
+
+    @Override
+    public List<String> listUserGroups(String username) {
+        String userDn = buildUserDn(username);
+        return groups.entrySet().stream()
+            .filter(entry -> entry.getValue().members.contains(userDn))
+            .map(Map.Entry::getKey)
+            .sorted()
+            .toList();
     }
 
     @Override

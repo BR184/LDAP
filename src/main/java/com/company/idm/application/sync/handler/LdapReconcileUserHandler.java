@@ -8,12 +8,16 @@ import com.company.idm.common.enums.SyncDiffType;
 import com.company.idm.common.enums.SyncJobType;
 import com.company.idm.common.enums.SyncRunStatus;
 import com.company.idm.common.enums.SyncTargetType;
+import com.company.idm.common.enums.UserStatus;
 import com.company.idm.domain.ldap.LdapDirectoryService;
+import com.company.idm.domain.ldap.LdapUserSnapshot;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.AppLdapProperties;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,6 +25,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class LdapReconcileUserHandler implements SyncJobHandler {
+
+    private static final String DEFAULT_RECONCILE_PASSWORD = "123456";
 
     private final UserRepository userRepository;
     private final LdapDirectoryService ldapDirectoryService;
@@ -53,32 +59,74 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
 
     private List<SyncDiffPayload> scanDiffs(boolean autoRepair) {
         List<SyncDiffPayload> diffs = new ArrayList<>();
-        for (User user : userRepository.findAll()) {
+        List<User> users = userRepository.findAll();
+        Set<String> mysqlUsernames = new HashSet<>();
+        for (User user : users) {
+            mysqlUsernames.add(user.getUsername());
             boolean ldapExists = ldapDirectoryService.existsByUid(user.getUsername());
             if (!ldapExists) {
+                if (autoRepair) {
+                    String ldapDn = ldapDirectoryService.createUser(user, DEFAULT_RECONCILE_PASSWORD);
+                    if (user.getStatus() == UserStatus.ENABLED) {
+                        ldapDirectoryService.enableUser(user.getUsername());
+                    } else {
+                        ldapDirectoryService.disableUser(user.getUsername());
+                    }
+                    userRepository.save(user.toBuilder().ldapDn(ldapDn).build());
+                    continue;
+                }
                 diffs.add(new SyncDiffPayload(
                     SyncTargetType.USER,
                     user.getUsername(),
                     SyncDiffType.MISSING_IN_LDAP,
                     snapshotUser(user),
                     null,
-                    false
+                    true
                 ));
                 continue;
             }
+            LdapUserSnapshot snapshot = ldapDirectoryService.findUserSnapshot(user.getUsername());
+            if (snapshot == null) {
+                continue;
+            }
             String expectedDn = buildExpectedDn(user.getUsername());
-            if (user.getLdapDn() == null || !user.getLdapDn().equals(expectedDn)) {
+            boolean dnMismatch = !safe(user.getLdapDn()).equals(safe(expectedDn));
+            boolean statusMismatch = !expectedStatus(user.getStatus()).equals(safe(snapshot.getStatus()));
+            boolean fieldMismatch = !safe(user.getRealName()).equals(safe(snapshot.getRealName()))
+                || !safe(user.getEmail()).equals(safe(snapshot.getEmail()))
+                || !safe(user.getMobile()).equals(safe(snapshot.getMobile()))
+                || !safe(user.getEmployeeNo()).equals(safe(snapshot.getEmployeeNo()))
+                || !safe(user.getDeptCode()).equals(safe(snapshot.getDeptCode()));
+            if (dnMismatch || statusMismatch || fieldMismatch) {
                 if (autoRepair) {
+                    ldapDirectoryService.updateUser(user);
+                    if (user.getStatus() == UserStatus.ENABLED) {
+                        ldapDirectoryService.enableUser(user.getUsername());
+                    } else {
+                        ldapDirectoryService.disableUser(user.getUsername());
+                    }
                     userRepository.save(user.toBuilder().ldapDn(expectedDn).build());
                     continue;
                 }
                 diffs.add(new SyncDiffPayload(
                     SyncTargetType.USER,
                     user.getUsername(),
-                    SyncDiffType.FIELD_MISMATCH,
+                    dnMismatch ? SyncDiffType.DN_MISMATCH : (statusMismatch ? SyncDiffType.STATUS_MISMATCH : SyncDiffType.FIELD_MISMATCH),
                     snapshotUser(user),
-                    "{\"ldapDn\":\"" + safe(expectedDn) + "\"}",
+                    snapshotLdapUser(snapshot),
                     true
+                ));
+            }
+        }
+        for (String ldapUsername : ldapDirectoryService.listAllUsernames()) {
+            if (!mysqlUsernames.contains(ldapUsername)) {
+                diffs.add(new SyncDiffPayload(
+                    SyncTargetType.USER,
+                    ldapUsername,
+                    SyncDiffType.MISSING_IN_MYSQL,
+                    null,
+                    snapshotLdapUser(ldapDirectoryService.findUserSnapshot(ldapUsername)),
+                    false
                 ));
             }
         }
@@ -96,10 +144,41 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
         return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
     }
 
+    private String expectedStatus(UserStatus status) {
+        return status == UserStatus.ENABLED ? "ENABLED" : "DISABLED";
+    }
+
     private String snapshotUser(User user) {
         return """
-            {"username":"%s","deptCode":"%s","ldapDn":"%s"}
-            """.formatted(safe(user.getUsername()), safe(user.getDeptCode()), safe(user.getLdapDn()));
+            {"username":"%s","realName":"%s","email":"%s","mobile":"%s","employeeNo":"%s","deptCode":"%s","status":"%s","ldapDn":"%s"}
+            """.formatted(
+            safe(user.getUsername()),
+            safe(user.getRealName()),
+            safe(user.getEmail()),
+            safe(user.getMobile()),
+            safe(user.getEmployeeNo()),
+            safe(user.getDeptCode()),
+            expectedStatus(user.getStatus()),
+            safe(user.getLdapDn())
+        );
+    }
+
+    private String snapshotLdapUser(LdapUserSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        return """
+            {"username":"%s","realName":"%s","email":"%s","mobile":"%s","employeeNo":"%s","deptCode":"%s","status":"%s","ldapDn":"%s"}
+            """.formatted(
+            safe(snapshot.getUsername()),
+            safe(snapshot.getRealName()),
+            safe(snapshot.getEmail()),
+            safe(snapshot.getMobile()),
+            safe(snapshot.getEmployeeNo()),
+            safe(snapshot.getDeptCode()),
+            safe(snapshot.getStatus()),
+            safe(snapshot.getDn())
+        );
     }
 
     private String safe(String value) {

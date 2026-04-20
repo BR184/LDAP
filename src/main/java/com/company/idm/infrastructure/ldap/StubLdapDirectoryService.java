@@ -1,9 +1,11 @@
 package com.company.idm.infrastructure.ldap;
 
 import com.company.idm.domain.ldap.LdapDirectoryService;
+import com.company.idm.domain.ldap.LdapUserSnapshot;
 import com.company.idm.domain.user.User;
 import com.company.idm.infrastructure.config.AppLdapProperties;
 import jakarta.annotation.PostConstruct;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +26,7 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
     @PostConstruct
     public void init() {
         ldapProperties.getStubUsers().forEach((username, password) ->
-            entries.put(username, new StubEntry(password, true, buildDn(username))));
+            entries.put(username, new StubEntry(password, true, buildDn(username), username, null, null, null, null)));
     }
 
     @Override
@@ -39,15 +41,56 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
     }
 
     @Override
+    public LdapUserSnapshot findUserSnapshot(String username) {
+        StubEntry entry = entries.get(username);
+        if (entry == null) {
+            return null;
+        }
+        return LdapUserSnapshot.builder()
+            .username(username)
+            .realName(entry.realName)
+            .email(entry.email)
+            .mobile(entry.mobile)
+            .employeeNo(entry.employeeNo)
+            .deptCode(entry.deptCode)
+            .status(entry.enabled ? "ENABLED" : "DISABLED")
+            .dn(entry.dn)
+            .build();
+    }
+
+    @Override
+    public List<String> listAllUsernames() {
+        return entries.keySet().stream()
+            .filter(username -> !"placeholder".equals(username))
+            .sorted()
+            .toList();
+    }
+
+    @Override
     public String createUser(User user, String rawPassword) {
         String dn = buildDn(user.getUsername());
-        entries.put(user.getUsername(), new StubEntry(rawPassword, true, dn));
+        entries.put(user.getUsername(), new StubEntry(
+            rawPassword,
+            true,
+            dn,
+            user.getRealName(),
+            user.getEmail(),
+            user.getMobile(),
+            user.getEmployeeNo(),
+            user.getDeptCode()
+        ));
         return dn;
     }
 
     @Override
     public void updateUser(User user) {
-        entries.computeIfPresent(user.getUsername(), (key, value) -> value);
+        entries.computeIfPresent(user.getUsername(), (key, value) -> value.withProfile(
+            user.getRealName(),
+            user.getEmail(),
+            user.getMobile(),
+            user.getEmployeeNo(),
+            user.getDeptCode()
+        ));
     }
 
     @Override
@@ -74,13 +117,26 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
         return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
     }
 
-    private record StubEntry(String password, boolean enabled, String dn) {
+    private record StubEntry(
+        String password,
+        boolean enabled,
+        String dn,
+        String realName,
+        String email,
+        String mobile,
+        String employeeNo,
+        String deptCode
+    ) {
         private StubEntry withEnabled(boolean newEnabled) {
-            return new StubEntry(password, newEnabled, dn);
+            return new StubEntry(password, newEnabled, dn, realName, email, mobile, employeeNo, deptCode);
         }
 
         private StubEntry withPassword(String newPassword) {
-            return new StubEntry(newPassword, enabled, dn);
+            return new StubEntry(newPassword, enabled, dn, realName, email, mobile, employeeNo, deptCode);
+        }
+
+        private StubEntry withProfile(String newRealName, String newEmail, String newMobile, String newEmployeeNo, String newDeptCode) {
+            return new StubEntry(password, enabled, dn, newRealName, newEmail, newMobile, newEmployeeNo, newDeptCode);
         }
     }
 }

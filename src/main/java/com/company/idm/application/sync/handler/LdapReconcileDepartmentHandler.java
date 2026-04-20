@@ -11,8 +11,11 @@ import com.company.idm.common.enums.SyncTargetType;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.domain.ldap.LdapGroupService;
+import com.company.idm.domain.ldap.LdapGroupSnapshot;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
@@ -46,7 +49,10 @@ public class LdapReconcileDepartmentHandler implements SyncJobHandler {
 
     private List<SyncDiffPayload> scanDiffs(boolean autoRepair) {
         List<SyncDiffPayload> diffs = new ArrayList<>();
-        for (Department department : departmentRepository.findAll()) {
+        List<Department> departments = departmentRepository.findAll();
+        Set<String> mysqlDeptCodes = new HashSet<>();
+        for (Department department : departments) {
+            mysqlDeptCodes.add(department.getDeptCode());
             boolean ldapExists = ldapGroupService.existsGroup(department.getDeptCode());
             if (!ldapExists) {
                 if (autoRepair) {
@@ -64,8 +70,14 @@ public class LdapReconcileDepartmentHandler implements SyncJobHandler {
                 ));
                 continue;
             }
-            String currentDn = ldapGroupService.findGroupDn(department.getDeptCode());
-            if (department.getLdapDn() == null || !department.getLdapDn().equals(currentDn)) {
+            LdapGroupSnapshot snapshot = ldapGroupService.findGroupSnapshot(department.getDeptCode());
+            if (snapshot == null) {
+                continue;
+            }
+            String expectedDn = ldapGroupService.findGroupDn(department.getDeptCode());
+            boolean dnMismatch = !safe(department.getLdapDn()).equals(safe(expectedDn));
+            boolean fieldMismatch = !safe(department.getDeptName()).equals(safe(snapshot.getGroupName()));
+            if (dnMismatch || fieldMismatch) {
                 if (autoRepair) {
                     String repairedDn = ldapGroupService.updateGroup(department.getDeptCode(), department.getDeptName());
                     departmentRepository.save(department.toBuilder().ldapDn(repairedDn).build());
@@ -74,10 +86,23 @@ public class LdapReconcileDepartmentHandler implements SyncJobHandler {
                 diffs.add(new SyncDiffPayload(
                     SyncTargetType.DEPARTMENT,
                     department.getDeptCode(),
-                    SyncDiffType.FIELD_MISMATCH,
+                    dnMismatch ? SyncDiffType.DN_MISMATCH : SyncDiffType.FIELD_MISMATCH,
                     snapshotDepartment(department),
-                    "{\"ldapDn\":\"" + safe(currentDn) + "\"}",
+                    snapshotGroup(snapshot),
                     true
+                ));
+            }
+        }
+        for (String ldapGroupCode : ldapGroupService.listAllGroupCodes()) {
+            if (!mysqlDeptCodes.contains(ldapGroupCode)) {
+                LdapGroupSnapshot snapshot = ldapGroupService.findGroupSnapshot(ldapGroupCode);
+                diffs.add(new SyncDiffPayload(
+                    SyncTargetType.DEPARTMENT,
+                    ldapGroupCode,
+                    SyncDiffType.MISSING_IN_MYSQL,
+                    null,
+                    snapshotGroup(snapshot),
+                    false
                 ));
             }
         }
@@ -95,6 +120,15 @@ public class LdapReconcileDepartmentHandler implements SyncJobHandler {
         return """
             {"deptCode":"%s","deptName":"%s","ldapDn":"%s"}
             """.formatted(safe(department.getDeptCode()), safe(department.getDeptName()), safe(department.getLdapDn()));
+    }
+
+    private String snapshotGroup(LdapGroupSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        return """
+            {"groupCode":"%s","groupName":"%s","dn":"%s"}
+            """.formatted(safe(snapshot.getGroupCode()), safe(snapshot.getGroupName()), safe(snapshot.getDn()));
     }
 
     private String safe(String value) {

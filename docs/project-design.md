@@ -1067,6 +1067,79 @@ flowchart LR
 - 已落地基础 LDAP 对账处理器，当前覆盖部门与用户维度
 - 已落地飞书导入公共处理器框架，其中“飞书部门导入”和“飞书用户导入”均已实现真实解析与执行
 
+#### 5.6.9 MySQL 与 LDAP 对账补偿设计
+
+MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目录投影**”的设计原则：
+
+- MySQL 负责用户、部门、角色和组织关系主数据
+- LDAP 负责第三方系统登录所需的目录与分组投影
+- 对账负责发现差异
+- 补偿负责在可控范围内自动修复差异
+
+建议将对账拆分为三个维度：
+
+1. 部门维度
+
+- MySQL 有部门，LDAP group 缺失
+- LDAP group 存在，但 `ldapDn` 不一致
+- LDAP group 存在，但名称与 `deptName` 不一致
+- LDAP 中存在 MySQL 未维护的孤儿 group
+
+2. 用户维度
+
+- MySQL 有用户，LDAP 用户缺失
+- LDAP 用户存在，但 `ldapDn` 不一致
+- 用户字段不一致：
+  - `realName`
+  - `email`
+  - `mobile`
+  - `employeeNo`
+  - `deptCode`
+- 用户状态不一致：
+  - MySQL 启用 / 禁用 与 LDAP `employeeType` 不一致
+- LDAP 中存在 MySQL 未维护的孤儿用户
+
+3. 成员关系维度
+
+- 用户未加入主部门对应 LDAP group
+- 用户残留在旧部门 group
+- LDAP group 成员关系与 MySQL `deptCode` 不一致
+
+差异类型建议至少包括：
+
+- `MISSING_IN_MYSQL`
+- `MISSING_IN_LDAP`
+- `FIELD_MISMATCH`
+- `RELATION_MISMATCH`
+- `STATUS_MISMATCH`
+- `DN_MISMATCH`
+
+补偿策略建议分级：
+
+- 自动补偿：
+  - LDAP 用户缺失
+  - LDAP group 缺失
+  - 字段不一致
+  - 状态不一致
+  - `ldapDn` 不一致
+  - 成员关系不一致
+
+- 仅记录不自动修复：
+  - LDAP 中存在而 MySQL 中不存在的孤儿用户
+  - LDAP 中存在而 MySQL 中不存在的孤儿 group
+
+这种策略可以降低误删 LDAP 条目的风险。
+
+当前原型已落地说明：
+
+- 已落地 `LdapReconcileDepartmentHandler`
+- 已落地 `LdapReconcileUserHandler`
+- 已落地 `LdapReconcileMembershipHandler`
+- 已支持手工触发与定时触发两种方式
+- 已支持部门、用户、成员关系三层顺序对账
+- 已支持缺失补建、字段修正、状态修正、成员关系修正
+- 已对 LDAP 孤儿用户 / 孤儿 group 进行记录，但当前默认不自动删除
+
 ### 5.7 API 网关模块设计（后续预留）
 
 根据基础服务层架构图，API 网关是后续统一门户与统一 API 接入的重要入口，但不建议在一期与身份管理核心强耦合。
@@ -1687,6 +1760,8 @@ flowchart LR
 - `FeishuUserImportServiceTest`
 - `SyncApplicationServiceTest`
 - `LdapReconcileDepartmentHandlerTest`
+- `LdapReconcileUserHandlerTest`
+- `LdapReconcileMembershipHandlerTest`
 - `SyncScheduleLauncherTest`
 - `PrototypeIntegrationTest`
 - `CasbinPolicyServiceTest`
@@ -1701,7 +1776,7 @@ flowchart LR
 当前全量测试执行结果：
 
 - 测试命令：`.tools\apache-maven-3.9.6\bin\mvn.cmd test`
-- Tests run：`88`
+- Tests run：`92`
 - Failures：`0`
 - Errors：`0`
 
