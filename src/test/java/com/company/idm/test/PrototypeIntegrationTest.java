@@ -525,6 +525,66 @@ class PrototypeIntegrationTest {
     }
 
     @Test
+    void shouldGetUserDetailAndSyncUserAndDepartmentToLdap() throws Exception {
+        String adminToken = loginAsAdmin();
+        String suffix = String.valueOf(System.nanoTime());
+        String deptCode = "SYNCD" + suffix;
+        String username = "syncuser" + suffix;
+
+        MvcResult createDeptResult = mockMvc.perform(post("/api/v1/departments")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "deptCode": "%s",
+                      "deptName": "同步部门",
+                      "externalId": "ou_sync_%s"
+                    }
+                    """.formatted(deptCode, suffix)))
+            .andExpect(status().isOk())
+            .andReturn();
+        String createdDeptCode = objectMapper.readTree(createDeptResult.getResponse().getContentAsString())
+            .path("data").path("deptCode").asText();
+
+        MvcResult createUserResult = mockMvc.perform(post("/api/v1/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "realName": "同步用户",
+                      "email": "%s@corp.local",
+                      "mobile": "13812340000",
+                      "employeeNo": "E%s",
+                      "deptCode": "%s",
+                      "initialPassword": "123456",
+                      "roleIds": [1]
+                    }
+                    """.formatted(username, username, suffix, deptCode)))
+            .andExpect(status().isOk())
+            .andReturn();
+        long userId = objectMapper.readTree(createUserResult.getResponse().getContentAsString()).path("data").path("id").asLong();
+
+        mockMvc.perform(get("/api/v1/users/{id}", userId)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.username").value(username))
+            .andExpect(jsonPath("$.data.deptCode").value(deptCode));
+
+        mockMvc.perform(post("/api/v1/users/{id}/sync-ldap", userId)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.username").value(username))
+            .andExpect(jsonPath("$.data.ldapDn").value("uid=" + username + ",ou=people,dc=corp,dc=local"));
+
+        mockMvc.perform(post("/api/v1/departments/{deptCode}/sync-ldap", createdDeptCode)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.deptCode").value(createdDeptCode))
+            .andExpect(jsonPath("$.data.ldapDn").value("cn=%s_%s,ou=groups,dc=corp,dc=local".formatted(createdDeptCode, "同步部门")));
+    }
+
+    @Test
     void shouldPreviewExecuteAndQuerySyncBatches() throws Exception {
         String adminToken = loginAsAdmin();
         String suffix = String.valueOf(System.nanoTime());

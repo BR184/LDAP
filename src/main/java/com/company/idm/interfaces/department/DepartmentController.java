@@ -104,6 +104,15 @@ public class DepartmentController {
         ));
     }
 
+    @PostMapping("/{deptCode}/sync-ldap")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/' + #deptCode + '/sync-ldap', 'POST')")
+    public ApiResponse<DepartmentResponse> syncLdap(
+        @PathVariable String deptCode,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        return ApiResponse.success(toResponse(departmentApplicationService.syncDepartmentToLdap(deptCode, username)));
+    }
+
     private List<DepartmentTreeNodeResponse> buildTree(List<Department> departments) {
         Map<String, DepartmentTreeNodeResponse> index = new LinkedHashMap<>();
         for (Department department : departments) {

@@ -46,6 +46,39 @@ public class DepartmentApplicationService {
     }
 
     /**
+     * 手工同步单个部门到 LDAP，并修正当前部门成员关系。
+     */
+    @Transactional
+    public Department syncDepartmentToLdap(String deptCode, String operator) {
+        permissionLevelRuleService.checkCanManageDepartment(operator);
+        Department department = departmentRepository.findByDeptCode(deptCode)
+            .orElseThrow(() -> new BizException("DEPT_NOT_FOUND", "部门不存在"));
+        String ldapDn = ldapGroupService.existsGroup(deptCode)
+            ? ldapGroupService.updateGroup(deptCode, department.getDeptName())
+            : ldapGroupService.createGroup(deptCode, department.getDeptName());
+        Department synced = department;
+        if (!ldapDn.equals(department.getLdapDn())) {
+            synced = departmentRepository.save(department.toBuilder().ldapDn(ldapDn).build());
+        }
+        for (com.company.idm.domain.user.User user : userRepository.findAll()) {
+            if (deptCode.equals(user.getDeptCode())) {
+                ldapGroupService.addUserToGroup(user.getUsername(), deptCode);
+                continue;
+            }
+            ldapGroupService.removeUserFromGroup(user.getUsername(), deptCode);
+        }
+        auditLogRepository.save(AuditLog.builder()
+            .operator(operator)
+            .operationType("DEPT_SYNC_LDAP")
+            .bizType("DEPARTMENT")
+            .bizId(deptCode)
+            .afterJson(synced.getDeptName())
+            .result("SUCCESS")
+            .build());
+        return synced;
+    }
+
+    /**
      * 创建手工部门并同步创建 LDAP group。
      */
     @Transactional

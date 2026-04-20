@@ -236,4 +236,32 @@ class DepartmentApplicationServiceTest {
         verify(ldapGroupService).deleteGroup("D100");
         verify(departmentRepository).deleteByDeptCode("D100");
     }
+
+    @Test
+    void shouldSyncDepartmentToLdapSuccessfully() {
+        Department current = Department.builder()
+            .id(2L)
+            .deptCode("D100")
+            .deptName("平台研发部")
+            .ancestorPath("/D001/D100")
+            .deptLevel(2)
+            .sourceType(SourceType.MANUAL)
+            .status(1)
+            .build();
+        when(departmentRepository.findByDeptCode("D100")).thenReturn(Optional.of(current));
+        when(ldapGroupService.existsGroup("D100")).thenReturn(false);
+        when(ldapGroupService.createGroup("D100", "平台研发部")).thenReturn("cn=D100_平台研发部,ou=groups,dc=corp,dc=local");
+        when(departmentRepository.save(any(Department.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.findAll()).thenReturn(List.of(
+            com.company.idm.domain.user.User.builder().username("zhangsan").deptCode("D100").build(),
+            com.company.idm.domain.user.User.builder().username("lisi").deptCode("D001").build()
+        ));
+
+        Department synced = departmentApplicationService.syncDepartmentToLdap("D100", "admin");
+
+        assertThat(synced.getLdapDn()).isEqualTo("cn=D100_平台研发部,ou=groups,dc=corp,dc=local");
+        verify(permissionLevelRuleService).checkCanManageDepartment("admin");
+        verify(ldapGroupService).addUserToGroup("zhangsan", "D100");
+        verify(ldapGroupService).removeUserFromGroup("lisi", "D100");
+    }
 }

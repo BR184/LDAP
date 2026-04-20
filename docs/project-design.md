@@ -1476,6 +1476,7 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 当前已落地：
 
 - `GET /api/v1/users`
+- `GET /api/v1/users/{id}`
 - `POST /api/v1/users`
 - `PUT /api/v1/users/{id}`
 - `DELETE /api/v1/users/{id}`
@@ -1483,10 +1484,6 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 - `PUT /api/v1/users/{id}/status`
 - `PUT /api/v1/users/{id}/password/reset`
 - `PUT /api/v1/users/{id}/roles`
-
-后续预留：
-
-- `GET /api/v1/users/{id}`
 - `POST /api/v1/users/{id}/sync-ldap`
 
 ### 7.3 部门管理接口
@@ -1498,11 +1495,13 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 - `POST /api/v1/departments`
 - `PUT /api/v1/departments/{deptCode}`
 - `DELETE /api/v1/departments/{deptCode}`
+- `POST /api/v1/departments/{deptCode}/sync-ldap`
 
 说明：
 
 - `deptCode` 作为部门接口的主路径参数，保持与用户资料、飞书映射和 LDAP group 映射口径一致
 - 部门树接口用于后台组织架构树和部门选择组件渲染
+- 手工同步 LDAP 接口用于首次初始化、紧急修复和对账后人工补偿
 
 ### 7.4 角色与菜单接口
 
@@ -1776,7 +1775,7 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 当前全量测试执行结果：
 
 - 测试命令：`.tools\apache-maven-3.9.6\bin\mvn.cmd test`
-- Tests run：`92`
+- Tests run：`96`
 - Failures：`0`
 - Errors：`0`
 
@@ -1988,6 +1987,14 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 - 同步任务查询接口
 - 飞书同步结果查询接口
 - 导入结果查询接口
+
+当前已完成的预留接口实现项包括：
+
+- 已落地用户详情接口 `GET /api/v1/users/{id}`
+- 已落地用户手工同步 LDAP 接口 `POST /api/v1/users/{id}/sync-ldap`
+- 已落地部门手工同步 LDAP 接口 `POST /api/v1/departments/{deptCode}/sync-ldap`
+- 已落地同步任务查询接口
+- 已落地同步批次结果查询接口
 
 接口实现要求：
 

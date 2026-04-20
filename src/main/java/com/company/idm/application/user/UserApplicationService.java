@@ -14,6 +14,7 @@ import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
+import com.company.idm.infrastructure.config.AppLdapProperties;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,12 +37,21 @@ public class UserApplicationService {
     private final PolicyRefreshService policyRefreshService;
     private final PasswordPolicyValidator passwordPolicyValidator;
     private final PermissionLevelRuleService permissionLevelRuleService;
+    private final AppLdapProperties ldapProperties;
 
     /**
      * 查询当前所有未逻辑删除的用户，用于后台用户列表展示。
      */
     public List<User> listUsers() {
         return userRepository.findAll();
+    }
+
+    /**
+     * 查询用户详情。
+     */
+    public User getUser(Long userId) {
+        return userRepository.findById(userId)
+            .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
     }
 
     /**
@@ -227,6 +237,55 @@ public class UserApplicationService {
     }
 
     /**
+     * 手工同步单个用户到 LDAP。
+     * 用于首次初始化、紧急修复或对账后人工补偿。
+     */
+    @Transactional
+    public User syncUserToLdap(Long userId, String operator) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        permissionLevelRuleService.checkCanModifySensitiveUser(operator, user);
+        Department department = null;
+        if (user.getDeptCode() != null && !user.getDeptCode().isBlank()) {
+            department = loadEnabledDepartment(user.getDeptCode());
+        }
+        String ldapDn;
+        if (ldapDirectoryService.existsByUid(user.getUsername())) {
+            ldapDirectoryService.updateUser(user);
+            ldapDn = user.getLdapDn() != null && !user.getLdapDn().isBlank()
+                ? user.getLdapDn()
+                : buildUserDn(user.getUsername());
+        } else {
+            ldapDn = ldapDirectoryService.createUser(user, DEFAULT_RESET_PASSWORD);
+        }
+        if (user.getStatus() == UserStatus.ENABLED) {
+            ldapDirectoryService.enableUser(user.getUsername());
+        } else {
+            ldapDirectoryService.disableUser(user.getUsername());
+        }
+        if (department != null) {
+            String groupDn = ldapGroupService.createGroup(department.getDeptCode(), department.getDeptName());
+            updateDepartmentLdapDn(department, groupDn);
+            ldapGroupService.syncUserGroups(user.getUsername(), List.of(department.getDeptCode()));
+        } else {
+            ldapGroupService.removeUserFromAllGroups(user.getUsername());
+        }
+        User synced = user;
+        if (!ldapDn.equals(user.getLdapDn())) {
+            synced = userRepository.save(user.toBuilder().ldapDn(ldapDn).build());
+        }
+        auditLogRepository.save(AuditLog.builder()
+            .operator(operator)
+            .operationType("USER_SYNC_LDAP")
+            .bizType("USER")
+            .bizId(String.valueOf(userId))
+            .afterJson(synced.getUsername())
+            .result("SUCCESS")
+            .build());
+        return synced;
+    }
+
+    /**
      * 统一计算用户下一次 tokenVersion。
      * 用于禁用、删除、改密、重置密码等需要立即踢出旧会话的场景。
      */
@@ -286,5 +345,9 @@ public class UserApplicationService {
             throw new BizException("DEPT_DISABLED", "部门已停用");
         }
         return department;
+    }
+
+    private String buildUserDn(String username) {
+        return "uid=" + username + "," + ldapProperties.getPeopleOu() + "," + ldapProperties.getBaseDn();
     }
 }

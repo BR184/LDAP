@@ -16,6 +16,7 @@ import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
+import com.company.idm.infrastructure.config.AppLdapProperties;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -65,6 +66,9 @@ class UserApplicationServiceTest {
 
     @Mock
     private PermissionLevelRuleService permissionLevelRuleService;
+
+    @Mock
+    private AppLdapProperties ldapProperties;
 
     @InjectMocks
     private UserApplicationService userApplicationService;
@@ -255,6 +259,36 @@ class UserApplicationServiceTest {
         assertThatThrownBy(() -> userApplicationService.resetPassword(new com.company.idm.application.user.ResetPasswordCommand(2L, "zhangsan")))
             .isInstanceOf(BizException.class)
             .hasMessage("仅管理员允许执行敏感操作");
+    }
+
+    @Test
+    void shouldGetUserDetailSuccessfully() {
+        User existing = buildUser(2L, "zhangsan", UserStatus.ENABLED, 2);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(existing));
+
+        User detail = userApplicationService.getUser(2L);
+
+        assertThat(detail.getUsername()).isEqualTo("zhangsan");
+    }
+
+    @Test
+    void shouldSyncUserToLdapSuccessfully() {
+        User existing = buildUser(2L, "zhangsan", UserStatus.ENABLED, 2).toBuilder().ldapDn(null).build();
+        Department department = Department.builder().id(1L).deptCode("D001").deptName("研发中心").sourceType(SourceType.MANUAL).status(1).build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(existing));
+        when(departmentRepository.findByDeptCode("D001")).thenReturn(Optional.of(department));
+        when(ldapDirectoryService.existsByUid("zhangsan")).thenReturn(false);
+        when(ldapDirectoryService.createUser(existing, "123456")).thenReturn("uid=zhangsan,ou=people,dc=corp,dc=local");
+        when(ldapGroupService.createGroup("D001", "研发中心")).thenReturn("cn=D001_研发中心,ou=groups,dc=corp,dc=local");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        User synced = userApplicationService.syncUserToLdap(2L, "admin");
+
+        assertThat(synced.getLdapDn()).isEqualTo("uid=zhangsan,ou=people,dc=corp,dc=local");
+        verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", existing);
+        verify(ldapDirectoryService).createUser(existing, "123456");
+        verify(ldapDirectoryService).enableUser("zhangsan");
+        verify(ldapGroupService).syncUserGroups("zhangsan", List.of("D001"));
     }
 
     private User buildUser(Long id, String username, UserStatus status, Integer tokenVersion) {

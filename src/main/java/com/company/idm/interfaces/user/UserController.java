@@ -52,6 +52,12 @@ public class UserController {
         return ApiResponse.success(users);
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id, 'GET')")
+    public ApiResponse<UserResponse> detail(@PathVariable Long id) {
+        return ApiResponse.success(toResponse(userApplicationService.getUser(id)));
+    }
+
     @PostMapping
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'POST')")
     public ApiResponse<UserResponse> create(
@@ -156,6 +162,15 @@ public class UserController {
         return ApiResponse.success(syncResponseAssembler.toResponse(
             syncApplicationService.executeFeishuUserSync(username, SyncTriggerMode.MANUAL)
         ));
+    }
+
+    @PostMapping("/{id}/sync-ldap")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/sync-ldap', 'POST')")
+    public ApiResponse<UserResponse> syncLdap(
+        @PathVariable Long id,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        return ApiResponse.success(toResponse(userApplicationService.syncUserToLdap(id, username)));
     }
 
     private UserResponse toResponse(User user) {
