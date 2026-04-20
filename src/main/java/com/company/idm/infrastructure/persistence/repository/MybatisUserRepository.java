@@ -45,6 +45,28 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
+    public Optional<User> findByExternalId(String externalId) {
+        if (externalId == null || externalId.isBlank()) {
+            return Optional.empty();
+        }
+        UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
+            .eq(UserDO::getExternalId, externalId)
+            .eq(UserDO::getDeleted, 0));
+        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())));
+    }
+
+    @Override
+    public Optional<User> findByEmployeeNo(String employeeNo) {
+        if (employeeNo == null || employeeNo.isBlank()) {
+            return Optional.empty();
+        }
+        UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
+            .eq(UserDO::getEmployeeNo, employeeNo)
+            .eq(UserDO::getDeleted, 0));
+        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())));
+    }
+
+    @Override
     public List<User> findAll() {
         return userMapper.selectList(new LambdaQueryWrapper<UserDO>()
                 .eq(UserDO::getDeleted, 0)

@@ -46,7 +46,7 @@ class LdapReconcileDepartmentHandlerTest {
         when(ldapGroupService.existsGroup("D001")).thenReturn(false);
         LdapReconcileDepartmentHandler handler = new LdapReconcileDepartmentHandler(departmentRepository, ldapGroupService);
 
-        SyncJobExecutionResult result = handler.preview(new SyncRequestPayload(null, null, false, "admin", SyncTriggerMode.MANUAL));
+        SyncJobExecutionResult result = handler.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL));
 
         assertThat(result.diffs()).hasSize(1);
         SyncDiffPayload diff = result.diffs().get(0);
@@ -68,7 +68,7 @@ class LdapReconcileDepartmentHandlerTest {
         when(ldapGroupService.createGroup("D001", "研发中心")).thenReturn("cn=D001_研发中心,ou=groups,dc=corp,dc=local");
         LdapReconcileDepartmentHandler handler = new LdapReconcileDepartmentHandler(departmentRepository, ldapGroupService);
 
-        SyncJobExecutionResult result = handler.execute(new SyncRequestPayload(null, null, true, "admin", SyncTriggerMode.MANUAL));
+        SyncJobExecutionResult result = handler.execute(new SyncRequestPayload(false, null, true, "admin", SyncTriggerMode.MANUAL));
 
         assertThat(result.diffs()).isEmpty();
         verify(departmentRepository).save(org.mockito.ArgumentMatchers.argThat(saved ->

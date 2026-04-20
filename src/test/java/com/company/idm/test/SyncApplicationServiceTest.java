@@ -2,11 +2,12 @@ package com.company.idm.test;
 
 import com.company.idm.application.sync.SyncApplicationService;
 import com.company.idm.application.sync.SyncBatchDetail;
+import com.company.idm.application.sync.SyncDiffPayload;
 import com.company.idm.application.sync.SyncJobHandler;
-import com.company.idm.application.sync.handler.FeishuDepartmentImportHandler;
-import com.company.idm.application.sync.handler.FeishuUserImportHandler;
 import com.company.idm.common.enums.SyncBatchType;
+import com.company.idm.common.enums.SyncJobType;
 import com.company.idm.common.enums.SyncRunStatus;
+import com.company.idm.common.enums.SyncTargetType;
 import com.company.idm.common.enums.SyncTriggerMode;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.audit.AuditLogRepository;
@@ -52,7 +53,10 @@ class SyncApplicationServiceTest {
 
     @Test
     void shouldCreateFeishuPreviewBatchAndJobs() {
-        List<SyncJobHandler> handlers = List.of(new FeishuDepartmentImportHandler(), new FeishuUserImportHandler());
+        List<SyncJobHandler> handlers = List.of(
+            new SuccessHandler(SyncJobType.FEISHU_DEPARTMENT_IMPORT, SyncTargetType.DEPARTMENT),
+            new SuccessHandler(SyncJobType.FEISHU_USER_IMPORT, SyncTargetType.USER)
+        );
         SyncApplicationService service = new SyncApplicationService(
             handlers,
             syncBatchRepository,
@@ -86,11 +90,11 @@ class SyncApplicationServiceTest {
             storedJobs.stream().filter(item -> item.getBatchNo().equals(invocation.getArgument(0))).toList()
         );
 
-        SyncBatchDetail detail = service.previewFeishu("feishu.json", "hash", "admin", SyncTriggerMode.MANUAL);
+        SyncBatchDetail detail = service.executeFeishuUserSync("admin", SyncTriggerMode.MANUAL);
 
         assertThat(detail.batch().getBatchType()).isEqualTo(SyncBatchType.FEISHU_IMPORT);
         assertThat(detail.batch().getStatus()).isEqualTo(SyncRunStatus.SUCCESS);
-        assertThat(detail.batch().getFileName()).isEqualTo("feishu.json");
+        assertThat(detail.batch().getFileName()).isNull();
         assertThat(detail.jobs()).hasSize(2);
         assertThat(detail.diffs()).isEmpty();
         verify(auditLogRepository).save(any());
@@ -99,7 +103,10 @@ class SyncApplicationServiceTest {
     @Test
     void shouldRejectWhenSameBatchTypeIsRunning() {
         SyncApplicationService service = new SyncApplicationService(
-            List.of(new FeishuDepartmentImportHandler(), new FeishuUserImportHandler()),
+            List.of(
+                new SuccessHandler(SyncJobType.FEISHU_DEPARTMENT_IMPORT, SyncTargetType.DEPARTMENT),
+                new SuccessHandler(SyncJobType.FEISHU_USER_IMPORT, SyncTargetType.USER)
+            ),
             syncBatchRepository,
             syncJobRepository,
             syncDiffRepository,
@@ -108,8 +115,44 @@ class SyncApplicationServiceTest {
         );
         when(syncBatchRepository.existsRunningBatch(SyncBatchType.FEISHU_IMPORT)).thenReturn(true);
 
-        assertThatThrownBy(() -> service.previewFeishu("feishu.json", "hash", "admin", SyncTriggerMode.MANUAL))
+        assertThatThrownBy(() -> service.executeFeishuUserSync("admin", SyncTriggerMode.MANUAL))
             .isInstanceOf(BizException.class)
             .hasMessage("当前已有同类型同步任务正在执行");
+    }
+
+    private static class SuccessHandler implements SyncJobHandler {
+
+        private final SyncJobType jobType;
+        private final SyncTargetType targetType;
+
+        private SuccessHandler(SyncJobType jobType, SyncTargetType targetType) {
+            this.jobType = jobType;
+            this.targetType = targetType;
+        }
+
+        @Override
+        public SyncJobType jobType() {
+            return jobType;
+        }
+
+        @Override
+        public com.company.idm.application.sync.SyncJobExecutionResult preview(com.company.idm.application.sync.SyncRequestPayload payload) {
+            return new com.company.idm.application.sync.SyncJobExecutionResult(
+                SyncRunStatus.SUCCESS,
+                "{\"ok\":true}",
+                null,
+                List.<SyncDiffPayload>of()
+            );
+        }
+
+        @Override
+        public com.company.idm.application.sync.SyncJobExecutionResult execute(com.company.idm.application.sync.SyncRequestPayload payload) {
+            return new com.company.idm.application.sync.SyncJobExecutionResult(
+                SyncRunStatus.SUCCESS,
+                "{\"ok\":true,\"target\":\"" + targetType.name() + "\"}",
+                null,
+                List.<SyncDiffPayload>of()
+            );
+        }
     }
 }

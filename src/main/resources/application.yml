@@ -70,6 +70,15 @@ app:
     placeholder-uid: placeholder
     db-validation-timeout-seconds: 2
   sync:
+    feishu:
+      # 飞书开放平台接入配置。
+      enabled: ${APP_SYNC_FEISHU_ENABLED:false}
+      base-url: ${APP_SYNC_FEISHU_BASE_URL:https://open.feishu.cn}
+      app-id: ${APP_SYNC_FEISHU_APP_ID:}
+      app-secret: ${APP_SYNC_FEISHU_APP_SECRET:}
+      page-size: ${APP_SYNC_FEISHU_PAGE_SIZE:50}
+      connect-timeout-ms: ${APP_SYNC_FEISHU_CONNECT_TIMEOUT_MS:5000}
+      read-timeout-ms: ${APP_SYNC_FEISHU_READ_TIMEOUT_MS:10000}
     schedule:
       # 同步定时任务默认关闭，避免在原型环境或首次部署时误触发。
       feishu:

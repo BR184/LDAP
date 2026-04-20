@@ -9,8 +9,13 @@ import com.company.idm.application.user.UpdateUserStatusCommand;
 import com.company.idm.application.user.UserApplicationService;
 import com.company.idm.application.rbac.AssignUserRolesCommand;
 import com.company.idm.application.rbac.RbacApplicationService;
+import com.company.idm.application.sync.SyncApplicationService;
 import com.company.idm.common.api.ApiResponse;
+import com.company.idm.common.enums.SyncTriggerMode;
 import com.company.idm.domain.user.User;
+import com.company.idm.interfaces.sync.FeishuSyncRequest;
+import com.company.idm.interfaces.sync.SyncBatchDetailResponse;
+import com.company.idm.interfaces.sync.SyncResponseAssembler;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +40,8 @@ public class UserController {
 
     private final UserApplicationService userApplicationService;
     private final RbacApplicationService rbacApplicationService;
+    private final SyncApplicationService syncApplicationService;
+    private final SyncResponseAssembler syncResponseAssembler;
 
     @GetMapping
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'GET')")
@@ -138,6 +145,17 @@ public class UserController {
     ) {
         rbacApplicationService.assignUserRoles(new AssignUserRolesCommand(id, request.roleIds(), username));
         return ApiResponse.success();
+    }
+
+    @PostMapping("/sync/feishu")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/sync/feishu', 'POST')")
+    public ApiResponse<SyncBatchDetailResponse> syncFeishu(
+        @RequestBody(required = false) FeishuSyncRequest request,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        return ApiResponse.success(syncResponseAssembler.toResponse(
+            syncApplicationService.executeFeishuUserSync(username, SyncTriggerMode.MANUAL)
+        ));
     }
 
     private UserResponse toResponse(User user) {

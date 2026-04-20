@@ -163,8 +163,7 @@ flowchart LR
     P --> R
 
     E[GitLab / Jenkins / Nexus / 禅道] --> D
-    F[外网飞书采集器<br/>插件或适配器] --> H[离线数据包 / 中转目录]
-    H --> P
+    F[飞书开放平台] --> P
     P --> U
 ```
 
@@ -889,29 +888,27 @@ GitLab 等系统直接配置 LDAP 参数连接 OpenLDAP：
 
 ### 5.6 飞书数据集成设计（后续预留）
 
-考虑到系统部署在内网，而飞书通常位于外网环境，建议采用“外网采集、内网导入”的解耦模式。
+第二期飞书导入能力调整为：由本项目后端直接调用飞书开放平台 API 拉取数据，再完成 MySQL 与 LDAP 双写，不再采用离线 JSON 包或本地文件导入方式。
 
 #### 5.6.1 逻辑流程
 
 ```mermaid
 flowchart LR
-    A[外网飞书采集器] --> B[生成加密数据包]
-    B --> C[人工上传 / 中转目录 / SFTP]
-    C --> D[内网同步模块]
-    D --> E[差异比对]
-    E --> F[更新 MySQL]
-    F --> G[按固定映射同步 OpenLDAP 用户与分组]
+    A[管理员点击用户或分组页面同步按钮] --> B[同步接口]
+    B --> C[飞书开放平台 API]
+    C --> D[标准化转换]
+    D --> E[更新 MySQL]
+    E --> F[按固定映射同步 OpenLDAP 用户与分组]
 ```
 
 #### 5.6.2 同步模式
 
-- 手动同步：管理员上传飞书导出包，确认差异后执行导入
-- 自动同步：定时扫描中转目录或 SFTP 目录，自动拉取并执行同步
+- 手动同步：管理员在“用户管理页”或“分组管理页”点击同步按钮，后端直接调用飞书开放平台 API 拉取数据并执行导入
+- 自动同步：系统定时任务在低峰时段自动调用飞书开放平台 API 拉取数据并执行导入
 
 #### 5.6.3 同步策略
 
 - 支持全量同步与增量同步
-- 支持“预览差异”后再提交
 - 支持失败重试和批次追踪
 - 支持导入幂等，避免重复包重复执行
 
@@ -941,7 +938,100 @@ flowchart LR
 - 同步任务与批次日志表
 - 固定映射规则由代码维护，后续如接入更多第三方来源再考虑映射配置化
 
-#### 5.6.6 同步公共模型与触发框架设计
+#### 5.6.6 飞书部门导入设计
+
+飞书部门导入建议在现有同步框架内实现，而不是绕开 `SyncBatch / SyncJob / SyncDiff` 单独开发。
+
+当前导入数据来源统一为飞书开放平台 API，不再支持前端直接传 JSON 或后端读取本地导入文件。
+
+前端入口约束如下：
+
+- 不单独提供飞书同步页面
+- 仅在“用户管理页”和“分组管理页”上提供同步按钮
+- 点击按钮后直接触发后端同步，不做预览确认
+
+当前阶段推荐的飞书部门标准化字段如下：
+
+- `externalId`
+- `departmentCode`
+- `departmentName`
+- `parentExternalId`
+- `status`
+- `orderNo`
+
+核心业务规则如下：
+
+1. `externalId` 作为飞书部门幂等更新主键
+2. `departmentCode` 作为平台内部稳定部门编码，创建后不允许随 `externalId` 映射变化
+3. `parentExternalId` 用于构建部门树，可引用同批次父部门或数据库中已存在父部门
+4. 导入前必须校验：
+   - `externalId` 不重复
+   - `departmentCode` 不重复
+   - 父节点存在
+   - 不存在循环引用
+5. 导入执行时必须维护：
+   - `parent_dept_code`
+   - `ancestor_path`
+   - `dept_level`
+6. 导入执行后必须完成部门到 LDAP group 的双写
+7. 若部门名称变化，则 LDAP group 节点重命名，并回写最新 `ldap_dn`
+
+当前原型已落地说明：
+
+- 已落地 `FeishuDepartmentImportService`
+- 已支持直接调用飞书开放平台 API 拉取部门数据
+- 已支持部门树构建、幂等更新和 LDAP group 同步
+- 已支持通过“分组管理页”对应后端接口触发部门同步
+
+#### 5.6.7 飞书用户导入设计
+
+飞书用户导入同样建议基于统一同步框架实现，并遵循“主部门导入、默认角色绑定、LDAP 用户双写”的原则。
+
+当前阶段用户模型仅维护一个主部门字段 `dept_code`，因此：
+
+- 系统支持完整部门树导入，包括多个平级部门和上下级部门
+- 但单个用户当前只保存一个主部门
+- 若飞书返回多部门信息，则当前阶段仅取主部门写入 `sys_user.dept_code`
+
+推荐的飞书用户标准化字段如下：
+
+- `externalId`
+- `username`
+- `realName`
+- `email`
+- `mobile`
+- `employeeNo`
+- `mainDepartmentExternalId`
+- `status`
+- `orderNo`
+
+核心业务规则如下：
+
+1. `externalId` 作为飞书用户幂等更新主键
+2. `username` 作为平台登录名，不允许在导入中被 `externalId` 映射为其他已有账号
+3. `employeeNo` 作为辅助冲突校验字段
+4. 用户导入必须建立在部门导入之后，`mainDepartmentExternalId` 必须能映射到部门
+5. `preview` 只做解析、校验和差异计算，不落业务数据
+6. `execute` 时需要完成：
+   - MySQL 用户主数据落库
+   - LDAP 用户条目创建或更新
+   - 用户与部门 group 的成员关系同步
+   - 新增用户默认绑定 `NORMAL_USER`
+7. 对已有用户：
+   - 不覆盖已有角色
+   - 仅在当前无任何角色时补绑定 `NORMAL_USER`
+8. 当前阶段为导入用户设置固定初始密码 `123456`，不启用首次登录强制改密
+
+当前原型已落地说明：
+
+- 已落地 `FeishuUserImportService`
+- 已支持直接调用飞书开放平台 API 拉取用户数据
+- 已支持 `externalId` 幂等定位、`username / employeeNo` 冲突校验
+- 已支持主部门映射、LDAP 用户双写和部门 group 成员关系同步
+- 已支持新增飞书用户默认绑定 `NORMAL_USER`
+- 已支持通过“用户管理页”对应后端接口触发用户同步
+
+#### 5.6.8 同步公共模型与触发框架设计
 
 为同时支撑飞书导入、LDAP 双写补偿和 MySQL 与 LDAP 对账，建议采用统一同步模型：
 
@@ -954,6 +1044,7 @@ flowchart LR
 - `SyncBatch`：描述一次导入、对账或重试的执行批次
 - `SyncJob`：描述批次中的具体执行步骤，例如部门导入、用户导入、部门对账、用户对账
 - `SyncDiff`：描述预览差异或对账扫描结果，用于后续修复或回溯
+  当前同步框架仍保留差异模型，但不再向前端提供飞书导入预览交互
 
 触发模式支持两类：
 
@@ -974,7 +1065,7 @@ flowchart LR
 - 已落地手工触发接口
 - 已落地轻量定时触发器 `SyncScheduleLauncher`
 - 已落地基础 LDAP 对账处理器，当前覆盖部门与用户维度
-- 已落地飞书导入公共处理器框架，真实数据包解析逻辑将在后续子任务补齐
+- 已落地飞书导入公共处理器框架，其中“飞书部门导入”和“飞书用户导入”均已实现真实解析与执行
 
 ### 5.7 API 网关模块设计（后续预留）
 
@@ -1367,8 +1458,8 @@ flowchart LR
 
 当前已落地：
 
-- `POST /api/v1/sync/feishu/preview`
-- `POST /api/v1/sync/feishu/execute`
+- `POST /api/v1/departments/sync/feishu`
+- `POST /api/v1/users/sync/feishu`
 - `POST /api/v1/sync/reconcile/preview`
 - `POST /api/v1/sync/reconcile/execute`
 - `POST /api/v1/sync/jobs/{id}/retry`
@@ -1379,7 +1470,12 @@ flowchart LR
 
 - 当前已支持管理员手工触发同步批次
 - 当前已支持轻量定时任务框架，作为第二期前置能力
-- 飞书导入接口当前已落地公共框架，真实文件解析逻辑将在后续子任务继续补齐
+- 飞书导入统一由后端直接调用飞书开放平台 API 拉取数据
+- “分组管理页”对应 `POST /api/v1/departments/sync/feishu`
+- “用户管理页”对应 `POST /api/v1/users/sync/feishu`
+- 当前不再提供飞书导入预览接口
+- 当前“飞书部门导入”已落地真实解析与执行逻辑
+- 当前“飞书用户导入”已落地真实解析与执行逻辑
 
 ### 7.6 未来预留接口
 
@@ -1587,6 +1683,8 @@ flowchart LR
 - `DepartmentApplicationServiceTest`
 - `DefaultPermissionLevelRuleServiceTest`
 - `EnvironmentStartupVerifierTest`
+- `FeishuDepartmentImportServiceTest`
+- `FeishuUserImportServiceTest`
 - `SyncApplicationServiceTest`
 - `LdapReconcileDepartmentHandlerTest`
 - `SyncScheduleLauncherTest`
@@ -1603,7 +1701,7 @@ flowchart LR
 当前全量测试执行结果：
 
 - 测试命令：`.tools\apache-maven-3.9.6\bin\mvn.cmd test`
-- Tests run：`79`
+- Tests run：`88`
 - Failures：`0`
 - Errors：`0`
 
@@ -1655,6 +1753,7 @@ flowchart LR
 - `application-prod.yml`：使用 `MySQL + OpenLDAP`，并关闭 H2 console 与 Swagger 文档暴露
 - JWT、数据库账号密码、LDAP bind 账号密码支持通过环境变量注入
 - 新增 `app.startup-check.*` 配置，用于控制真实环境启动校验
+- 新增 `app.sync.feishu.*` 配置，用于约定飞书开放平台接入参数
 
 #### 12.2.1 启动校验与部署辅助能力
 
@@ -1704,7 +1803,7 @@ flowchart LR
 ### 13.2 第二阶段
 
 - 将运行环境从原型形态切换为真实生产形态：`MySQL + OpenLDAP`
-- 完成飞书数据导入能力，包括部门导入、用户导入、差异预览与幂等更新
+- 完成飞书数据导入能力，包括部门导入、用户导入和幂等更新
 - 建立凌晨低峰同步流程：先执行飞书导入双写，再执行 MySQL 与 LDAP 对账补偿
 - 实现当前预留接口，例如用户详情、手工同步 LDAP、同步任务查询等
 - 完成 GitLab 等第三方系统的真实 LDAP 接入联调
@@ -1762,10 +1861,11 @@ flowchart LR
 - 落地手工触发同步接口
 - 落地轻量定时触发器 `SyncScheduleLauncher`
 - 落地基础 LDAP 对账处理器
+- 落地飞书部门导入的真实处理逻辑
 
 3. 飞书部门导入
 
-- 解析飞书部门数据包
+- 直接调用飞书开放平台 API 拉取部门数据
 - 基于 `external_id` 做幂等更新
 - 按固定映射规则落库 `sys_department`
 - 维护 `parent_dept_code`、`ancestor_path`、`dept_level`
@@ -1775,13 +1875,23 @@ flowchart LR
 
 4. 飞书用户导入
 
-- 解析飞书用户数据包
+- 直接调用飞书开放平台 API 拉取用户数据
 - 基于外部主键做幂等更新
 - 将用户写入 MySQL
 - 按固定映射规则同步写入 LDAP 用户条目
 - 建立用户与部门 group 的成员关系
 - 为导入用户默认绑定 `NORMAL_USER`
 - 补充用户导入、用户角色默认绑定和用户分组同步测试
+
+当前已完成的飞书用户导入项包括：
+
+- 已落地飞书用户标准化载荷解析
+- 已支持 `external_id` 幂等定位
+- 已支持 `username / employee_no` 冲突校验
+- 已支持主部门映射到 `dept_code`
+- 已支持 MySQL + LDAP 用户双写
+- 已支持新增用户默认绑定 `NORMAL_USER`
+- 已补充单元测试与集成测试
 
 5. MySQL 与 LDAP 对账补偿
 
@@ -1801,8 +1911,7 @@ flowchart LR
 - 用户详情接口
 - 手工同步 LDAP 接口
 - 同步任务查询接口
-- 导入预览接口
-- 导入执行接口
+- 飞书同步结果查询接口
 - 导入结果查询接口
 
 接口实现要求：
@@ -1826,7 +1935,7 @@ flowchart LR
 - 角色管理页
 - 菜单管理页
 - 部门管理页
-- 导入预览与执行页面
+- 在用户管理页与分组管理页补充飞书同步按钮
 - 同步任务与对账结果页面
 
 页面开发约束：
@@ -1857,7 +1966,7 @@ flowchart LR
 | 风险 | 说明 | 应对建议 |
 | --- | --- | --- |
 | LDAP 与数据库不一致 | 双写场景可能失败 | 凌晨先执行飞书导入双写，再执行 MySQL 与 LDAP 对账补偿，并记录审计追踪 |
-| 内外网隔离导致飞书直连不可行 | 内网不能直接访问飞书 | 采用离线数据包或中转目录方案 |
+| 内外网隔离导致飞书直连受限 | 内网网络策略可能无法直连飞书开放平台 | 提前完成网络可达性评估，并为失败场景保留人工触发与重试机制 |
 | 角色权限模型过于粗糙 | 后续功能扩展受限 | 一期即按资源和动作维度设计权限 |
 | 第三方系统 LDAP 配置差异 | GitLab、Jenkins 等配置项不同 | 预留应用接入模板与参数说明 |
 | 平台宕机影响后台管理 | 用户、角色无法修改 | 第三方认证直接连 LDAP，降低运行时依赖 |

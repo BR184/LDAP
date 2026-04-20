@@ -4,8 +4,13 @@ import com.company.idm.application.department.CreateDepartmentCommand;
 import com.company.idm.application.department.DeleteDepartmentCommand;
 import com.company.idm.application.department.DepartmentApplicationService;
 import com.company.idm.application.department.UpdateDepartmentCommand;
+import com.company.idm.application.sync.SyncApplicationService;
 import com.company.idm.common.api.ApiResponse;
+import com.company.idm.common.enums.SyncTriggerMode;
 import com.company.idm.domain.department.Department;
+import com.company.idm.interfaces.sync.FeishuSyncRequest;
+import com.company.idm.interfaces.sync.SyncBatchDetailResponse;
+import com.company.idm.interfaces.sync.SyncResponseAssembler;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -32,6 +37,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class DepartmentController {
 
     private final DepartmentApplicationService departmentApplicationService;
+    private final SyncApplicationService syncApplicationService;
+    private final SyncResponseAssembler syncResponseAssembler;
 
     @GetMapping("/tree")
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/tree', 'GET')")
@@ -84,6 +91,17 @@ public class DepartmentController {
     ) {
         departmentApplicationService.deleteDepartment(new DeleteDepartmentCommand(deptCode, username));
         return ApiResponse.success();
+    }
+
+    @PostMapping("/sync/feishu")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/sync/feishu', 'POST')")
+    public ApiResponse<SyncBatchDetailResponse> syncFeishu(
+        @RequestBody(required = false) FeishuSyncRequest request,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        return ApiResponse.success(syncResponseAssembler.toResponse(
+            syncApplicationService.executeFeishuDepartmentSync(username, SyncTriggerMode.MANUAL)
+        ));
     }
 
     private List<DepartmentTreeNodeResponse> buildTree(List<Department> departments) {

@@ -13,6 +13,10 @@ public interface UserRepository {
 
     Optional<User> findByUsername(String username);
 
+    Optional<User> findByExternalId(String externalId);
+
+    Optional<User> findByEmployeeNo(String employeeNo);
+
     List<User> findAll();
 
     User save(User user);

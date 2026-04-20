@@ -29,7 +29,7 @@ class SyncScheduleLauncherTest {
 
         launcher.runFeishuImport();
 
-        verify(syncApplicationService).executeFeishu(null, null, "system-scheduler", SyncTriggerMode.SCHEDULED);
+        verify(syncApplicationService).executeFeishuUserSync("system-scheduler", SyncTriggerMode.SCHEDULED);
     }
 
     @Test

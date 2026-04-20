@@ -40,34 +40,35 @@ public class SyncApplicationService {
     private final ObjectMapper objectMapper;
 
     /**
-     * 手工或定时预览飞书同步批次。
+     * 手工或定时执行飞书部门同步批次。
      */
     @Transactional
-    public SyncBatchDetail previewFeishu(String sourceFileName, String sourceFileHash, String operator, SyncTriggerMode triggerMode) {
+    public SyncBatchDetail executeFeishuDepartmentSync(String operator, SyncTriggerMode triggerMode) {
         return runBatch(
             SyncBatchType.FEISHU_IMPORT,
             SyncSourceType.FEISHU,
-            sourceFileName,
-            sourceFileHash,
+            false,
+            null,
             false,
             operator,
             triggerMode,
-            List.of(SyncJobType.FEISHU_DEPARTMENT_IMPORT, SyncJobType.FEISHU_USER_IMPORT),
-            true,
+            List.of(SyncJobType.FEISHU_DEPARTMENT_IMPORT),
+            false,
             null
         );
     }
 
     /**
-     * 手工或定时执行飞书同步批次。
+     * 手工或定时执行飞书用户同步批次。
+     * 为确保主部门映射完整，当前会先执行部门同步，再执行用户同步。
      */
     @Transactional
-    public SyncBatchDetail executeFeishu(String sourceFileName, String sourceFileHash, String operator, SyncTriggerMode triggerMode) {
+    public SyncBatchDetail executeFeishuUserSync(String operator, SyncTriggerMode triggerMode) {
         return runBatch(
             SyncBatchType.FEISHU_IMPORT,
             SyncSourceType.FEISHU,
-            sourceFileName,
-            sourceFileHash,
+            false,
+            null,
             false,
             operator,
             triggerMode,
@@ -85,7 +86,7 @@ public class SyncApplicationService {
         return runBatch(
             SyncBatchType.LDAP_RECONCILE,
             SyncSourceType.SYSTEM,
-            null,
+            false,
             null,
             false,
             operator,
@@ -104,7 +105,7 @@ public class SyncApplicationService {
         return runBatch(
             SyncBatchType.LDAP_RECONCILE,
             SyncSourceType.SYSTEM,
-            null,
+            false,
             null,
             autoRepair,
             operator,
@@ -126,8 +127,8 @@ public class SyncApplicationService {
         return runBatch(
             resolveBatchType(job.getJobType()),
             resolveSourceType(job.getJobType()),
-            payload.sourceFileName(),
-            payload.sourceFileHash(),
+            payload.forceFullSync(),
+            payload.remark(),
             payload.autoRepair(),
             operator,
             SyncTriggerMode.MANUAL,
@@ -160,8 +161,8 @@ public class SyncApplicationService {
     private SyncBatchDetail runBatch(
         SyncBatchType batchType,
         SyncSourceType sourceType,
-        String sourceFileName,
-        String sourceFileHash,
+        boolean forceFullSync,
+        String remark,
         boolean autoRepair,
         String operator,
         SyncTriggerMode triggerMode,
@@ -178,8 +179,8 @@ public class SyncApplicationService {
             .batchType(batchType)
             .sourceType(sourceType)
             .triggerMode(triggerMode)
-            .fileName(sourceFileName)
-            .fileHash(sourceFileHash)
+            .fileName(remark)
+            .fileHash(forceFullSync ? "FULL_SYNC" : null)
             .status(SyncRunStatus.RUNNING)
             .operator(operator)
             .correlationBatchNo(correlationBatchNo)
@@ -190,7 +191,13 @@ public class SyncApplicationService {
         int failCount = 0;
         int totalDiffCount = 0;
         for (SyncJobType jobType : jobTypes) {
-            SyncRequestPayload payload = new SyncRequestPayload(sourceFileName, sourceFileHash, autoRepair, operator, triggerMode);
+            SyncRequestPayload payload = new SyncRequestPayload(
+                forceFullSync,
+                remark,
+                autoRepair,
+                operator,
+                triggerMode
+            );
             SyncJob job = syncJobRepository.save(SyncJob.builder()
                 .batchNo(batchNo)
                 .jobType(jobType)

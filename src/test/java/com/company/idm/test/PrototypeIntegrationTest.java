@@ -1,11 +1,17 @@
 package com.company.idm.test;
 
 import com.company.idm.boot.IdmBootApplication;
+import com.company.idm.application.sync.feishu.FeishuDepartmentPayload;
+import com.company.idm.application.sync.feishu.FeishuUserPayload;
 import com.company.idm.common.log.TraceIdConstants;
+import com.company.idm.infrastructure.feishu.FeishuDepartmentRemoteService;
+import com.company.idm.infrastructure.feishu.FeishuUserRemoteService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -13,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -32,6 +39,12 @@ class PrototypeIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @MockBean
+    private FeishuDepartmentRemoteService feishuDepartmentRemoteService;
+
+    @MockBean
+    private FeishuUserRemoteService feishuUserRemoteService;
 
     @Test
     void shouldLoginAndReadCurrentUserProfile() throws Exception {
@@ -514,29 +527,91 @@ class PrototypeIntegrationTest {
     @Test
     void shouldPreviewExecuteAndQuerySyncBatches() throws Exception {
         String adminToken = loginAsAdmin();
+        String suffix = String.valueOf(System.nanoTime());
+        String rootDeptCode = "FROOT" + suffix;
+        String childDeptCode = "FCHILD" + suffix;
+        String importedUsername = "feishu" + suffix;
+        when(feishuDepartmentRemoteService.fetchDepartments()).thenReturn(List.of(
+            new FeishuDepartmentPayload("ou_root_" + suffix, rootDeptCode, "飞书一级部门", null, 1, 1),
+            new FeishuDepartmentPayload("ou_child_" + suffix, childDeptCode, "飞书二级部门", "ou_root_" + suffix, 1, 2)
+        ));
+        when(feishuUserRemoteService.fetchUsers()).thenReturn(List.of(
+            new FeishuUserPayload("user_" + suffix, importedUsername, "飞书导入用户", importedUsername + "@corp.local", "13812345678", "E" + suffix, "ou_child_" + suffix, 1, 1)
+        ));
 
-        MvcResult previewResult = mockMvc.perform(post("/api/v1/sync/feishu/preview")
+        MvcResult departmentSyncResult = mockMvc.perform(post("/api/v1/departments/sync/feishu")
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                      "sourceFileName": "feishu-export.json",
-                      "sourceFileHash": "hash-preview"
+                      "remark": "manual-sync"
                     }
                     """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.batch.batchType").value("FEISHU_IMPORT"))
-            .andExpect(jsonPath("$.data.jobs.length()").value(2))
             .andReturn();
-        String previewBatchNo = objectMapper.readTree(previewResult.getResponse().getContentAsString())
+        String departmentBatchNo = objectMapper.readTree(departmentSyncResult.getResponse().getContentAsString())
             .path("data").path("batch").path("batchNo").asText();
-        assertThat(previewBatchNo).isNotBlank();
+        assertThat(departmentBatchNo).isNotBlank();
 
-        mockMvc.perform(get("/api/v1/sync/batches/{batchNo}", previewBatchNo)
+        MvcResult departmentTreeResult = mockMvc.perform(get("/api/v1/departments/tree")
                 .header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.batch.batchNo").value(previewBatchNo));
+            .andReturn();
+        JsonNode departmentTree = objectMapper.readTree(departmentTreeResult.getResponse().getContentAsString()).path("data");
+        JsonNode rootNode = findDepartmentNodeByCode(departmentTree, rootDeptCode);
+        JsonNode childNode = findDepartmentNodeByCode(departmentTree, childDeptCode);
+        assertThat(rootNode).isNotNull();
+        assertThat(childNode).isNotNull();
+        assertThat(childNode.path("parentDeptCode").asText()).isEqualTo(rootDeptCode);
+
+        MvcResult userSyncResult = mockMvc.perform(post("/api/v1/users/sync/feishu")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "remark": "manual-sync"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.batch.batchType").value("FEISHU_IMPORT"))
+            .andReturn();
+        String executeBatchNo = objectMapper.readTree(userSyncResult.getResponse().getContentAsString())
+            .path("data").path("batch").path("batchNo").asText();
+        assertThat(executeBatchNo).isNotBlank();
+
+        MvcResult usersResult = mockMvc.perform(get("/api/v1/users")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode users = objectMapper.readTree(usersResult.getResponse().getContentAsString()).path("data");
+        JsonNode importedUser = null;
+        for (JsonNode user : users) {
+            if (importedUsername.equals(user.path("username").asText())) {
+                importedUser = user;
+                break;
+            }
+        }
+        assertThat(importedUser).isNotNull();
+        assertThat(importedUser.path("deptCode").asText()).isEqualTo(childDeptCode);
+
+        String importedToken = login(importedUsername, "123456");
+        assertThat(importedToken).isNotBlank();
+
+        mockMvc.perform(get("/api/v1/auth/me")
+                .header("Authorization", "Bearer " + importedToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.username").value(importedUsername))
+            .andExpect(jsonPath("$.data.roleCodes[0]").value("NORMAL_USER"));
+
+        MvcResult jobsResult = mockMvc.perform(get("/api/v1/sync/jobs")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andReturn();
+        JsonNode jobs = objectMapper.readTree(jobsResult.getResponse().getContentAsString()).path("data");
+        assertThat(jobs.isArray()).isTrue();
+        assertThat(jobs.size()).isGreaterThanOrEqualTo(3);
 
         MvcResult reconcileResult = mockMvc.perform(post("/api/v1/sync/reconcile/execute")
                 .header("Authorization", "Bearer " + adminToken)
@@ -553,14 +628,16 @@ class PrototypeIntegrationTest {
             .path("data").path("batch").path("batchNo").asText();
         assertThat(reconcileBatchNo).isNotBlank();
 
-        MvcResult jobsResult = mockMvc.perform(get("/api/v1/sync/jobs")
+        mockMvc.perform(get("/api/v1/sync/batches/{batchNo}", departmentBatchNo)
                 .header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.success").value(true))
-            .andReturn();
-        JsonNode jobs = objectMapper.readTree(jobsResult.getResponse().getContentAsString()).path("data");
-        assertThat(jobs.isArray()).isTrue();
-        assertThat(jobs.size()).isGreaterThanOrEqualTo(4);
+            .andExpect(jsonPath("$.data.batch.batchNo").value(departmentBatchNo));
+
+        mockMvc.perform(get("/api/v1/sync/batches/{batchNo}", executeBatchNo)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.batch.batchNo").value(executeBatchNo))
+            .andExpect(jsonPath("$.data.jobs.length()").value(2));
 
         mockMvc.perform(get("/api/v1/sync/batches/{batchNo}", reconcileBatchNo)
                 .header("Authorization", "Bearer " + adminToken))
@@ -632,4 +709,5 @@ class PrototypeIntegrationTest {
         }
         return null;
     }
+
 }

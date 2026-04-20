@@ -25,7 +25,7 @@ public class SyncScheduleLauncher {
         if (!syncScheduleProperties.getFeishu().isEnabled()) {
             return;
         }
-        syncApplicationService.executeFeishu(null, null, SCHEDULE_OPERATOR, SyncTriggerMode.SCHEDULED);
+        syncApplicationService.executeFeishuUserSync(SCHEDULE_OPERATOR, SyncTriggerMode.SCHEDULED);
     }
 
     @Scheduled(cron = "${app.sync.schedule.reconcile.cron:0 30 2 * * *}")
