@@ -28,12 +28,14 @@ public class FeishuDepartmentRemoteService {
         List<FeishuDepartmentPayload> departments = new ArrayList<>();
         String pageToken = null;
         do {
-            JsonNode root = openApiClient.get("/open-apis/contact/v3/departments", Map.of(
-                "department_id_type", "open_department_id",
-                "page_size", String.valueOf(properties.getPageSize()),
-                "page_token", blankToNull(pageToken),
-                "fetch_child", "true"
-            ));
+            Map<String, String> queryParameters = new LinkedHashMap<>();
+            queryParameters.put("department_id_type", "open_department_id");
+            queryParameters.put("page_size", String.valueOf(properties.getPageSize()));
+            queryParameters.put("fetch_child", "true");
+            if (pageToken != null && !pageToken.isBlank()) {
+                queryParameters.put("page_token", pageToken);
+            }
+            JsonNode root = openApiClient.get("/open-apis/contact/v3/departments", queryParameters);
             JsonNode items = root.path("data").path("items");
             if (!items.isArray()) {
                 throw new BizException("FEISHU_DEPARTMENT_FETCH_FAILED", "飞书部门列表响应格式错误");

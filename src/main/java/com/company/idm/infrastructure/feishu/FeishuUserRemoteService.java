@@ -28,12 +28,14 @@ public class FeishuUserRemoteService {
         List<FeishuUserPayload> users = new ArrayList<>();
         String pageToken = null;
         do {
-            JsonNode root = openApiClient.get("/open-apis/contact/v3/users", Map.of(
-                "user_id_type", "open_id",
-                "department_id_type", "open_department_id",
-                "page_size", String.valueOf(properties.getPageSize()),
-                "page_token", blankToNull(pageToken)
-            ));
+            Map<String, String> queryParameters = new LinkedHashMap<>();
+            queryParameters.put("user_id_type", "open_id");
+            queryParameters.put("department_id_type", "open_department_id");
+            queryParameters.put("page_size", String.valueOf(properties.getPageSize()));
+            if (pageToken != null && !pageToken.isBlank()) {
+                queryParameters.put("page_token", pageToken);
+            }
+            JsonNode root = openApiClient.get("/open-apis/contact/v3/users", queryParameters);
             JsonNode items = root.path("data").path("items");
             if (!items.isArray()) {
                 throw new BizException("FEISHU_USER_FETCH_FAILED", "飞书用户列表响应格式错误");
@@ -49,9 +51,10 @@ public class FeishuUserRemoteService {
                 if (isBlank(externalId) || isBlank(username) || isBlank(realName) || isBlank(mainDepartmentExternalId)) {
                     throw new BizException("FEISHU_USER_FETCH_FAILED", "飞书用户数据缺少关键字段");
                 }
-                boolean active = !item.path("status").path("is_frozen").asBoolean(false)
-                    && !item.path("status").path("is_resigned").asBoolean(false)
-                    && !item.path("status").path("is_activated").isBoolean() || item.path("status").path("is_activated").asBoolean(true);
+                JsonNode statusNode = item.path("status");
+                boolean active = !statusNode.path("is_frozen").asBoolean(false)
+                    && !statusNode.path("is_resigned").asBoolean(false)
+                    && (!statusNode.path("is_activated").isBoolean() || statusNode.path("is_activated").asBoolean(true));
                 users.add(new FeishuUserPayload(
                     externalId,
                     username,

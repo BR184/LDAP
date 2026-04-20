@@ -1744,38 +1744,47 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 当前原型已落地的测试类型包括：
 
 - 应用服务单元测试：认证、用户、角色权限、部门、同步编排
-- 基础设施单元测试：JWT、过滤器、SQL 日志、LDAP stub、Casbin、统一异常处理
+- 基础设施单元测试：JWT、过滤器、SQL 日志、LDAP stub、Casbin、统一异常处理、飞书 OpenAPI、LDAP 健康检查、同步响应组装
 - 集成测试：认证、用户管理、角色菜单管理、部门管理、同步接口全链路
 
-当前已落地的典型测试文件包括：
+当前已落地的测试文件包括：
 
 - `AuthApplicationServiceTest`
-- `UserApplicationServiceTest`
-- `RbacApplicationServiceTest`
-- `DepartmentApplicationServiceTest`
-- `DefaultPermissionLevelRuleServiceTest`
-- `EnvironmentStartupVerifierTest`
-- `FeishuDepartmentImportServiceTest`
-- `FeishuUserImportServiceTest`
-- `SyncApplicationServiceTest`
-- `LdapReconcileDepartmentHandlerTest`
-- `LdapReconcileUserHandlerTest`
-- `LdapReconcileMembershipHandlerTest`
-- `SyncScheduleLauncherTest`
-- `PrototypeIntegrationTest`
+- `CasbinAccessServiceTest`
 - `CasbinPolicyServiceTest`
-- `StubLdapDirectoryServiceTest`
-- `StubLdapGroupServiceTest`
+- `DefaultFeishuAccessTokenServiceTest`
+- `DefaultPermissionLevelRuleServiceTest`
+- `DepartmentApplicationServiceTest`
+- `EnvironmentStartupVerifierTest`
+- `UserApplicationServiceTest`
+- `FeishuDepartmentImportServiceTest`
+- `FeishuDepartmentRemoteServiceTest`
+- `FeishuOpenApiClientTest`
+- `FeishuUserImportServiceTest`
+- `FeishuUserRemoteServiceTest`
 - `GlobalExceptionHandlerTest`
 - `JwtAuthenticationFilterTest`
 - `JwtTokenServiceTest`
+- `LdapDirectoryHealthIndicatorTest`
+- `LdapReconcileDepartmentHandlerTest`
+- `LdapReconcileMembershipHandlerTest`
+- `LdapReconcileUserHandlerTest`
+- `PrototypeIntegrationTest`
+- `RbacApplicationServiceTest`
+- `SecurityHandlersTest`
+- `SimplePasswordPolicyValidatorTest`
 - `SqlLogFormatterTest`
+- `StubLdapDirectoryServiceTest`
+- `StubLdapGroupServiceTest`
+- `SyncApplicationServiceTest`
+- `SyncResponseAssemblerTest`
+- `SyncScheduleLauncherTest`
 - `TraceIdFilterTest`
 
 当前全量测试执行结果：
 
-- 测试命令：`.tools\apache-maven-3.9.6\bin\mvn.cmd test`
-- Tests run：`96`
+- 测试命令：`.tools\apache-maven-3.9.6\bin\mvn.cmd clean test`
+- Tests run：`109`
 - Failures：`0`
 - Errors：`0`
 
