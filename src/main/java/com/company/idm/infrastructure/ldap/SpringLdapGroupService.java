@@ -149,13 +149,19 @@ public class SpringLdapGroupService implements LdapGroupService {
         try {
             DirContextAdapter context = lookupGroup(groupCode);
             String userDn = LdapDnHelper.buildUserDn(ldapProperties, username);
+            String placeholderDn = LdapDnHelper.buildPlaceholderMemberDn(ldapProperties);
             String[] members = context.getStringAttributes("member");
             if (members == null || java.util.Arrays.stream(members).noneMatch(userDn::equals)) {
                 return;
             }
-            context.removeAttributeValue("member", userDn);
-            if (remainingMembersCount(context) == 0) {
-                context.addAttributeValue("member", LdapDnHelper.buildPlaceholderMemberDn(ldapProperties));
+            List<String> remainingMembers = java.util.Arrays.stream(members)
+                .filter(member -> !userDn.equals(member))
+                .filter(member -> !placeholderDn.equals(member))
+                .toList();
+            if (remainingMembers.isEmpty()) {
+                context.setAttributeValues("member", new String[] { placeholderDn });
+            } else {
+                context.setAttributeValues("member", remainingMembers.toArray(String[]::new));
             }
             ldapTemplate.modifyAttributes(context);
         } catch (BizException ignored) {
@@ -192,15 +198,6 @@ public class SpringLdapGroupService implements LdapGroupService {
         } catch (NameNotFoundException exception) {
             throw new BizException("LDAP_GROUP_NOT_FOUND", "LDAP 分组不存在");
         }
-    }
-
-    private int remainingMembersCount(DirContextAdapter context) {
-        String[] members = context.getStringAttributes("member");
-        if (members == null) {
-            return 0;
-        }
-        String placeholder = LdapDnHelper.buildPlaceholderMemberDn(ldapProperties);
-        return (int) java.util.Arrays.stream(members).filter(member -> !placeholder.equals(member)).count();
     }
 
     private List<String> extractMembers(DirContextAdapter context) {

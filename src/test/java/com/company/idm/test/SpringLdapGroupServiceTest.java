@@ -7,6 +7,7 @@ import java.util.List;
 import javax.naming.Name;
 import javax.naming.directory.BasicAttribute;
 import javax.naming.directory.BasicAttributes;
+import javax.naming.directory.DirContext;
 import javax.naming.directory.ModificationItem;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,12 +49,13 @@ class SpringLdapGroupServiceTest {
         ModificationItem[] items = context.getModificationItems();
         String placeholderDn = LdapDnHelper.buildPlaceholderMemberDn(properties);
 
-        assertThat(items).anySatisfy(item -> {
-            if (!"member".equalsIgnoreCase(item.getAttribute().getID())) {
-                return;
-            }
-            assertThat(item.getAttribute().contains(placeholderDn)).isTrue();
-        });
+        assertThat(items)
+            .singleElement()
+            .satisfies(item -> {
+                assertThat(item.getModificationOp()).isEqualTo(DirContext.REPLACE_ATTRIBUTE);
+                assertThat(item.getAttribute().getID()).isEqualToIgnoringCase("member");
+                assertThat(item.getAttribute().contains(placeholderDn)).isTrue();
+            });
     }
 
     private AppLdapProperties buildProperties() {
