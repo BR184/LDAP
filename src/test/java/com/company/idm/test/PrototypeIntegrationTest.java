@@ -777,6 +777,76 @@ class PrototypeIntegrationTest {
         assertThat(importedToken).isNotBlank();
     }
 
+    @Test
+    void shouldExposeThirdPartyLdapFrameworkTemplateAndPrecheckEndpoints() throws Exception {
+        String adminToken = loginAsAdmin();
+        String username = "ldapcheck" + System.nanoTime();
+
+        MvcResult createResult = mockMvc.perform(post("/api/v1/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "realName": "LDAP 预检用户",
+                      "email": "%s@corp.local",
+                      "mobile": "13911111111",
+                      "employeeNo": "E%s",
+                      "deptCode": "D001",
+                      "initialPassword": "Password@123",
+                      "roleIds": [1]
+                    }
+                    """.formatted(username, username, System.nanoTime())))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        long userId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+            .path("data")
+            .path("id")
+            .asLong();
+
+        mockMvc.perform(put("/api/v1/users/{id}/status", userId)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "statusCode": 0
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/ldap/framework")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.loginAttr").value("uid"))
+            .andExpect(jsonPath("$.data.authorizationMode").value("LOCAL_ONLY"));
+
+        mockMvc.perform(get("/api/v1/ldap/templates/{systemCode}", "gitlab")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.systemCode").value("gitlab"))
+            .andExpect(jsonPath("$.data.settings.user_filter").value("(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))"))
+            .andExpect(jsonPath("$.data.settings.bind_password").value("${LDAP_BIND_PASSWORD}"));
+
+        mockMvc.perform(post("/api/v1/ldap/precheck")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "systemCode": "gitlab",
+                      "enabledUsername": "admin",
+                      "disabledUsername": "%s"
+                    }
+                    """.formatted(username)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.overallStatus").value("PASS"))
+            .andExpect(jsonPath("$.data.items[?(@.code=='ENABLED_USER_FILTER_MATCH')].status").value("PASS"))
+            .andExpect(jsonPath("$.data.items[?(@.code=='DISABLED_USER_FILTER_BLOCK')].status").value("PASS"));
+    }
+
     private String loginAsAdmin() throws Exception {
         return login("admin", "admin123456");
     }

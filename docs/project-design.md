@@ -966,6 +966,16 @@ GitLab 等系统直接配置 LDAP 参数连接 OpenLDAP：
 - 不允许跳过“禁用用户不可登录”的验收项
 - 不允许将 LDAP 认证成功直接等价为业务授权成功
 
+当前代码落地说明如下：
+
+- 新增 `ThirdPartyLdapIntegrationApplicationService`，将“统一目录契约 + 系统模板 + 联调预检”沉淀为可复用应用服务，而不是仅保留在文档层
+- 新增接口 `GET /api/v1/ldap/framework`，用于输出当前环境下的标准契约，包括 `baseDn`、`userBase`、`groupBase`、`uid` 登录字段和统一过滤器
+- 新增接口 `GET /api/v1/ldap/templates/{systemCode}`，当前支持 `gitlab`、`jenkins`、`nexus`、`zentao` 四类模板；模板会基于 `app.ldap.*` 自动生成连接参数，但 `bind_password` 只返回占位符 `${LDAP_BIND_PASSWORD}`，不暴露真实密钥
+- 新增接口 `POST /api/v1/ldap/precheck`，要求至少提供一个启用用户样本，可选提供禁用用户样本；接口会校验统一过滤器是否能够命中启用用户、拦截禁用用户，并在 `spring` 模式下补充真实 LDAP 目录可访问性检查
+- `local/stub` 模式下，预检逻辑会复用现有 `LdapDirectoryService` 内存目录快照完成联调演练，保证本地开发阶段也能提前暴露模板和状态规则问题
+- 新增数据库迁移 `V10__third_party_ldap_framework.sql`，将框架查询、模板查询和预检执行纳入 Casbin 权限体系，确保该能力默认只向管理员开放
+- 该阶段仍然坚持“平台不进入第三方系统运行时认证链路”的边界，接口只负责生成模板、输出标准和做接入前校验，不托管第三方系统自身配置
+
 该通用接入框架的核心价值，不是新增一层认证系统，而是把“第三方系统直接接 LDAP”的能力标准化，确保不同系统在同一身份源下保持一致的登录字段、启用规则、联调流程和验收口径。
 
 ### 5.6 飞书数据集成设计（后续预留）
