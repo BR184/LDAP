@@ -35,6 +35,13 @@ class MenuControllerTest extends AbstractControllerMvcTest {
     private RbacApplicationService rbacApplicationService;
 
     @Test
+    void shouldReturnUnauthorizedWhenReadMenuTreeWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/menus/tree"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTH_UNAUTHORIZED"));
+    }
+
+    @Test
     @WithMockUser(username = "admin")
     void shouldGetMenuDetailSuccessfully() throws Exception {
         allow("/api/v1/menus/1", "GET");
@@ -71,6 +78,31 @@ class MenuControllerTest extends AbstractControllerMvcTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.menuCode").value("SYSTEM"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldReturnBadRequestWhenCreateMenuRequestInvalid() throws Exception {
+        allow("/api/v1/menus", "POST");
+
+        mockMvc.perform(post("/api/v1/menus")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "menuCode": "",
+                      "menuName": "",
+                      "parentId": -1,
+                      "menuType": null,
+                      "path": "",
+                      "component": "system/index",
+                      "icon": "setting",
+                      "sortNo": -1,
+                      "minPermissionLevel": 0,
+                      "remark": "系统管理"
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("PARAM_INVALID"));
     }
 
     @Test

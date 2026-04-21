@@ -38,6 +38,23 @@ class SyncControllerTest extends AbstractControllerMvcTest {
     private SyncResponseAssembler syncResponseAssembler;
 
     @Test
+    void shouldReturnUnauthorizedWhenPreviewReconcileWithoutAuthentication() throws Exception {
+        mockMvc.perform(post("/api/v1/sync/reconcile/preview"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTH_UNAUTHORIZED"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldReturnForbiddenWhenListJobsWithoutPermission() throws Exception {
+        deny("/api/v1/sync/jobs", "GET");
+
+        mockMvc.perform(get("/api/v1/sync/jobs"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("AUTH_FORBIDDEN"));
+    }
+
+    @Test
     @WithMockUser(username = "admin")
     void shouldPreviewReconcileSuccessfully() throws Exception {
         allow("/api/v1/sync/reconcile/preview", "POST");

@@ -64,6 +64,16 @@ class ThirdPartyLdapControllerTest extends AbstractControllerMvcTest {
 
     @Test
     @WithMockUser(username = "admin")
+    void shouldReturnForbiddenWhenReadFrameworkWithoutPermission() throws Exception {
+        deny("/api/v1/ldap/framework", "GET");
+
+        mockMvc.perform(get("/api/v1/ldap/framework"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("AUTH_FORBIDDEN"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
     void shouldReadTemplateSuccessfully() throws Exception {
         allow("/api/v1/ldap/templates/gitlab", "GET");
         when(thirdPartyLdapIntegrationApplicationService.getTemplate("gitlab")).thenReturn(new ThirdPartyLdapTemplateDetail(

@@ -37,6 +37,13 @@ class RoleControllerTest extends AbstractControllerMvcTest {
     private RbacApplicationService rbacApplicationService;
 
     @Test
+    void shouldReturnUnauthorizedWhenListRolesWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/roles"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTH_UNAUTHORIZED"));
+    }
+
+    @Test
     @WithMockUser(username = "admin")
     void shouldListRolesSuccessfully() throws Exception {
         allow("/api/v1/roles", "GET");
@@ -78,6 +85,25 @@ class RoleControllerTest extends AbstractControllerMvcTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.roleCode").value("ADMIN"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldReturnBadRequestWhenCreateRoleRequestInvalid() throws Exception {
+        allow("/api/v1/roles", "POST");
+
+        mockMvc.perform(post("/api/v1/roles")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "roleCode": "",
+                      "roleName": "",
+                      "permissionLevel": 0,
+                      "remark": "系统管理员"
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("PARAM_INVALID"));
     }
 
     @Test

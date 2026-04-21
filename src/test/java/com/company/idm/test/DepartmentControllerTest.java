@@ -48,6 +48,13 @@ class DepartmentControllerTest extends AbstractControllerMvcTest {
     private SyncResponseAssembler syncResponseAssembler;
 
     @Test
+    void shouldReturnUnauthorizedWhenReadDepartmentTreeWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/departments/tree"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTH_UNAUTHORIZED"));
+    }
+
+    @Test
     @WithMockUser(username = "admin")
     void shouldReturnDepartmentTreeSuccessfully() throws Exception {
         allow("/api/v1/departments/tree", "GET");
@@ -93,6 +100,25 @@ class DepartmentControllerTest extends AbstractControllerMvcTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.deptCode").value("D100"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldReturnBadRequestWhenCreateDepartmentRequestInvalid() throws Exception {
+        allow("/api/v1/departments", "POST");
+
+        mockMvc.perform(post("/api/v1/departments")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "deptCode": "",
+                      "deptName": "",
+                      "parentDeptCode": null,
+                      "externalId": "ou_root_001"
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("PARAM_INVALID"));
     }
 
     @Test

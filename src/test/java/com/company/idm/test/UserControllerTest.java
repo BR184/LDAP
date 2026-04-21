@@ -58,6 +58,23 @@ class UserControllerTest extends AbstractControllerMvcTest {
     private SyncResponseAssembler syncResponseAssembler;
 
     @Test
+    void shouldReturnUnauthorizedWhenListUsersWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/users"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTH_UNAUTHORIZED"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldReturnForbiddenWhenListUsersWithoutPermission() throws Exception {
+        deny("/api/v1/users", "GET");
+
+        mockMvc.perform(get("/api/v1/users"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("AUTH_FORBIDDEN"));
+    }
+
+    @Test
     @WithMockUser(username = "admin")
     void shouldListUsersSuccessfully() throws Exception {
         allow("/api/v1/users", "GET");
@@ -108,6 +125,29 @@ class UserControllerTest extends AbstractControllerMvcTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.id").value(2))
             .andExpect(jsonPath("$.data.username").value("zhangsan"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldReturnBadRequestWhenCreateUserRequestInvalid() throws Exception {
+        allow("/api/v1/users", "POST");
+
+        mockMvc.perform(post("/api/v1/users")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "",
+                      "realName": "",
+                      "email": "bad-email",
+                      "mobile": "13900000000",
+                      "employeeNo": "E10001",
+                      "deptCode": "D001",
+                      "initialPassword": "",
+                      "roleIds": []
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("PARAM_INVALID"));
     }
 
     @Test

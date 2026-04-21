@@ -63,4 +63,14 @@ class PermissionControllerTest extends AbstractControllerMvcTest {
             .andExpect(jsonPath("$.data[0].permissionCode").value("SYSTEM"))
             .andExpect(jsonPath("$.data[0].children[0].permissionCode").value("USER_READ"));
     }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldReturnForbiddenWhenReadPermissionTreeWithoutPermission() throws Exception {
+        deny("/api/v1/permissions/tree", "GET");
+
+        mockMvc.perform(get("/api/v1/permissions/tree"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("AUTH_FORBIDDEN"));
+    }
 }
