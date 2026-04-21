@@ -40,6 +40,13 @@ public enum ThirdPartyLdapSystemType {
         return "(&(objectClass=inetOrgPerson)(uid=" + filterPlaceholder + ")(employeeType=ENABLED))";
     }
 
+    public String buildTemplateUserFilter() {
+        return switch (this) {
+            case GITLAB -> "(&(objectClass=inetOrgPerson)(employeeType=ENABLED))";
+            default -> buildUserFilter();
+        };
+    }
+
     public static ThirdPartyLdapSystemType fromCode(String code) {
         return Arrays.stream(values())
             .filter(item -> item.code.equalsIgnoreCase(code))

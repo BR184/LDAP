@@ -69,7 +69,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 settings.put("bind_password", PASSWORD_PLACEHOLDER);
                 settings.put("base_dn", ldapProperties.getBaseDn());
                 settings.put("user_base", buildAbsoluteDn(ldapProperties.getPeopleOu()));
-                settings.put("user_filter", systemType.buildUserFilter());
+                settings.put("user_filter", systemType.buildTemplateUserFilter());
                 settings.put("encryption", connectionView.encryption());
 
                 fieldMappings.put("uid", "uid");
@@ -77,6 +77,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 fieldMappings.put("email", "mail");
 
                 notes.add("GitLab 只使用 LDAP 做认证，项目与组权限继续由 GitLab 本地维护。");
+                notes.add("GitLab 会自动按 uid=%{username} 拼接登录条件，模板中的 user_filter 只保留 objectClass 与 employeeType 附加限制。");
                 notes.add("允许首登自动创建本地用户，但登录标识必须固定为 uid。");
             }
             case JENKINS -> {
@@ -91,7 +92,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 fieldMappings.put("mail", "mail");
                 fieldMappings.put("login_attr", LOGIN_ATTR);
 
-                notes.add("Jenkins 常见误配是只按 uid 搜索，必须保留 employeeType=ENABLED 过滤条件。");
+                notes.add("Jenkins 常见配置是只按 uid 搜索，必须保留 employeeType=ENABLED 过滤条件。");
                 notes.add("Jenkins 权限体系继续由本地矩阵授权或角色策略维护。");
             }
             case NEXUS -> {
@@ -253,7 +254,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
             ).size();
             if (rawCount == 0) {
-                return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "禁用用户样本不存在: " + username);
+                return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "禁用用户样本不存在 " + username);
             }
             int enabledFilterCount = ldapTemplate.get().search(
                 ldapProperties.getPeopleOu(),
@@ -278,7 +279,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
     private ThirdPartyLdapPrecheckItem checkEnabledUserFilterMatchInStub(String username) {
         LdapUserSnapshot snapshot = ldapDirectoryService.findUserSnapshot(username);
         if (snapshot == null) {
-            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.FAIL, "启用用户样本不存在: " + username);
+            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.FAIL, "启用用户样本不存在 " + username);
         }
         if ("ENABLED".equalsIgnoreCase(snapshot.getStatus())) {
             return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.PASS, "统一过滤器可命中启用用户 " + username);
@@ -292,7 +293,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
         }
         LdapUserSnapshot snapshot = ldapDirectoryService.findUserSnapshot(username);
         if (snapshot == null) {
-            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "禁用用户样本不存在: " + username);
+            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "禁用用户样本不存在 " + username);
         }
         if ("DISABLED".equalsIgnoreCase(snapshot.getStatus())) {
             return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.PASS, "统一过滤器会拦截禁用用户 " + username);

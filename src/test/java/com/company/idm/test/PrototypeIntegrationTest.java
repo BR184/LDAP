@@ -827,7 +827,7 @@ class PrototypeIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.systemCode").value("gitlab"))
-            .andExpect(jsonPath("$.data.settings.user_filter").value("(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))"))
+            .andExpect(jsonPath("$.data.settings.user_filter").value("(&(objectClass=inetOrgPerson)(employeeType=ENABLED))"))
             .andExpect(jsonPath("$.data.settings.bind_password").value("${LDAP_BIND_PASSWORD}"));
 
         mockMvc.perform(post("/api/v1/ldap/precheck")

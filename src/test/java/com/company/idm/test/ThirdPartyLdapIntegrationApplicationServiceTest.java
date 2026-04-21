@@ -67,7 +67,7 @@ class ThirdPartyLdapIntegrationApplicationServiceTest {
             .containsEntry("port", "636")
             .containsEntry("base_dn", "dc=corp,dc=local")
             .containsEntry("user_base", "ou=people,dc=corp,dc=local")
-            .containsEntry("user_filter", "(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))")
+            .containsEntry("user_filter", "(&(objectClass=inetOrgPerson)(employeeType=ENABLED))")
             .containsEntry("bind_password", "${LDAP_BIND_PASSWORD}")
             .containsEntry("encryption", "simple_tls");
         assertThat(template.fieldMappings())

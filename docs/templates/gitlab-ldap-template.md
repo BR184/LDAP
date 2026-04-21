@@ -27,7 +27,7 @@
 
 - 登录字段必须为 `uid`
 - 用户搜索根必须为 `ou=people,<baseDn>`
-- 统一过滤器必须为 `(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))`
+- GitLab 生效后的等效过滤器必须为 `(&(uid=%{username})(&(objectClass=inetOrgPerson)(employeeType=ENABLED)))`
 
 ## 5. 模板要点
 
@@ -36,11 +36,12 @@
 - Base：`<base_dn>`
 - Bind DN：`<bind_dn>`
 - Password：通过外部安全配置注入
-- User filter：`(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))`
+- User filter：`(&(objectClass=inetOrgPerson)(employeeType=ENABLED))`
 - Encryption：按环境选择 `plain`、`start_tls` 或 `simple_tls`
 
 ## 6. 说明
 
 - GitLab 可作为首个标准接入样板
+- GitLab 会自动按 `uid=%{username}` 拼接查询条件，因此后台 `user_filter` 不再重复填写 `uid={login}`
 - LDAP 认证成功不代表用户自动拥有项目权限
 - 上线时需要记录最终生效配置的脱敏快照
