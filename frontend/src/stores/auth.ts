@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { useStorage } from '@vueuse/core'
 import { fetchCurrentUser, login } from '@/api/modules/auth'
+import { useMenuStore } from '@/stores/menu'
 import type { CurrentUser, LoginCommand } from '@/types/auth'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -9,6 +10,7 @@ export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<CurrentUser | null>(null)
   const profileLoaded = ref(false)
   const profileLoading = ref(false)
+  const menuStore = useMenuStore()
 
   const displayName = computed(() => currentUser.value?.realName || currentUser.value?.username || '未登录')
 
@@ -36,6 +38,7 @@ export const useAuthStore = defineStore('auth', () => {
       const profile = await fetchCurrentUser()
       currentUser.value = profile
       profileLoaded.value = true
+      menuStore.syncRoleAccess(profile.roleCodes)
       return profile
     } catch (error) {
       clearSession()
@@ -49,6 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = ''
     currentUser.value = null
     profileLoaded.value = false
+    menuStore.clearMenus()
   }
 
   return {

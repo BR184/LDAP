@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -46,8 +47,12 @@ public class UserController {
 
     @GetMapping
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'GET')")
-    public ApiResponse<List<UserResponse>> list() {
-        List<UserResponse> users = userApplicationService.listUsers().stream()
+    public ApiResponse<List<UserResponse>> list(
+        @RequestParam(required = false) String username,
+        @RequestParam(required = false) String deptCode,
+        @RequestParam(required = false) Integer status
+    ) {
+        List<UserResponse> users = userApplicationService.listUsers(username, deptCode, status).stream()
             .map(this::toResponse)
             .toList();
         return ApiResponse.success(users);

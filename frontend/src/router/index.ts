@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AdminLayout from '@/layout/AdminLayout.vue'
 import pinia from '@/stores'
 import { useAuthStore } from '@/stores/auth'
+import { useMenuStore } from '@/stores/menu'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -89,6 +90,7 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const authStore = useAuthStore(pinia)
+  const menuStore = useMenuStore(pinia)
   const requiresAuth = to.meta.requiresAuth !== false
 
   if (!requiresAuth) {
@@ -119,6 +121,24 @@ router.beforeEach(async (to) => {
         },
       }
     }
+  }
+
+  if (!menuStore.loaded) {
+    try {
+      await menuStore.loadMenus()
+    } catch {
+      authStore.clearSession()
+      return {
+        path: '/login',
+        query: {
+          redirect: to.fullPath,
+        },
+      }
+    }
+  }
+
+  if (!menuStore.canAccess(to.path)) {
+    return '/dashboard'
   }
 
   return true

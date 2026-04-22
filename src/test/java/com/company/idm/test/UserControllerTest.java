@@ -78,11 +78,25 @@ class UserControllerTest extends AbstractControllerMvcTest {
     @WithMockUser(username = "admin")
     void shouldListUsersSuccessfully() throws Exception {
         allow("/api/v1/users", "GET");
-        when(userApplicationService.listUsers()).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED)));
+        when(userApplicationService.listUsers(null, null, null)).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED)));
 
         mockMvc.perform(get("/api/v1/users"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data[0].id").value(1))
+            .andExpect(jsonPath("$.data[0].username").value("admin"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldListUsersWithConditionsSuccessfully() throws Exception {
+        allow("/api/v1/users", "GET");
+        when(userApplicationService.listUsers("adm", "D001", 1)).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED)));
+
+        mockMvc.perform(get("/api/v1/users")
+                .param("username", "adm")
+                .param("deptCode", "D001")
+                .param("status", "1"))
+            .andExpect(status().isOk())
             .andExpect(jsonPath("$.data[0].username").value("admin"));
     }
 
@@ -152,6 +166,29 @@ class UserControllerTest extends AbstractControllerMvcTest {
 
     @Test
     @WithMockUser(username = "admin")
+    void shouldReturnBadRequestWhenCreateUserMobileInvalid() throws Exception {
+        allow("/api/v1/users", "POST");
+
+        mockMvc.perform(post("/api/v1/users")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "zhangsan",
+                      "realName": "张三",
+                      "email": "zhangsan@corp.local",
+                      "mobile": "english-mobile",
+                      "employeeNo": "E10001",
+                      "deptCode": "D001",
+                      "initialPassword": "123456",
+                      "roleIds": [1]
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("PARAM_INVALID"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
     void shouldUpdateUserSuccessfully() throws Exception {
         allow("/api/v1/users/2", "PUT");
         when(userApplicationService.updateUser(argThat((UpdateUserCommand command) ->
@@ -171,6 +208,26 @@ class UserControllerTest extends AbstractControllerMvcTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.id").value(2));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldReturnBadRequestWhenUpdateUserMobileInvalid() throws Exception {
+        allow("/api/v1/users/2", "PUT");
+
+        mockMvc.perform(put("/api/v1/users/{id}", 2L)
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "realName": "张三",
+                      "email": "zhangsan@corp.local",
+                      "mobile": "abc",
+                      "employeeNo": "E10001",
+                      "deptCode": "D001"
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("PARAM_INVALID"));
     }
 
     @Test

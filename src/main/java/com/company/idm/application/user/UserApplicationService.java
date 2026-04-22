@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserApplicationService {
 
+    private static final String DEFAULT_INITIAL_PASSWORD = "123456";
     private static final String DEFAULT_RESET_PASSWORD = "123456";
 
     private final UserRepository userRepository;
@@ -43,8 +44,8 @@ public class UserApplicationService {
     /**
      * 查询当前所有未逻辑删除的用户，用于后台用户列表展示。
      */
-    public List<User> listUsers() {
-        return userRepository.findAll();
+    public List<User> listUsers(String username, String deptCode, Integer statusCode) {
+        return userRepository.findByConditions(normalize(username), normalize(deptCode), statusCode);
     }
 
     /**
@@ -61,7 +62,7 @@ public class UserApplicationService {
      */
     @Transactional
     public User createUser(CreateUserCommand command) {
-        passwordPolicyValidator.validate(command.initialPassword());
+        passwordPolicyValidator.validate(DEFAULT_INITIAL_PASSWORD);
         Department department = null;
         userRepository.findByUsername(command.username())
             .ifPresent(user -> {
@@ -84,7 +85,7 @@ public class UserApplicationService {
             .sourceType(SourceType.MANUAL)
             .tokenVersion(0)
             .build());
-        String ldapDn = ldapDirectoryService.createUser(saved, command.initialPassword());
+        String ldapDn = ldapDirectoryService.createUser(saved, DEFAULT_INITIAL_PASSWORD);
         saved = userRepository.save(saved.toBuilder().ldapDn(ldapDn).build());
         syncUserDepartmentGroup(saved, department);
         userRepository.assignRoles(saved.getId(), command.roleIds());
@@ -173,7 +174,7 @@ public class UserApplicationService {
         // 目录侧先删条目，避免逻辑删除后仍可通过 LDAP 认证。
         ldapDirectoryService.deleteUser(user.getUsername());
         // 业务库只做逻辑删除，保留审计和后续恢复基础。
-        userRepository.logicalDelete(command.userId(), nextTokenVersion(user));
+        userRepository.logicalDelete(command.userId(), buildRecycledUsername(user), nextTokenVersion(user));
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
             .operationType("USER_DELETE")
@@ -350,5 +351,16 @@ public class UserApplicationService {
 
     private String buildUserDn(String username) {
         return LdapDnHelper.buildUserDn(ldapProperties, username);
+    }
+
+    private String buildRecycledUsername(User user) {
+        return user.getUsername() + "__deleted__" + user.getId();
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }

@@ -77,6 +77,27 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
+    public List<User> findByConditions(String username, String deptCode, Integer statusCode) {
+        LambdaQueryWrapper<UserDO> queryWrapper = new LambdaQueryWrapper<UserDO>()
+            .eq(UserDO::getDeleted, 0)
+            .orderByAsc(UserDO::getId);
+
+        if (username != null && !username.isBlank()) {
+            queryWrapper.like(UserDO::getUsername, username);
+        }
+        if (deptCode != null && !deptCode.isBlank()) {
+            queryWrapper.eq(UserDO::getDeptCode, deptCode);
+        }
+        if (statusCode != null) {
+            queryWrapper.eq(UserDO::getStatus, statusCode);
+        }
+
+        return userMapper.selectList(queryWrapper).stream()
+            .map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())))
+            .toList();
+    }
+
+    @Override
     public User save(User user) {
         UserDO dataObject = toDataObject(user);
         if (dataObject.getId() == null) {
@@ -117,9 +138,10 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
-    public void logicalDelete(Long id, Integer tokenVersion) {
+    public void logicalDelete(Long id, String recycledUsername, Integer tokenVersion) {
         UserDO dataObject = new UserDO();
         dataObject.setId(id);
+        dataObject.setUsername(recycledUsername);
         dataObject.setDeleted(1);
         dataObject.setStatus(UserStatus.DISABLED.getCode());
         dataObject.setTokenVersion(tokenVersion);

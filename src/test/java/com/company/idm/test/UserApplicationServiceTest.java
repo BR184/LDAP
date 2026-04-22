@@ -75,11 +75,22 @@ class UserApplicationServiceTest {
 
     @Test
     void shouldListUsers() {
-        when(userRepository.findAll()).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED, 0)));
+        when(userRepository.findByConditions(null, null, null)).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED, 0)));
 
-        List<User> users = userApplicationService.listUsers();
+        List<User> users = userApplicationService.listUsers(null, null, null);
 
         assertThat(users).hasSize(1);
+    }
+
+    @Test
+    void shouldListUsersWithNormalizedConditions() {
+        when(userRepository.findByConditions("admin", "D001", UserStatus.ENABLED.getCode()))
+            .thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED, 0)));
+
+        List<User> users = userApplicationService.listUsers(" admin ", " D001 ", UserStatus.ENABLED.getCode());
+
+        assertThat(users).hasSize(1);
+        verify(userRepository).findByConditions("admin", "D001", UserStatus.ENABLED.getCode());
     }
 
     @Test
@@ -95,13 +106,13 @@ class UserApplicationServiceTest {
         when(departmentRepository.findByDeptCode("D001")).thenReturn(Optional.of(department));
         when(ldapDirectoryService.existsByUid("zhangsan")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(firstSaved, secondSaved);
-        when(ldapDirectoryService.createUser(firstSaved, "Password@123")).thenReturn("uid=zhangsan,ou=people,dc=corp,dc=local");
+        when(ldapDirectoryService.createUser(firstSaved, "123456")).thenReturn("uid=zhangsan,ou=people,dc=corp,dc=local");
         when(ldapGroupService.createGroup("D001", "研发中心")).thenReturn("cn=D001_研发中心,ou=groups,dc=corp,dc=local");
 
         User created = userApplicationService.createUser(command);
 
         assertThat(created.getLdapDn()).isEqualTo("uid=zhangsan,ou=people,dc=corp,dc=local");
-        verify(passwordPolicyValidator).validate("Password@123");
+        verify(passwordPolicyValidator).validate("123456");
         verify(ldapGroupService).createGroup("D001", "研发中心");
         verify(ldapGroupService).addUserToGroup("zhangsan", "D001");
         verify(userRepository).assignRoles(2L, List.of(1L));
@@ -206,7 +217,7 @@ class UserApplicationServiceTest {
         verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", existing);
         verify(ldapGroupService).removeUserFromAllGroups("zhangsan");
         verify(ldapDirectoryService).deleteUser("zhangsan");
-        verify(userRepository).logicalDelete(2L, 3);
+        verify(userRepository).logicalDelete(2L, "zhangsan__deleted__2", 3);
     }
 
     @Test

@@ -231,7 +231,7 @@ class PrototypeIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true));
 
-        String guestToken = login(username, "Password@123");
+        String guestToken = login(username, "123456");
 
         mockMvc.perform(get("/api/v1/users")
                 .header("Authorization", "Bearer " + guestToken))
@@ -349,6 +349,58 @@ class PrototypeIntegrationTest {
                     }
                     """.formatted(username)))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldAllowRecreateUserWithSameUsernameAfterDelete() throws Exception {
+        String adminToken = loginAsAdmin();
+        String username = "recreate" + System.nanoTime();
+
+        MvcResult firstCreateResult = mockMvc.perform(post("/api/v1/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "realName": "重复创建用户",
+                      "email": "%s@corp.local",
+                      "mobile": "13800000001",
+                      "employeeNo": "E%s",
+                      "deptCode": "D001",
+                      "initialPassword": "123456",
+                      "roleIds": [1]
+                    }
+                    """.formatted(username, username, System.nanoTime())))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        long firstUserId = objectMapper.readTree(firstCreateResult.getResponse().getContentAsString())
+            .path("data")
+            .path("id")
+            .asLong();
+
+        mockMvc.perform(delete("/api/v1/users/{id}", firstUserId)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(post("/api/v1/users")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "realName": "重复创建用户-再次创建",
+                      "email": "%s-second@corp.local",
+                      "mobile": "13800000002",
+                      "employeeNo": "E%s",
+                      "deptCode": "D001",
+                      "initialPassword": "123456",
+                      "roleIds": [1]
+                    }
+                    """.formatted(username, username, System.nanoTime())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.username").value(username));
     }
 
     @Test

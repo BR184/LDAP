@@ -3,17 +3,18 @@ import { computed } from 'vue'
 import { Fold, Expand, SwitchButton } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import { navigationItems } from '@/constants/navigation'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { useMenuStore } from '@/stores/menu'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const menuStore = useMenuStore()
 
 const activeMenu = computed(() => {
-  const match = navigationItems.find((item) => route.path.startsWith(item.path))
+  const match = menuStore.visibleNavigation.find((item) => route.path.startsWith(item.path))
   return match?.path || '/dashboard'
 })
 
@@ -40,6 +41,13 @@ async function handleLogout() {
     // 用户取消退出时不做额外处理。
   }
 }
+
+function handleMenuSelect(index: string) {
+  if (route.path === index) {
+    return
+  }
+  router.push(index)
+}
 </script>
 
 <template>
@@ -58,9 +66,9 @@ async function handleLogout() {
           class="admin-layout__menu"
           :collapse="appStore.sidebarCollapsed"
           :default-active="activeMenu"
-          router
+          @select="handleMenuSelect"
         >
-          <el-menu-item v-for="item in navigationItems" :key="item.path" :index="item.path">
+          <el-menu-item v-for="item in menuStore.visibleNavigation" :key="item.path" :index="item.path">
             <el-icon><component :is="item.icon" /></el-icon>
             <template #title>{{ item.title }}</template>
           </el-menu-item>
