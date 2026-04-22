@@ -83,6 +83,31 @@ class RbacApplicationServiceTest {
     }
 
     @Test
+    void shouldListRoleMenuIdsAndPermissionIds() {
+        Role role = Role.builder()
+            .id(2L).roleCode("ADMIN").roleName("管理员").permissionLevel(2).builtIn(1).status(1).build();
+        when(roleRepository.findById(2L)).thenReturn(Optional.of(role));
+        when(roleRepository.findMenuIdsByRoleId(2L)).thenReturn(List.of(1L, 6L, 8L));
+        when(roleRepository.findPermissionIdsByRoleId(2L)).thenReturn(List.of(2L, 3L));
+
+        assertThat(rbacApplicationService.listRoleMenuIds(2L)).containsExactly(1L, 6L, 8L);
+        assertThat(rbacApplicationService.listRolePermissionIds(2L)).containsExactly(2L, 3L);
+    }
+
+    @Test
+    void shouldRejectWhenListingRoleSelectionsForMissingRole() {
+        when(roleRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> rbacApplicationService.listRoleMenuIds(99L))
+            .isInstanceOf(BizException.class)
+            .hasMessage("角色不存在");
+
+        assertThatThrownBy(() -> rbacApplicationService.listRolePermissionIds(99L))
+            .isInstanceOf(BizException.class)
+            .hasMessage("角色不存在");
+    }
+
+    @Test
     void shouldCreateRoleSuccessfully() {
         when(roleRepository.findByCode("DEV_ENGINEER")).thenReturn(Optional.empty());
         when(roleRepository.save(any(Role.class))).thenReturn(Role.builder()

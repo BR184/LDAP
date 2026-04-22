@@ -52,6 +52,22 @@ public class RbacApplicationService {
     }
 
     /**
+     * 查询角色当前已绑定的菜单 ID 列表。
+     */
+    public List<Long> listRoleMenuIds(Long roleId) {
+        ensureRoleExists(roleId);
+        return roleRepository.findMenuIdsByRoleId(roleId);
+    }
+
+    /**
+     * 查询角色当前已授权的权限 ID 列表。
+     */
+    public List<Long> listRolePermissionIds(Long roleId) {
+        ensureRoleExists(roleId);
+        return roleRepository.findPermissionIdsByRoleId(roleId);
+    }
+
+    /**
      * 查询接口权限点列表。
      */
     public List<Permission> listPermissions() {
@@ -450,5 +466,10 @@ public class RbacApplicationService {
             return "Layout";
         }
         return component;
+    }
+
+    private void ensureRoleExists(Long roleId) {
+        roleRepository.findById(roleId)
+            .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
     }
 }

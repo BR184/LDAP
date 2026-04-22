@@ -67,6 +67,30 @@ class RoleControllerTest extends AbstractControllerMvcTest {
 
     @Test
     @WithMockUser(username = "admin")
+    void shouldGetRoleMenuIdsSuccessfully() throws Exception {
+        allow("/api/v1/roles/1/menus", "GET");
+        when(rbacApplicationService.listRoleMenuIds(1L)).thenReturn(List.of(1L, 2L, 8L));
+
+        mockMvc.perform(get("/api/v1/roles/{id}/menus", 1L))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0]").value(1))
+            .andExpect(jsonPath("$.data[2]").value(8));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldGetRolePermissionIdsSuccessfully() throws Exception {
+        allow("/api/v1/roles/1/permissions", "GET");
+        when(rbacApplicationService.listRolePermissionIds(1L)).thenReturn(List.of(3L, 4L));
+
+        mockMvc.perform(get("/api/v1/roles/{id}/permissions", 1L))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0]").value(3))
+            .andExpect(jsonPath("$.data[1]").value(4));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
     void shouldCreateRoleSuccessfully() throws Exception {
         allow("/api/v1/roles", "POST");
         when(rbacApplicationService.createRole(argThat((CreateRoleCommand command) ->

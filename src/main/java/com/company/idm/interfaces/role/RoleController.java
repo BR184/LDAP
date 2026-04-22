@@ -48,6 +48,18 @@ public class RoleController {
         return ApiResponse.success(toResponse(rbacApplicationService.getRole(id)));
     }
 
+    @GetMapping("/{id}/menus")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id + '/menus', 'GET')")
+    public ApiResponse<List<Long>> menuIds(@PathVariable Long id) {
+        return ApiResponse.success(rbacApplicationService.listRoleMenuIds(id));
+    }
+
+    @GetMapping("/{id}/permissions")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id + '/permissions', 'GET')")
+    public ApiResponse<List<Long>> permissionIds(@PathVariable Long id) {
+        return ApiResponse.success(rbacApplicationService.listRolePermissionIds(id));
+    }
+
     @PostMapping
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles', 'POST')")
     public ApiResponse<RoleResponse> create(

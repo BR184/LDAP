@@ -29,6 +29,10 @@ public interface RoleRepository {
 
     void bindMenus(Long roleId, List<Long> menuIds);
 
+    List<Long> findPermissionIdsByRoleId(Long roleId);
+
+    List<Long> findMenuIdsByRoleId(Long roleId);
+
     boolean existsUserBinding(Long roleId);
 }
 

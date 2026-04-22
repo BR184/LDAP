@@ -719,11 +719,14 @@ m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
 
 - 角色列表
 - 角色详情
+- 角色已绑定菜单查询
+- 角色已授权权限查询
 - 角色创建
 - 角色更新
 - 角色状态更新
 - 角色删除
 - 角色菜单绑定
+- 角色权限授权
 - 用户分配角色
 - 菜单详情
 - 菜单创建
@@ -1629,22 +1632,27 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 
 - `GET /api/v1/roles`
 - `GET /api/v1/roles/{id}`
+- `GET /api/v1/roles/{id}/menus`
+- `GET /api/v1/roles/{id}/permissions`
 - `POST /api/v1/roles`
 - `PUT /api/v1/roles/{id}`
 - `DELETE /api/v1/roles/{id}`
 - `PUT /api/v1/roles/{id}/status`
 - `PUT /api/v1/roles/{id}/menus`
+- `PUT /api/v1/roles/{id}/permissions`
 - `GET /api/v1/menus/{id}`
 - `POST /api/v1/menus`
 - `PUT /api/v1/menus/{id}`
 - `DELETE /api/v1/menus/{id}`
 - `GET /api/v1/menus/tree`
 - `GET /api/v1/menus/self/tree`
-
-保留的接口权限原型能力：
-
 - `GET /api/v1/permissions/tree`
-- `PUT /api/v1/roles/{id}/permissions`
+
+说明：
+
+- `GET /api/v1/roles/{id}/menus` 返回角色当前已绑定菜单的 `id` 列表，用于前端菜单绑定弹窗回显
+- `GET /api/v1/roles/{id}/permissions` 返回角色当前已授权权限的 `id` 列表，用于前端权限授权弹窗回显
+- 前端通过“完整树 + 已选 id 列表”的方式完成菜单和权限的勾选回显，不重复设计重型聚合响应结构
 
 ### 7.5 同步接口
 
@@ -2341,6 +2349,11 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
   - `POST /api/v1/departments/{deptCode}/sync-ldap`
 - 角色、菜单、权限
   - `GET /api/v1/roles`
+  - `GET /api/v1/roles/{id}`
+  - `GET /api/v1/roles/{id}/menus`
+  - `PUT /api/v1/roles/{id}/menus`
+  - `GET /api/v1/roles/{id}/permissions`
+  - `PUT /api/v1/roles/{id}/permissions`
   - `GET /api/v1/menus/tree`
   - `GET /api/v1/menus/self/tree`
   - `GET /api/v1/permissions/tree`
@@ -2562,3 +2575,82 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 - 对于不在可见菜单树中的受保护页面，前端路由守卫直接阻止进入并回退到首页
 
 这样可以避免普通用户看到用户管理、角色管理等后台页入口，也避免进入页面后连续触发多个无权接口请求而产生大量错误提示。
+
+### 16.15 角色管理页设计方案
+
+角色管理页用于维护角色基础信息，并承接“角色菜单绑定”和“角色接口权限授权”两类高频关系配置操作。
+
+页面组织方式采用“标准查询列表页 + 角色表单抽屉 + 配置关系弹窗”的组合方案，符合阿里系中后台对角色配置页“在当前页面完成查、改、配”的常见设计方法。
+
+#### 16.15.1 页面结构
+
+角色管理页由以下区域组成：
+
+1. `SearchPanel`
+   - 检索项：角色编码、状态
+   - 操作：查询、重置
+2. `TableToolbar`
+   - 左侧显示结果总数
+   - 右侧提供“新增角色”入口
+3. `DataTable`
+   - 展示角色编码、角色名称、权限等级、角色类型、状态、备注
+4. `Pagination`
+   - 当前阶段采用前端分页
+
+#### 16.15.2 交互设计
+
+角色管理页的交互设计如下：
+
+- 新增角色
+  - 使用抽屉表单
+  - 字段对应 `CreateRoleRequest`
+  - 包含角色编码、角色名称、权限等级、备注
+- 编辑角色
+  - 使用抽屉表单
+  - 字段对应 `UpdateRoleRequest`
+  - 不允许修改角色编码
+- 启用/禁用
+  - 使用二次确认弹窗
+  - 保存后刷新角色列表
+- 删除角色
+  - 使用危险操作确认
+  - 内置角色在前端不展示删除入口，最终仍以后端规则为准
+- 绑定菜单
+  - 使用单独弹窗
+  - 先加载完整菜单树，再加载角色当前已绑定菜单 `id`
+  - 保存时全量覆盖当前菜单绑定，后端继续负责祖先菜单自动补齐
+- 授权权限
+  - 使用单独弹窗
+  - 先加载完整权限树，再加载角色当前已授权权限 `id`
+  - 保存时全量覆盖当前接口权限授权
+
+#### 16.15.3 前后端契约对齐
+
+角色管理页直接对接以下接口：
+
+- `GET /api/v1/roles`
+- `POST /api/v1/roles`
+- `PUT /api/v1/roles/{id}`
+- `PUT /api/v1/roles/{id}/status`
+- `DELETE /api/v1/roles/{id}`
+- `GET /api/v1/roles/{id}/menus`
+- `PUT /api/v1/roles/{id}/menus`
+- `GET /api/v1/roles/{id}/permissions`
+- `PUT /api/v1/roles/{id}/permissions`
+
+同时依赖以下辅助接口：
+
+- `GET /api/v1/menus/tree`
+  - 用于菜单绑定弹窗的完整菜单树
+- `GET /api/v1/permissions/tree`
+  - 用于权限授权弹窗的完整权限树
+
+#### 16.15.4 当前阶段实现策略
+
+考虑到当前后端角色列表接口尚未提供标准分页能力，现阶段采用如下策略：
+
+- 后端负责返回全量角色列表
+- 前端负责本地查询和本地分页
+- 前端通过“完整树 + 已选 id 列表”的组合方式完成菜单和权限回显
+
+这样的做法既能满足首期快速交付，也能避免将角色页实现成重量级详情工作台。

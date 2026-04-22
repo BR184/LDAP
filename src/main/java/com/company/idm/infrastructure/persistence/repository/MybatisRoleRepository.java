@@ -130,6 +130,26 @@ public class MybatisRoleRepository implements RoleRepository {
     }
 
     @Override
+    public List<Long> findPermissionIdsByRoleId(Long roleId) {
+        return rolePermissionMapper.selectList(new LambdaQueryWrapper<RolePermissionDO>()
+                .eq(RolePermissionDO::getRoleId, roleId))
+            .stream()
+            .map(RolePermissionDO::getPermissionId)
+            .sorted()
+            .toList();
+    }
+
+    @Override
+    public List<Long> findMenuIdsByRoleId(Long roleId) {
+        return roleMenuMapper.selectList(new LambdaQueryWrapper<RoleMenuDO>()
+                .eq(RoleMenuDO::getRoleId, roleId))
+            .stream()
+            .map(RoleMenuDO::getMenuId)
+            .sorted()
+            .toList();
+    }
+
+    @Override
     public boolean existsUserBinding(Long roleId) {
         return userRoleMapper.selectCount(new LambdaQueryWrapper<UserRoleDO>().eq(UserRoleDO::getRoleId, roleId)) > 0;
     }
