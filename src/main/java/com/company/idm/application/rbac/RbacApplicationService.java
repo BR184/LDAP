@@ -274,7 +274,7 @@ public class RbacApplicationService {
             .minPermissionLevel(command.minPermissionLevel())
             .remark(command.remark())
             .build());
-        bindMenuToAdmin(menu.getId());
+        bindMenuToBuiltInManagers(menu);
         auditLogRepository.save(AuditLog.builder()
             .operator(operator)
             .operationType("MENU_CREATE")
@@ -375,6 +375,20 @@ public class RbacApplicationService {
         Role adminRole = roleRepository.findByCode("ADMIN")
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "管理员角色不存在"));
         menuRepository.bindRole(adminRole.getId(), menuId);
+    }
+
+    private void bindMenuToBuiltInManagers(Menu menu) {
+        List<Role> builtInRoles = roleRepository.findAll().stream()
+            .filter(role -> role.getBuiltIn() != null && role.getBuiltIn() == 1)
+            .filter(role -> role.getStatus() != null && role.getStatus() == 1)
+            .filter(role -> role.getPermissionLevel() != null && role.getPermissionLevel() <= menu.getMinPermissionLevel())
+            .toList();
+        if (builtInRoles.isEmpty()) {
+            throw new BizException("ROLE_NOT_FOUND", "内置管理角色不存在");
+        }
+        for (Role role : builtInRoles) {
+            menuRepository.bindRole(role.getId(), menu.getId());
+        }
     }
 
     private void validateMenuPayload(

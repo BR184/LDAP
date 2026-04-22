@@ -1,56 +1,234 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { notifyPlanned } from '@/utils/placeholder'
+import { computed, ref } from 'vue'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { FolderAdd, RefreshRight, Upload } from '@element-plus/icons-vue'
+import {
+  createDepartment,
+  deleteDepartment,
+  fetchDepartmentDetail,
+  fetchDepartmentTree,
+  importDepartmentsFromFeishuFile,
+  syncDepartmentToLdap,
+  syncDepartmentsFromFeishu,
+  updateDepartment,
+} from '@/api/modules/department'
+import DepartmentFormDrawer from '@/views/department/components/DepartmentFormDrawer.vue'
+import type {
+  CreateDepartmentPayload,
+  DepartmentDetail,
+  DepartmentTreeNode,
+  DepartmentTreeOption,
+  UpdateDepartmentPayload,
+} from '@/types/department'
 
-interface DepartmentNode {
-  id: string
-  label: string
-  deptCode: string
-  ancestorPath: string
-  children?: DepartmentNode[]
+const queryClient = useQueryClient()
+
+const selectedDeptCode = ref<string>('')
+const detailLoading = ref(false)
+const currentDepartment = ref<DepartmentDetail | null>(null)
+const formVisible = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+
+const departmentTreeQuery = useQuery({
+  queryKey: ['department-tree'],
+  queryFn: fetchDepartmentTree,
+})
+
+const departmentTree = computed(() => departmentTreeQuery.data.value || [])
+const departmentOptions = computed<DepartmentTreeOption[]>(() =>
+  buildDepartmentOptions(departmentTree.value),
+)
+
+const createDepartmentMutation = useMutation({
+  mutationFn: createDepartment,
+  onSuccess: async (department) => {
+    ElMessage.success(`部门 ${department.deptName} 创建成功`)
+    formVisible.value = false
+    await refreshDepartments()
+    await loadDepartmentDetail(department.deptCode)
+  },
+})
+
+const updateDepartmentMutation = useMutation({
+  mutationFn: ({ deptCode, payload }: { deptCode: string; payload: UpdateDepartmentPayload }) =>
+    updateDepartment(deptCode, payload),
+  onSuccess: async (department) => {
+    ElMessage.success(`部门 ${department.deptName} 更新成功`)
+    formVisible.value = false
+    await refreshDepartments()
+    await loadDepartmentDetail(department.deptCode)
+  },
+})
+
+const syncLdapMutation = useMutation({
+  mutationFn: syncDepartmentToLdap,
+  onSuccess: async (department) => {
+    ElMessage.success(`部门 ${department.deptName} 已同步到 LDAP`)
+    await refreshDepartments()
+    await loadDepartmentDetail(department.deptCode)
+  },
+})
+
+const syncFeishuMutation = useMutation({
+  mutationFn: syncDepartmentsFromFeishu,
+})
+
+const importFeishuMutation = useMutation({
+  mutationFn: ({ documentPath, remark }: { documentPath: string; remark?: string }) =>
+    importDepartmentsFromFeishuFile(documentPath, remark),
+})
+
+function buildDepartmentOptions(nodes: DepartmentTreeNode[]): DepartmentTreeOption[] {
+  return nodes.map((node) => ({
+    value: node.deptCode,
+    label: `${node.deptName} (${node.deptCode})`,
+    disabled: node.status !== 1,
+    children: buildDepartmentOptions(node.children || []),
+  }))
 }
 
-const departmentTree: DepartmentNode[] = [
-  {
-    id: 'D001',
-    label: '研发中心',
-    deptCode: 'D001',
-    ancestorPath: '/D001',
-    children: [
+async function refreshDepartments() {
+  await queryClient.invalidateQueries({ queryKey: ['department-tree'] })
+}
+
+async function loadDepartmentDetail(deptCode: string) {
+  selectedDeptCode.value = deptCode
+  detailLoading.value = true
+  currentDepartment.value = null
+
+  try {
+    currentDepartment.value = await fetchDepartmentDetail(deptCode)
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+function openCreate() {
+  formMode.value = 'create'
+  formVisible.value = true
+}
+
+function openEdit() {
+  if (!currentDepartment.value) {
+    return
+  }
+  formMode.value = 'edit'
+  formVisible.value = true
+}
+
+async function handleDelete() {
+  if (!currentDepartment.value) {
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确认删除部门 ${currentDepartment.value.deptName}（${currentDepartment.value.deptCode}）吗？`,
+      '删除部门',
       {
-        id: 'D002',
-        label: '平台研发',
-        deptCode: 'D002',
-        ancestorPath: '/D001/D002',
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
       },
-    ],
-  },
-]
+    )
 
-const currentDepartment = ref<DepartmentNode>(departmentTree[0])
+    await deleteDepartment(currentDepartment.value.deptCode)
+    ElMessage.success('部门已删除')
+    selectedDeptCode.value = ''
+    currentDepartment.value = null
+    await refreshDepartments()
+  } catch {
+    // 用户取消时不做额外处理。
+  }
+}
 
-function handleNodeClick(node: DepartmentNode) {
-  currentDepartment.value = node
+async function handleSyncLdap() {
+  if (!currentDepartment.value) {
+    return
+  }
+
+  await syncLdapMutation.mutateAsync(currentDepartment.value.deptCode)
+}
+
+async function handleSyncFeishu() {
+  const result = await syncFeishuMutation.mutateAsync('manual-sync')
+  ElMessage.success(`部门飞书同步任务已触发，批次号：${result.batch.batchNo}`)
+}
+
+async function handleImportFeishuFile() {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入受控目录中的 JSON 文件路径，例如 departments/demo.json', '飞书文件导入', {
+      confirmButtonText: '导入',
+      cancelButtonText: '取消',
+      inputPlaceholder: 'departments/demo.json',
+    })
+
+    if (!value || !value.trim()) {
+      return
+    }
+
+    const result = await importFeishuMutation.mutateAsync({
+      documentPath: value.trim(),
+      remark: 'manual-file-import',
+    })
+
+    ElMessage.success(`部门文件导入任务已触发，批次号：${result.batch.batchNo}`)
+    await refreshDepartments()
+  } catch {
+    // 用户取消时不做额外处理。
+  }
+}
+
+async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentPayload) {
+  if (formMode.value === 'create') {
+    await createDepartmentMutation.mutateAsync(payload as CreateDepartmentPayload)
+    return
+  }
+
+  if (!currentDepartment.value) {
+    return
+  }
+
+  await updateDepartmentMutation.mutateAsync({
+    deptCode: currentDepartment.value.deptCode,
+    payload: payload as UpdateDepartmentPayload,
+  })
 }
 </script>
 
 <template>
-  <PageContainer title="部门管理" description="采用树加详情页模板，适合承载部门树、部门详情和 LDAP 分组同步。">
+  <PageContainer title="部门管理" description="统一维护部门树、组织层级与 LDAP 分组映射，支持 CRUD、飞书同步和手工 LDAP 同步。">
+    <template #extra>
+      <el-space>
+        <el-button :icon="RefreshRight" :loading="syncFeishuMutation.isPending.value" @click="handleSyncFeishu">
+          飞书同步
+        </el-button>
+        <el-button :icon="Upload" :loading="importFeishuMutation.isPending.value" @click="handleImportFeishuFile">
+          文件导入
+        </el-button>
+        <el-button type="primary" :icon="FolderAdd" @click="openCreate">新增部门</el-button>
+      </el-space>
+    </template>
+
     <div class="department-layout">
       <el-card class="idm-card department-layout__tree" shadow="never">
         <template #header>
           <div class="view-toolbar">
             <strong>部门树</strong>
-            <el-button type="primary" @click="notifyPlanned('新增部门')">新增部门</el-button>
+            <span class="idm-muted">选择左侧节点查看详情</span>
           </div>
         </template>
 
         <el-tree
+          v-loading="departmentTreeQuery.isLoading.value || departmentTreeQuery.isFetching.value"
           :data="departmentTree"
-          node-key="id"
+          node-key="deptCode"
           default-expand-all
           highlight-current
-          @node-click="handleNodeClick"
+          :current-node-key="selectedDeptCode"
+          :props="{ label: 'deptName', children: 'children' }"
+          @node-click="(node: DepartmentTreeNode) => loadDepartmentDetail(node.deptCode)"
         />
       </el-card>
 
@@ -58,22 +236,52 @@ function handleNodeClick(node: DepartmentNode) {
         <template #header>
           <div class="view-toolbar">
             <strong>部门详情</strong>
-            <div class="view-toolbar__actions">
-              <el-button @click="notifyPlanned('编辑部门')">编辑</el-button>
-              <el-button type="success" @click="notifyPlanned('同步部门 LDAP')">同步 LDAP</el-button>
+            <div class="view-toolbar__actions" v-if="currentDepartment">
+              <el-button @click="openEdit">编辑</el-button>
+              <el-button type="success" :loading="syncLdapMutation.isPending.value" @click="handleSyncLdap">
+                同步 LDAP
+              </el-button>
+              <el-button type="danger" plain @click="handleDelete">删除</el-button>
             </div>
           </div>
         </template>
 
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="部门名称">{{ currentDepartment.label }}</el-descriptions-item>
-          <el-descriptions-item label="部门编码">{{ currentDepartment.deptCode }}</el-descriptions-item>
-          <el-descriptions-item label="祖先路径" :span="2">
-            {{ currentDepartment.ancestorPath }}
-          </el-descriptions-item>
-        </el-descriptions>
+        <el-skeleton :loading="detailLoading" animated :rows="8">
+          <template #template>
+            <el-skeleton-item variant="p" style="width: 100%; height: 24px" />
+          </template>
+
+          <template v-if="currentDepartment">
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="部门名称">{{ currentDepartment.deptName }}</el-descriptions-item>
+              <el-descriptions-item label="部门编码">{{ currentDepartment.deptCode }}</el-descriptions-item>
+              <el-descriptions-item label="上级部门">{{ currentDepartment.parentDeptCode || '--' }}</el-descriptions-item>
+              <el-descriptions-item label="层级">{{ currentDepartment.deptLevel }}</el-descriptions-item>
+              <el-descriptions-item label="来源">{{ currentDepartment.sourceType }}</el-descriptions-item>
+              <el-descriptions-item label="状态">
+                <el-tag :type="currentDepartment.status === 1 ? 'success' : 'danger'">
+                  {{ currentDepartment.status === 1 ? '启用' : '禁用' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="祖先路径" :span="2">{{ currentDepartment.ancestorPath }}</el-descriptions-item>
+              <el-descriptions-item label="外部部门 ID" :span="2">{{ currentDepartment.externalId || '--' }}</el-descriptions-item>
+              <el-descriptions-item label="LDAP DN" :span="2">{{ currentDepartment.ldapDn || '--' }}</el-descriptions-item>
+            </el-descriptions>
+          </template>
+
+          <el-empty v-else description="请先从左侧选择部门节点" />
+        </el-skeleton>
       </el-card>
     </div>
+
+    <DepartmentFormDrawer
+      v-model="formVisible"
+      :mode="formMode"
+      :loading="createDepartmentMutation.isPending.value || updateDepartmentMutation.isPending.value"
+      :department="formMode === 'edit' ? currentDepartment : null"
+      :department-options="departmentOptions"
+      @submit="handleSubmit"
+    />
   </PageContainer>
 </template>
 
@@ -85,7 +293,7 @@ function handleNodeClick(node: DepartmentNode) {
 }
 
 .department-layout__tree {
-  min-height: 520px;
+  min-height: 560px;
 }
 
 .view-toolbar {

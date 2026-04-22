@@ -10,8 +10,11 @@ import com.company.idm.application.user.UserApplicationService;
 import com.company.idm.application.rbac.AssignUserRolesCommand;
 import com.company.idm.application.rbac.RbacApplicationService;
 import com.company.idm.application.sync.SyncApplicationService;
+import com.company.idm.application.sync.SyncBatchDetail;
 import com.company.idm.common.api.ApiResponse;
+import com.company.idm.common.enums.SyncRunStatus;
 import com.company.idm.common.enums.SyncTriggerMode;
+import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.user.User;
 import com.company.idm.interfaces.sync.FeishuFileImportRequest;
 import com.company.idm.interfaces.sync.FeishuSyncRequest;
@@ -176,15 +179,15 @@ public class UserController {
         @Valid @RequestBody FeishuFileImportRequest request,
         @AuthenticationPrincipal(expression = "username") String username
     ) {
-        return ApiResponse.success(syncResponseAssembler.toResponse(
-            syncApplicationService.executeFeishuUserFileImport(
-                request.documentPath(),
-                Boolean.TRUE.equals(request.forceFullSync()),
-                request.remark(),
-                username,
-                SyncTriggerMode.MANUAL
-            )
-        ));
+        SyncBatchDetail detail = syncApplicationService.executeFeishuUserFileImport(
+            request.documentPath(),
+            Boolean.TRUE.equals(request.forceFullSync()),
+            request.remark(),
+            username,
+            SyncTriggerMode.MANUAL
+        );
+        throwIfFileImportFailed(detail);
+        return ApiResponse.success(syncResponseAssembler.toResponse(detail));
     }
 
     @PostMapping("/{id}/sync-ldap")
@@ -194,6 +197,18 @@ public class UserController {
         @AuthenticationPrincipal(expression = "username") String username
     ) {
         return ApiResponse.success(toResponse(userApplicationService.syncUserToLdap(id, username)));
+    }
+
+    private void throwIfFileImportFailed(SyncBatchDetail detail) {
+        if (detail == null || detail.batch() == null || detail.batch().getStatus() != SyncRunStatus.FAIL) {
+            return;
+        }
+        String errorMessage = detail.jobs().stream()
+            .map(job -> job.getErrorMessage())
+            .filter(message -> message != null && !message.isBlank())
+            .findFirst()
+            .orElse("用户文件导入失败");
+        throw new BizException("USER_FILE_IMPORT_FAILED", errorMessage);
     }
 
     private UserResponse toResponse(User user) {

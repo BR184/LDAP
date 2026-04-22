@@ -40,6 +40,7 @@ request.interceptors.response.use(
     const message = error.response?.data?.message || error.message || '请求失败'
 
     if (status === 401) {
+      ElMessage.error(message)
       authStore.clearSession()
 
       if (window.location.pathname !== '/login') {

@@ -16,20 +16,12 @@
         "orderNo":  1
     },
     {
-        "externalId":  "xlsx_dept_e68fe93fae43d32a5a57f088beb12b58929c40e9",
-        "departmentCode":  "FDE68FE93FAE43",
-        "departmentName":  "基础开发部门",
-        "parentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
-        "status":  1,
-        "orderNo":  1
-    },
-    {
         "externalId":  "xlsx_dept_913b50bbc404e9285c6e2b785da3d505b06c55db",
         "departmentCode":  "FD913B50BBC404",
         "departmentName":  "平台开发部门",
         "parentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
         "status":  1,
-        "orderNo":  2
+        "orderNo":  1
     },
     {
         "externalId":  "xlsx_dept_86d99a5c47342a142acb667ef4af491024918e56",
@@ -38,5 +30,21 @@
         "parentExternalId":  "xlsx_dept_913b50bbc404e9285c6e2b785da3d505b06c55db",
         "status":  1,
         "orderNo":  1
+    },
+    {
+        "externalId":  "xlsx_dept_e68fe93fae43d32a5a57f088beb12b58929c40e9",
+        "departmentCode":  "FDE68FE93FAE43",
+        "departmentName":  "基础开发部门",
+        "parentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
+        "status":  1,
+        "orderNo":  2
+    },
+    {
+        "externalId":  "xlsx_dept_97ed06e02db4073a72f24465837d403d3eaf2fea",
+        "departmentCode":  "FD97ED06E02DB4",
+        "departmentName":  "产品开发部门",
+        "parentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
+        "status":  1,
+        "orderNo":  3
     }
 ]

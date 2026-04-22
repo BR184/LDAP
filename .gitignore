@@ -3,4 +3,4 @@ target/
 .vscode/
 .tools/
 *.log
-
+scripts/pinyin-helper/node_modules/

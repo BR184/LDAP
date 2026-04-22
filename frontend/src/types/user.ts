@@ -43,3 +43,9 @@ export interface AssignUserRolesPayload {
 export interface ResetPasswordResult {
   resetPassword: string
 }
+
+export interface ChangePasswordPayload {
+  oldPassword: string
+  newPassword: string
+  confirmPassword: string
+}

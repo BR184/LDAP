@@ -2,8 +2,20 @@
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
-import { assignUserRoles, createUser, deleteUser, fetchUserDetail, fetchUsers, resetUserPassword, syncUserToLdap, syncUsersFromFeishu, updateUser, updateUserStatus } from '@/api/modules/user'
+import { MoreFilled, Plus, RefreshRight, Search, Upload } from '@element-plus/icons-vue'
+import {
+  assignUserRoles,
+  createUser,
+  deleteUser,
+  fetchUserDetail,
+  fetchUsers,
+  importUsersFromFeishuFile,
+  resetUserPassword,
+  syncUserToLdap,
+  syncUsersFromFeishu,
+  updateUser,
+  updateUserStatus,
+} from '@/api/modules/user'
 import { fetchRoles } from '@/api/modules/role'
 import { fetchDepartmentTree } from '@/api/modules/department'
 import UserDetailDrawer from '@/views/user/components/UserDetailDrawer.vue'
@@ -147,6 +159,11 @@ const syncLdapMutation = useMutation({
 
 const syncFeishuMutation = useMutation({
   mutationFn: syncUsersFromFeishu,
+})
+
+const importFeishuMutation = useMutation({
+  mutationFn: ({ documentPath, remark }: { documentPath: string; remark?: string }) =>
+    importUsersFromFeishuFile(documentPath, remark),
 })
 
 function buildDepartmentOptions(options: { deptCode: string; deptName: string; status: number; children: unknown[] }[]): DepartmentTreeOption[] {
@@ -314,6 +331,34 @@ async function handleSyncFeishu() {
   ElMessage.success(`飞书同步任务已触发，批次号：${result.batch.batchNo}`)
 }
 
+async function handleImportFeishuFile() {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '请输入受控目录中的 JSON 文件路径，例如 users/demo.json',
+      '用户文件导入',
+      {
+        confirmButtonText: '导入',
+        cancelButtonText: '取消',
+        inputPlaceholder: 'users/demo.json',
+      },
+    )
+
+    if (!value || !value.trim()) {
+      return
+    }
+
+    const result = await importFeishuMutation.mutateAsync({
+      documentPath: value.trim(),
+      remark: 'manual-file-import',
+    })
+
+    ElMessage.success(`用户文件导入任务已触发，批次号：${result.batch.batchNo}`)
+    await refreshUsers()
+  } catch {
+    // 用户取消时不做额外处理。
+  }
+}
+
 function statusText(status: number) {
   return status === 1 ? '启用' : '禁用'
 }
@@ -359,6 +404,9 @@ function statusTagType(status: number) {
 
           <div class="view-toolbar__actions">
             <el-button type="primary" :icon="Plus" @click="openCreate">新增用户</el-button>
+            <el-button :icon="Upload" :loading="importFeishuMutation.isPending.value" @click="handleImportFeishuFile">
+              文件导入
+            </el-button>
             <el-button :icon="RefreshRight" :loading="syncFeishuMutation.isPending.value" @click="handleSyncFeishu">
               飞书同步
             </el-button>

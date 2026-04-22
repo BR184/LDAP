@@ -65,7 +65,7 @@ class PrototypeIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.username").value("admin"))
-            .andExpect(jsonPath("$.data.roleCodes[0]").value("ADMIN"));
+            .andExpect(jsonPath("$.data.roleCodes[0]").value("SUPER_ADMIN"));
     }
 
     @Test
@@ -237,6 +237,39 @@ class PrototypeIntegrationTest {
                 .header("Authorization", "Bearer " + guestToken))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("AUTH_FORBIDDEN"));
+    }
+
+    @Test
+    void shouldRejectDeleteSuperAdminWhenOperatorIsAdmin() throws Exception {
+        String superAdminToken = loginAsAdmin();
+        long adminRoleId = findRoleIdByCode(superAdminToken, "ADMIN");
+        assertThat(adminRoleId).isPositive();
+        String username = "adminuser" + System.nanoTime();
+
+        mockMvc.perform(post("/api/v1/users")
+                .header("Authorization", "Bearer " + superAdminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "realName": "管理员用户",
+                      "email": "%s@corp.local",
+                      "mobile": "13600000000",
+                      "employeeNo": "E%s",
+                      "deptCode": "D001",
+                      "initialPassword": "123456",
+                      "roleIds": [%d]
+                    }
+                    """.formatted(username, username, System.nanoTime(), adminRoleId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+
+        String adminToken = login(username, "123456");
+
+        mockMvc.perform(delete("/api/v1/users/{id}", 1L)
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.code").value("AUTH_FORBIDDEN"));
     }
 
@@ -422,7 +455,7 @@ class PrototypeIntegrationTest {
                       "component": "system/data-sync/index",
                       "icon": "sync",
                       "sortNo": 9,
-                      "minPermissionLevel": 1,
+                      "minPermissionLevel": 2,
                       "remark": "菜单管理集成测试"
                     }
                     """.formatted(System.nanoTime(), systemManagementId, System.nanoTime())))
@@ -453,7 +486,7 @@ class PrototypeIntegrationTest {
                       "component": "system/data-sync/center",
                       "icon": "sync",
                       "sortNo": 10,
-                      "minPermissionLevel": 1,
+                      "minPermissionLevel": 2,
                       "remark": "菜单管理更新测试"
                     }
                     """.formatted(systemManagementId)))
@@ -830,6 +863,31 @@ class PrototypeIntegrationTest {
     }
 
     @Test
+    void shouldPromptToImportDepartmentFileBeforeUserFileImport() throws Exception {
+        String adminToken = loginAsAdmin();
+        String suffix = String.valueOf(System.nanoTime());
+        String username = "missingdeptuser" + suffix;
+
+        writeImportDocument("users/user-missing-dept-" + suffix + ".json", List.of(
+            new FeishuUserPayload("user_missing_" + suffix, username, "缺失部门用户", username + "@corp.local", "13812345678", "E" + suffix, "ou_missing_" + suffix, 1, 1)
+        ));
+
+        mockMvc.perform(post("/api/v1/users/import/feishu-file")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "documentPath": "users/user-missing-dept-%s.json",
+                      "remark": "manual-file-import"
+                    }
+                    """.formatted(suffix)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("FEISHU_USER_IMPORT_DEPARTMENT_FILE_REQUIRED"))
+            .andExpect(jsonPath("$.message").value("请先更新部门文件后再导入用户文件"));
+    }
+
+    @Test
     void shouldExposeThirdPartyLdapFrameworkTemplateAndPrecheckEndpoints() throws Exception {
         String adminToken = loginAsAdmin();
         String username = "ldapcheck" + System.nanoTime();
@@ -929,6 +987,20 @@ class PrototypeIntegrationTest {
         JsonNode target = findMenuNodeByCode(root, menuCode);
         assertThat(target).isNotNull();
         return target.path("id").asLong();
+    }
+
+    private long findRoleIdByCode(String token, String roleCode) throws Exception {
+        MvcResult roleResult = mockMvc.perform(get("/api/v1/roles")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode roles = objectMapper.readTree(roleResult.getResponse().getContentAsString()).path("data");
+        for (JsonNode role : roles) {
+            if (roleCode.equals(role.path("roleCode").asText())) {
+                return role.path("id").asLong();
+            }
+        }
+        return 0L;
     }
 
     private JsonNode findMenuNodeByCode(JsonNode nodes, String menuCode) {

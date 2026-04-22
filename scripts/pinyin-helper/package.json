@@ -1,0 +1,8 @@
+{
+  "name": "pinyin-helper",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pinyin-pro": "^3.28.1"
+  }
+}

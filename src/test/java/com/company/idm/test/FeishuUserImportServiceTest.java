@@ -223,6 +223,21 @@ class FeishuUserImportServiceTest {
         verify(departmentRemoteService, never()).fetchDepartments();
     }
 
+    @Test
+    void shouldRejectUserFileImportWhenDepartmentFileNotImported() {
+        FeishuUserImportService service = buildService();
+        when(departmentRepository.findAll()).thenReturn(List.of());
+        when(importDocumentResolver.resolveUsers("users/demo.json")).thenReturn(List.of(
+            new FeishuUserPayload("u001", "zhangsan", "张三", "zhangsan@corp.local", null, "E10001", "ou_missing", 1, 1)
+        ));
+
+        assertThatThrownBy(() -> service.previewFromDocument("users/demo.json"))
+            .isInstanceOf(BizException.class)
+            .hasMessage("请先更新部门文件后再导入用户文件");
+
+        verify(departmentRemoteService, never()).fetchDepartments();
+    }
+
     private FeishuUserImportService buildService() {
         AppLdapProperties ldapProperties = new AppLdapProperties();
         ldapProperties.setBaseDn("dc=corp,dc=local");

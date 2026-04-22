@@ -39,7 +39,7 @@ class AuthControllerTest extends AbstractControllerMvcTest {
         ))).thenReturn(new LoginResult(
             1L,
             "admin",
-            Set.of("ADMIN"),
+            Set.of("SUPER_ADMIN"),
             "token-value",
             Instant.parse("2026-04-21T12:00:00Z")
         ));
@@ -106,7 +106,7 @@ class AuthControllerTest extends AbstractControllerMvcTest {
             .deptCode("D001")
             .status(UserStatus.ENABLED)
             .sourceType(SourceType.MANUAL)
-            .roleCodes(Set.of("ADMIN"))
+            .roleCodes(Set.of("SUPER_ADMIN"))
             .build());
 
         mockMvc.perform(get("/api/v1/auth/me"))
@@ -114,6 +114,6 @@ class AuthControllerTest extends AbstractControllerMvcTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.username").value("admin"))
             .andExpect(jsonPath("$.data.deptCode").value("D001"))
-            .andExpect(jsonPath("$.data.roleCodes[0]").value("ADMIN"));
+            .andExpect(jsonPath("$.data.roleCodes[0]").value("SUPER_ADMIN"));
     }
 }

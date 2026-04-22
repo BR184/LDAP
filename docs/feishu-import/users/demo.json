@@ -1,57 +1,68 @@
 [
     {
-        "externalId":  "5f4ad879",
-        "username":  "+8615850553970",
-        "realName":  "用户725015",
+        "externalId":  "xlsx_user_73222b12ad13b5b666e751170088554bcdb1fba0",
+        "username":  "yezeqi",
+        "realName":  "叶泽奇",
         "email":  null,
-        "mobile":  "+8615850553970",
-        "employeeNo":  null,
-        "mainDepartmentExternalId":  "xlsx_dept_653a53fbdbae5a6bd1bba4ece153259058071514",
+        "mobile":  "+8613964228855",
+        "employeeNo":  "1",
+        "mainDepartmentExternalId":  "xlsx_dept_e68fe93fae43d32a5a57f088beb12b58929c40e9",
         "status":  1,
         "orderNo":  1
     },
     {
-        "externalId":  "276b33cd",
-        "username":  "+8613964112234",
-        "realName":  "于善鹏",
-        "email":  null,
-        "mobile":  "+8613964112234",
-        "employeeNo":  null,
-        "mainDepartmentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
-        "status":  0,
-        "orderNo":  2
-    },
-    {
-        "externalId":  "87f1g3ec",
-        "username":  "+8613964228855",
-        "realName":  "叶泽奇",
-        "email":  null,
-        "mobile":  "+8613964228855",
-        "employeeNo":  null,
-        "mainDepartmentExternalId":  "xlsx_dept_e68fe93fae43d32a5a57f088beb12b58929c40e9",
-        "status":  0,
-        "orderNo":  3
-    },
-    {
-        "externalId":  "78fe8e9b",
-        "username":  "+8613964113374",
+        "externalId":  "xlsx_user_0c46e646ce5de4380b4abe7d7c5700968b239eb1",
+        "username":  "daijiawei",
         "realName":  "戴佳伟",
         "email":  null,
         "mobile":  "+8613964113374",
-        "employeeNo":  null,
+        "employeeNo":  "2",
         "mainDepartmentExternalId":  "xlsx_dept_86d99a5c47342a142acb667ef4af491024918e56",
-        "status":  0,
-        "orderNo":  4
+        "status":  1,
+        "orderNo":  2
     },
     {
-        "externalId":  "cab11466",
-        "username":  "+8613964885524",
+        "externalId":  "xlsx_user_c197443642ddc724a2004130a299983ce6fe47b0",
+        "username":  "yushanpeng",
+        "realName":  "于善鹏",
+        "email":  null,
+        "mobile":  "+8613964112234",
+        "employeeNo":  "3",
+        "mainDepartmentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
+        "status":  1,
+        "orderNo":  3
+    },
+    {
+        "externalId":  "xlsx_user_68612bf0557cee123c4af507ca6709e80c126555",
+        "username":  "chenjiebin",
         "realName":  "陈杰斌",
         "email":  null,
         "mobile":  "+8613964885524",
-        "employeeNo":  null,
+        "employeeNo":  "4",
         "mainDepartmentExternalId":  "xlsx_dept_86d99a5c47342a142acb667ef4af491024918e56",
-        "status":  0,
+        "status":  1,
+        "orderNo":  4
+    },
+    {
+        "externalId":  "xlsx_user_3e312a27bef60f42d63d8c72189c09eb3c896fd5",
+        "username":  "daijiawei2",
+        "realName":  "戴佳伟",
+        "email":  null,
+        "mobile":  "+8613964882265",
+        "employeeNo":  "5",
+        "mainDepartmentExternalId":  "xlsx_dept_8e088c6a4d92115ae18135613201f0deaf301724",
+        "status":  1,
         "orderNo":  5
+    },
+    {
+        "externalId":  "xlsx_user_779cdddd6fc1321ffc6ce00b83983c7a78f4079c",
+        "username":  "yonghu725015",
+        "realName":  "用户725015",
+        "email":  null,
+        "mobile":  "+8615850553970",
+        "employeeNo":  "0",
+        "mainDepartmentExternalId":  "xlsx_dept_653a53fbdbae5a6bd1bba4ece153259058071514",
+        "status":  1,
+        "orderNo":  6
     }
 ]

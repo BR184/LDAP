@@ -36,6 +36,8 @@ public class FeishuUserImportService {
 
     private static final String DEFAULT_IMPORTED_PASSWORD = "123456";
     private static final String NORMAL_USER_ROLE_CODE = "NORMAL_USER";
+    private static final String USER_FILE_IMPORT_REQUIRES_DEPARTMENT_FILE_CODE = "FEISHU_USER_IMPORT_DEPARTMENT_FILE_REQUIRED";
+    private static final String USER_FILE_IMPORT_REQUIRES_DEPARTMENT_FILE_MESSAGE = "请先更新部门文件后再导入用户文件";
 
     private final FeishuUserRemoteService userRemoteService;
     private final FeishuDepartmentRemoteService departmentRemoteService;
@@ -184,7 +186,7 @@ public class FeishuUserImportService {
         int noChangeCount = 0;
 
         for (FeishuUserPayload payloadItem : users) {
-            Department department = resolveDepartment(payloadItem, departmentByExternalId);
+            Department department = resolveDepartment(payloadItem, departmentByExternalId, includeRemoteDepartmentFallback);
             User existing = resolveExistingUser(payloadItem);
             User target = buildTargetUser(payloadItem, department, existing);
             ChangeType changeType = resolveChangeType(existing, target);
@@ -229,9 +231,19 @@ public class FeishuUserImportService {
         return departmentByExternalId;
     }
 
-    private Department resolveDepartment(FeishuUserPayload payload, Map<String, Department> departmentByExternalId) {
+    private Department resolveDepartment(
+        FeishuUserPayload payload,
+        Map<String, Department> departmentByExternalId,
+        boolean includeRemoteDepartmentFallback
+    ) {
         Department department = departmentByExternalId.get(payload.mainDepartmentExternalId());
         if (department == null) {
+            if (!includeRemoteDepartmentFallback) {
+                throw new BizException(
+                    USER_FILE_IMPORT_REQUIRES_DEPARTMENT_FILE_CODE,
+                    USER_FILE_IMPORT_REQUIRES_DEPARTMENT_FILE_MESSAGE
+                );
+            }
             throw new BizException("FEISHU_USER_DEPT_NOT_FOUND", "飞书用户主部门不存在");
         }
         return department;

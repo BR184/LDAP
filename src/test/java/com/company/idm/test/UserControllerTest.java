@@ -12,8 +12,15 @@ import com.company.idm.application.user.UpdateUserCommand;
 import com.company.idm.application.user.UpdateUserStatusCommand;
 import com.company.idm.application.user.UserApplicationService;
 import com.company.idm.common.enums.SourceType;
+import com.company.idm.common.enums.SyncBatchType;
+import com.company.idm.common.enums.SyncRunStatus;
+import com.company.idm.common.enums.SyncSourceType;
 import com.company.idm.common.enums.SyncTriggerMode;
+import com.company.idm.common.enums.SyncTargetType;
 import com.company.idm.common.enums.UserStatus;
+import com.company.idm.domain.sync.SyncBatch;
+import com.company.idm.domain.sync.SyncJob;
+import com.company.idm.common.enums.SyncJobType;
 import com.company.idm.domain.user.User;
 import com.company.idm.interfaces.sync.SyncBatchDetailResponse;
 import com.company.idm.interfaces.sync.SyncBatchResponse;
@@ -340,6 +347,52 @@ class UserControllerTest extends AbstractControllerMvcTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.batch.batchNo").value("BATCH_USER_FILE"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldReturnBadRequestWhenUserFileImportBatchFails() throws Exception {
+        allow("/api/v1/users/import/feishu-file", "POST");
+        SyncBatchDetail detail = new SyncBatchDetail(
+            SyncBatch.builder()
+                .id(1L)
+                .batchNo("BATCH_USER_FILE_FAIL")
+                .batchType(SyncBatchType.FEISHU_IMPORT)
+                .sourceType(SyncSourceType.FEISHU)
+                .triggerMode(SyncTriggerMode.MANUAL)
+                .status(SyncRunStatus.FAIL)
+                .fileName("users/demo.json")
+                .operator("admin")
+                .build(),
+            List.of(
+                SyncJob.builder()
+                    .id(1L)
+                    .batchNo("BATCH_USER_FILE_FAIL")
+                    .jobType(SyncJobType.FEISHU_USER_IMPORT)
+                    .targetType(SyncTargetType.USER)
+                    .status(SyncRunStatus.FAIL)
+                    .errorMessage("请先更新部门文件后再导入用户文件")
+                    .operator("admin")
+                    .retryCount(0)
+                    .build()
+            ),
+            List.of()
+        );
+        when(syncApplicationService.executeFeishuUserFileImport("users/demo.json", false, "manual-file-import", "admin", SyncTriggerMode.MANUAL))
+            .thenReturn(detail);
+
+        mockMvc.perform(post("/api/v1/users/import/feishu-file")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "documentPath": "users/demo.json",
+                      "remark": "manual-file-import",
+                      "forceFullSync": false
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("USER_FILE_IMPORT_FAILED"))
+            .andExpect(jsonPath("$.message").value("请先更新部门文件后再导入用户文件"));
     }
 
     @Test

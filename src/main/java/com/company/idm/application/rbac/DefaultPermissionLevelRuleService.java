@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 public class DefaultPermissionLevelRuleService implements PermissionLevelRuleService {
 
     private static final String ADMIN_ROLE_CODE = "ADMIN";
+    private static final String SUPER_ADMIN_ROLE_CODE = "SUPER_ADMIN";
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -36,12 +37,13 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
 
     @Override
     public boolean isAdmin(String username) {
-        return userRepository.findRoleCodesByUsername(username).contains(ADMIN_ROLE_CODE);
+        Set<String> roleCodes = userRepository.findRoleCodesByUsername(username);
+        return roleCodes.contains(ADMIN_ROLE_CODE) || roleCodes.contains(SUPER_ADMIN_ROLE_CODE);
     }
 
     @Override
     public void checkCanModifyBasicUser(String operatorUsername, User targetUser) {
-        if (operatorUsername.equals(targetUser.getUsername()) || isAdmin(operatorUsername)) {
+        if (operatorUsername.equals(targetUser.getUsername()) || isSuperAdmin(operatorUsername)) {
             return;
         }
         int operatorLevel = getEffectivePermissionLevel(operatorUsername);
@@ -53,14 +55,22 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
 
     @Override
     public void checkCanModifySensitiveUser(String operatorUsername, User targetUser) {
+        if (isSuperAdmin(operatorUsername)) {
+            return;
+        }
         if (!isAdmin(operatorUsername)) {
             throw new BizException("AUTH_FORBIDDEN", "仅管理员允许执行敏感操作");
+        }
+        int operatorLevel = getEffectivePermissionLevel(operatorUsername);
+        int targetLevel = getEffectivePermissionLevel(targetUser.getUsername());
+        if (!(operatorLevel < targetLevel)) {
+            throw new BizException("AUTH_FORBIDDEN", "当前管理员无权操作目标用户");
         }
     }
 
     @Override
     public void checkCanCreateRole(String operatorUsername, Integer newPermissionLevel) {
-        if (isAdmin(operatorUsername)) {
+        if (isSuperAdmin(operatorUsername)) {
             return;
         }
         int operatorLevel = getEffectivePermissionLevel(operatorUsername);
@@ -71,7 +81,7 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
 
     @Override
     public void checkCanUpdateRole(String operatorUsername, Role targetRole, Integer newPermissionLevel) {
-        if (isAdmin(operatorUsername)) {
+        if (isSuperAdmin(operatorUsername)) {
             return;
         }
         int operatorLevel = getEffectivePermissionLevel(operatorUsername);
@@ -85,7 +95,7 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
         if (targetRole.getBuiltIn() != null && targetRole.getBuiltIn() == 1) {
             throw new BizException("ROLE_DELETE_FORBIDDEN", "内置角色不允许删除");
         }
-        if (isAdmin(operatorUsername)) {
+        if (isSuperAdmin(operatorUsername)) {
             return;
         }
         int operatorLevel = getEffectivePermissionLevel(operatorUsername);
@@ -96,7 +106,7 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
 
     @Override
     public void checkCanAssignRoles(String operatorUsername, User targetUser, List<Role> assignedRoles) {
-        if (isAdmin(operatorUsername)) {
+        if (isSuperAdmin(operatorUsername)) {
             return;
         }
         int operatorLevel = getEffectivePermissionLevel(operatorUsername);
@@ -112,7 +122,7 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
 
     @Override
     public void checkCanBindMenus(String operatorUsername, Role targetRole, List<Menu> menus) {
-        if (!isAdmin(operatorUsername)) {
+        if (!isSuperAdmin(operatorUsername)) {
             int operatorLevel = getEffectivePermissionLevel(operatorUsername);
             if (!(operatorLevel < targetRole.getPermissionLevel())) {
                 throw new BizException("AUTH_FORBIDDEN", "无权维护当前角色菜单");
@@ -138,5 +148,9 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
         if (!isAdmin(operatorUsername)) {
             throw new BizException("AUTH_FORBIDDEN", "仅管理员允许维护部门");
         }
+    }
+
+    private boolean isSuperAdmin(String username) {
+        return userRepository.findRoleCodesByUsername(username).contains(SUPER_ADMIN_ROLE_CODE);
     }
 }

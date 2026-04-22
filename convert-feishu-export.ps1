@@ -1,12 +1,10 @@
-﻿param(
-    [Parameter(Position = 0)]
-    [string]$InputPath = "docs/demo.xlsx",
-
-    [string]$WorksheetName,
-
-    [string]$DepartmentOutputPath,
-
-    [string]$UserOutputPath
+param(
+    [string]$DepartmentInputPath = "docs/departments.xlsx",
+    [string]$UserInputPath = "docs/users.xlsx",
+    [string]$DepartmentWorksheetName,
+    [string]$UserWorksheetName,
+    [string]$DepartmentOutputPath = "docs/feishu-import/departments/demo.json",
+    [string]$UserOutputPath = "docs/feishu-import/users/demo.json"
 )
 
 Set-StrictMode -Version Latest
@@ -14,16 +12,19 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $ScriptRoot = Split-Path -Parent $PSCommandPath
+$DepartmentPathColumn = "B"
+$UserRealNameColumn = "A"
+$UserMobileColumn = "B"
+$UserEmployeeNoColumn = "C"
+$UserDepartmentColumn = "E"
 
 function Resolve-LocalPath {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Path
-    )
+    param([Parameter(Mandatory = $true)][string]$Path)
 
     if ([System.IO.Path]::IsPathRooted($Path)) {
         return [System.IO.Path]::GetFullPath($Path)
     }
+
     return [System.IO.Path]::GetFullPath((Join-Path $ScriptRoot $Path))
 }
 
@@ -33,11 +34,8 @@ function New-Utf8NoBomEncoding {
 
 function Write-Utf8NoBomFile {
     param(
-        [Parameter(Mandatory = $true)]
-        [string]$Path,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Content
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Content
     )
 
     $directory = Split-Path -Parent $Path
@@ -49,16 +47,13 @@ function Write-Utf8NoBomFile {
 
 function Read-ZipEntryText {
     param(
-        [Parameter(Mandatory = $true)]
-        [System.IO.Compression.ZipArchive]$Archive,
-
-        [Parameter(Mandatory = $true)]
-        [string]$EntryName
+        [Parameter(Mandatory = $true)][System.IO.Compression.ZipArchive]$Archive,
+        [Parameter(Mandatory = $true)][string]$EntryName
     )
 
     $entry = $Archive.GetEntry($EntryName)
     if (-not $entry) {
-        throw "Excel 文件缺少必要条目：$EntryName"
+        throw "Missing Excel entry: $EntryName"
     }
 
     $stream = $entry.Open()
@@ -73,10 +68,7 @@ function Read-ZipEntryText {
 }
 
 function Get-SharedStrings {
-    param(
-        [Parameter(Mandatory = $true)]
-        [System.IO.Compression.ZipArchive]$Archive
-    )
+    param([Parameter(Mandatory = $true)][System.IO.Compression.ZipArchive]$Archive)
 
     $entry = $Archive.GetEntry("xl/sharedStrings.xml")
     if (-not $entry) {
@@ -87,68 +79,58 @@ function Get-SharedStrings {
     $result = @()
     foreach ($stringNode in $sharedStringsXml.SelectNodes("//*[local-name()='si']")) {
         $textNodes = $stringNode.SelectNodes(".//*[local-name()='t']")
-        if (@($textNodes).Count -eq 0) {
-            $result += ""
-            continue
-        }
-        $value = ($textNodes | ForEach-Object { $_.InnerText }) -join ""
-        $result += $value
+        $result += (($textNodes | ForEach-Object { $_.InnerText }) -join "")
     }
     return $result
 }
 
 function Get-WorkbookSheets {
-    param(
-        [Parameter(Mandatory = $true)]
-        [System.IO.Compression.ZipArchive]$Archive
-    )
+    param([Parameter(Mandatory = $true)][System.IO.Compression.ZipArchive]$Archive)
 
     [xml]$workbookXml = Read-ZipEntryText -Archive $Archive -EntryName "xl/workbook.xml"
     [xml]$relationXml = Read-ZipEntryText -Archive $Archive -EntryName "xl/_rels/workbook.xml.rels"
 
     $relationById = @{}
     foreach ($relationNode in $relationXml.SelectNodes("//*[local-name()='Relationship']")) {
-        $relationById[$relationNode.Id] = $relationNode.Target
+        $target = [string]$relationNode.Target
+        if ($target.StartsWith('/')) {
+            $target = $target.TrimStart('/')
+        }
+        if (-not $target.StartsWith("xl/")) {
+            $target = "xl/$target"
+        }
+        $relationById[$relationNode.Id] = $target
     }
 
     $sheets = @()
     foreach ($sheetNode in $workbookXml.SelectNodes("//*[local-name()='sheet']")) {
         $relationshipId = $sheetNode.GetAttribute("id", "http://schemas.openxmlformats.org/officeDocument/2006/relationships")
-        $target = $relationById[$relationshipId]
-        if (-not $target) {
+        if (-not $relationById.ContainsKey($relationshipId)) {
             continue
         }
         $sheets += [pscustomobject]@{
-            Name      = $sheetNode.name
-            Target    = "xl/$target"
-            SheetId   = [string]$sheetNode.sheetId
+            Name   = [string]$sheetNode.name
+            Target = [string]$relationById[$relationshipId]
         }
     }
     return $sheets
 }
 
 function Get-CellColumnLetters {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$CellReference
-    )
+    param([Parameter(Mandatory = $true)][string]$CellReference)
 
     return ($CellReference -replace "\d", "")
 }
 
 function Get-CellValue {
     param(
-        [Parameter(Mandatory = $true)]
-        [System.Xml.XmlElement]$CellNode,
-
-        [Parameter(Mandatory = $true)]
-        [object[]]$SharedStrings
+        [Parameter(Mandatory = $true)][System.Xml.XmlElement]$CellNode,
+        [Parameter(Mandatory = $true)][object[]]$SharedStrings
     )
 
     $cellType = $CellNode.GetAttribute("t")
     if ($cellType -eq "inlineStr") {
-        $textNodes = $CellNode.SelectNodes(".//*[local-name()='t']")
-        return ($textNodes | ForEach-Object { $_.InnerText }) -join ""
+        return (($CellNode.SelectNodes(".//*[local-name()='t']") | ForEach-Object { $_.InnerText }) -join "")
     }
 
     $valueNode = $CellNode.SelectSingleNode("./*[local-name()='v']")
@@ -168,14 +150,9 @@ function Get-CellValue {
 
 function Get-WorksheetRows {
     param(
-        [Parameter(Mandatory = $true)]
-        [System.IO.Compression.ZipArchive]$Archive,
-
-        [Parameter(Mandatory = $true)]
-        [string]$WorksheetEntryName,
-
-        [Parameter(Mandatory = $true)]
-        [object[]]$SharedStrings
+        [Parameter(Mandatory = $true)][System.IO.Compression.ZipArchive]$Archive,
+        [Parameter(Mandatory = $true)][string]$WorksheetEntryName,
+        [Parameter(Mandatory = $true)][object[]]$SharedStrings
     )
 
     [xml]$worksheetXml = Read-ZipEntryText -Archive $Archive -EntryName $WorksheetEntryName
@@ -195,96 +172,80 @@ function Get-WorksheetRows {
     return $rows
 }
 
-function Get-MetaConfiguration {
+function Get-WorksheetData {
     param(
-        [Parameter(Mandatory = $true)]
-        [System.IO.Compression.ZipArchive]$Archive,
-
-        [Parameter(Mandatory = $true)]
-        [object[]]$SharedStrings,
-
-        [Parameter(Mandatory = $true)]
-        [object[]]$WorkbookSheets
+        [Parameter(Mandatory = $true)][string]$InputPath,
+        [string]$WorksheetName
     )
 
-    $metaSheet = $WorkbookSheets | Where-Object { $_.Name -eq "meta" } | Select-Object -First 1
-    if (-not $metaSheet) {
-        return $null
-    }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-    $rows = @(Get-WorksheetRows -Archive $Archive -WorksheetEntryName $metaSheet.Target -SharedStrings @($SharedStrings))
-    if (@($rows).Count -eq 0) {
-        return $null
-    }
-
-    $metaPayload = $rows[0].Cells["A"]
-    if ([string]::IsNullOrWhiteSpace($metaPayload)) {
-        return $null
-    }
-
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($InputPath)
     try {
-        $metaJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($metaPayload))
-        return $metaJson | ConvertFrom-Json -Depth 10
-    }
-    catch {
-        return $null
-    }
-}
-
-function Get-RowMaps {
-    param(
-        [Parameter(Mandatory = $true)]
-        [object[]]$Rows,
-
-        [Parameter(Mandatory = $true)]
-        [int]$HeaderRowNumber,
-
-        [Parameter(Mandatory = $true)]
-        [int]$DataStartRowNumber
-    )
-
-    $headerRow = $Rows | Where-Object { $_.RowNumber -eq $HeaderRowNumber } | Select-Object -First 1
-    if (-not $headerRow) {
-        throw "未找到表头行：第 $HeaderRowNumber 行"
-    }
-
-    $headerByColumn = @{}
-    foreach ($entry in $headerRow.Cells.GetEnumerator()) {
-        $headerByColumn[$entry.Key] = [string]$entry.Value
-    }
-
-    $result = @()
-    foreach ($row in $Rows | Where-Object { $_.RowNumber -ge $DataStartRowNumber }) {
-        $rowMap = [ordered]@{}
-        foreach ($header in $headerByColumn.GetEnumerator()) {
-            $rawValue = if ($row.Cells.Contains($header.Key)) { [string]$row.Cells[$header.Key] } else { "" }
-            $rowMap[$header.Value] = $rawValue
+        $sharedStrings = @(Get-SharedStrings -Archive $archive)
+        $workbookSheets = @(Get-WorkbookSheets -Archive $archive)
+        if (@($workbookSheets).Count -eq 0) {
+            throw "No readable worksheet found in $InputPath"
         }
 
-        $hasValue = $false
-        foreach ($value in $rowMap.Values) {
-            if (-not [string]::IsNullOrWhiteSpace([string]$value)) {
-                $hasValue = $true
-                break
+        $worksheet = if ($WorksheetName) {
+            $workbookSheets | Where-Object { $_.Name -eq $WorksheetName } | Select-Object -First 1
+        }
+        else {
+            $workbookSheets | Select-Object -First 1
+        }
+        if (-not $worksheet) {
+            throw "Worksheet not found: $WorksheetName"
+        }
+
+        $rows = @(Get-WorksheetRows -Archive $archive -WorksheetEntryName $worksheet.Target -SharedStrings @($sharedStrings))
+        if (@($rows).Count -eq 0) {
+            throw "Worksheet has no rows: $InputPath -> $($worksheet.Name)"
+        }
+
+        $headerRow = $rows | Where-Object { $_.RowNumber -eq 1 } | Select-Object -First 1
+        if (-not $headerRow) {
+            throw "Header row not found: $InputPath"
+        }
+
+        $result = @()
+        foreach ($row in $rows | Where-Object { $_.RowNumber -ge 2 }) {
+            $rowMap = [ordered]@{}
+            foreach ($column in $headerRow.Cells.Keys) {
+                $rawValue = if ($row.Cells.Contains($column)) { [string]$row.Cells[$column] } else { "" }
+                $rowMap[$column] = $rawValue
+            }
+
+            $hasValue = $false
+            foreach ($value in $rowMap.Values) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$value)) {
+                    $hasValue = $true
+                    break
+                }
+            }
+            if (-not $hasValue) {
+                continue
+            }
+
+            $result += [pscustomobject]@{
+                RowNumber = $row.RowNumber
+                Values    = $rowMap
             }
         }
-        if (-not $hasValue) {
-            continue
-        }
 
-        $result += [pscustomobject]@{
-            RowNumber = $row.RowNumber
-            Values    = $rowMap
+        return [pscustomobject]@{
+            WorksheetName = $worksheet.Name
+            HeaderValues  = $headerRow.Cells
+            Rows          = $result
         }
     }
-    return $result
+    finally {
+        $archive.Dispose()
+    }
 }
 
 function Get-NormalizedValue {
-    param(
-        [AllowNull()]
-        [string]$Value
-    )
+    param([AllowNull()][string]$Value)
 
     if ($null -eq $Value) {
         return $null
@@ -296,37 +257,26 @@ function Get-NormalizedValue {
     return $trimmed
 }
 
-function Get-PreferredValue {
-    param(
-        [Parameter(Mandatory = $true)]
-        [object[]]$Candidates
-    )
-
-    foreach ($candidate in $Candidates) {
-        $normalized = Get-NormalizedValue -Value ([string]$candidate)
-        if ($null -ne $normalized) {
-            return $normalized
-        }
-    }
-    return $null
-}
-
 function Get-DepartmentSegments {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$DepartmentPath
-    )
+    param([Parameter(Mandatory = $true)][string]$DepartmentPath)
 
     return @(
-        ($DepartmentPath -split "[/／]+" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        ($DepartmentPath -split "/" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     )
+}
+
+function Get-LeafDepartmentName {
+    param([Parameter(Mandatory = $true)][string]$DepartmentPath)
+
+    $segments = Get-DepartmentSegments -DepartmentPath $DepartmentPath
+    if (@($segments).Count -eq 0) {
+        return $null
+    }
+    return $segments[-1]
 }
 
 function Get-Sha1Hex {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Text
-    )
+    param([Parameter(Mandatory = $true)][string]$Text)
 
     $sha1 = [System.Security.Cryptography.SHA1]::Create()
     try {
@@ -341,75 +291,58 @@ function Get-Sha1Hex {
 }
 
 function New-DepartmentExternalId {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$DepartmentPath
-    )
+    param([Parameter(Mandatory = $true)][string]$DepartmentPath)
 
     return "xlsx_dept_" + (Get-Sha1Hex -Text $DepartmentPath)
 }
 
 function New-DepartmentCode {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$DepartmentPath
-    )
+    param([Parameter(Mandatory = $true)][string]$DepartmentPath)
 
     return "FD" + ((Get-Sha1Hex -Text $DepartmentPath).Substring(0, 12).ToUpperInvariant())
 }
 
-function Get-UsernameFromRow {
+function New-UserExternalId {
     param(
-        [Parameter(Mandatory = $true)]
-        [System.Collections.IDictionary]$Values
+        [string]$EmployeeNo,
+        [string]$Mobile,
+        [string]$RealName,
+        [string]$DepartmentPath
     )
 
-    $employeeNo = Get-NormalizedValue -Value $Values["工号"]
-    if ($employeeNo) {
-        return $employeeNo
-    }
+    $identity = ($EmployeeNo, $Mobile, $RealName, $DepartmentPath | ForEach-Object { if ($_){ $_ } else { '' } }) -join '|'
+    return "xlsx_user_" + (Get-Sha1Hex -Text $identity)
+}
 
-    $email = Get-NormalizedValue -Value $Values["工作邮箱"]
-    if ($email -and $email.Contains("@")) {
-        return $email.Substring(0, $email.IndexOf("@"))
-    }
+function Normalize-Mobile {
+    param([AllowNull()][string]$Value)
 
-    $mobile = Get-NormalizedValue -Value $Values["联系手机"]
-    if ($mobile) {
-        return $mobile
+    $normalized = Get-NormalizedValue -Value $Value
+    if ($null -eq $normalized) {
+        return $null
     }
-
-    return Get-PreferredValue @(
-        $Values["用户 ID（修改值）"],
-        $Values["用户 ID"]
-    )
+    return ($normalized -replace "\s", "")
 }
 
 function Convert-UserStatus {
-    param(
-        [AllowNull()]
-        [string]$AccountStatus
-    )
+    param([AllowNull()][string]$StatusValue)
 
-    $normalized = Get-NormalizedValue -Value $AccountStatus
+    $normalized = Get-NormalizedValue -Value $StatusValue
     if ($null -eq $normalized) {
         return 1
     }
 
-    $enabledStatuses = @("正常", "启用", "在职", "已激活", "active", "enabled")
-    if ($enabledStatuses -contains $normalized) {
-        return 1
+    $disabledStatuses = @("离职", "禁用", "停用", "disabled", "inactive")
+    if ($disabledStatuses -contains $normalized.ToLowerInvariant()) {
+        return 0
     }
-    return 0
+    return 1
 }
 
 function Assert-RequiredHeaders {
     param(
-        [Parameter(Mandatory = $true)]
-        [System.Collections.IDictionary]$HeaderValues,
-
-        [Parameter(Mandatory = $true)]
-        [string[]]$RequiredHeaders
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$HeaderValues,
+        [Parameter(Mandatory = $true)][string[]]$RequiredHeaders
     )
 
     $missingHeaders = @()
@@ -420,17 +353,14 @@ function Assert-RequiredHeaders {
     }
 
     if (@($missingHeaders).Count -gt 0) {
-        throw "Excel 中缺少必要列：$($missingHeaders -join '、')"
+        throw "Missing required columns: $($missingHeaders -join ', ')"
     }
 }
 
 function Assert-UniqueField {
     param(
-        [Parameter(Mandatory = $true)]
-        [object[]]$Rows,
-
-        [Parameter(Mandatory = $true)]
-        [string]$FieldName
+        [Parameter(Mandatory = $true)][object[]]$Rows,
+        [Parameter(Mandatory = $true)][string]$FieldName
     )
 
     $counter = @{}
@@ -448,172 +378,227 @@ function Assert-UniqueField {
     $duplicates = @($counter.GetEnumerator() | Where-Object { @($_.Value).Count -gt 1 })
     if ($duplicates) {
         $messages = $duplicates | ForEach-Object {
-            "$($_.Key)（行号：$($_.Value -join ', ')）"
+            "$($_.Key) (rows: $($_.Value -join ', '))"
         }
-        throw "$FieldName 存在重复：$($messages -join '；')"
+        throw "$FieldName duplicate values: $($messages -join '; ')"
     }
 }
 
-Add-Type -AssemblyName System.IO.Compression.FileSystem
+function Ensure-PinyinHelperScript {
+    $helperDirectory = Resolve-LocalPath -Path "scripts/pinyin-helper"
+    $helperScriptPath = Join-Path $helperDirectory "name-to-pinyin.mjs"
+    $helperModulePath = Join-Path $helperDirectory "node_modules/pinyin-pro/dist/index.mjs"
 
-$resolvedInputPath = Resolve-LocalPath -Path $InputPath
-if (-not (Test-Path -LiteralPath $resolvedInputPath -PathType Leaf)) {
-    throw "找不到输入文件：$resolvedInputPath"
+    if (-not (Test-Path -LiteralPath $helperScriptPath -PathType Leaf)) {
+        throw "Pinyin helper script not found: $helperScriptPath"
+    }
+
+    if (-not (Test-Path -LiteralPath $helperModulePath -PathType Leaf)) {
+        $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+        if (-not $npmCommand) {
+            throw "npm.cmd not found. Cannot install pinyin dependency."
+        }
+        Write-Host "Installing pinyin helper dependency..." -ForegroundColor Yellow
+        & $npmCommand.Source install --prefix $helperDirectory | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $helperModulePath -PathType Leaf)) {
+            throw "Failed to install pinyin helper dependency."
+        }
+    }
+
+    return $helperScriptPath
 }
 
-$baseName = [System.IO.Path]::GetFileNameWithoutExtension($resolvedInputPath)
-if (-not $DepartmentOutputPath) {
-    $DepartmentOutputPath = "docs/feishu-import/departments/$baseName.json"
-}
-if (-not $UserOutputPath) {
-    $UserOutputPath = "docs/feishu-import/users/$baseName.json"
+function Convert-NamesToPinyinBase {
+    param([Parameter(Mandatory = $true)][string[]]$Names)
+
+    if (@($Names).Count -eq 0) {
+        return @()
+    }
+
+    $helperScriptPath = Ensure-PinyinHelperScript
+    $inputFile = Join-Path ([System.IO.Path]::GetTempPath()) ("pinyin-input-" + [guid]::NewGuid().ToString("N") + ".json")
+    $outputFile = Join-Path ([System.IO.Path]::GetTempPath()) ("pinyin-output-" + [guid]::NewGuid().ToString("N") + ".json")
+
+    try {
+        Write-Utf8NoBomFile -Path $inputFile -Content (($Names | ConvertTo-Json -Depth 3))
+        & node $helperScriptPath $inputFile $outputFile
+        if ($LASTEXITCODE -ne 0) {
+            throw "Pinyin conversion failed."
+        }
+        return @((Get-Content -Raw $outputFile | ConvertFrom-Json))
+    }
+    finally {
+        Remove-Item -LiteralPath $inputFile -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $outputFile -ErrorAction SilentlyContinue
+    }
 }
 
+function New-UniqueUsernameList {
+    param([Parameter(Mandatory = $true)][string[]]$BaseUsernames)
+
+    $counter = @{}
+    $result = @()
+
+    foreach ($baseUsername in $BaseUsernames) {
+        $base = Get-NormalizedValue -Value $baseUsername
+        if ($null -eq $base) {
+            throw "Failed to generate username from name."
+        }
+
+        if (-not $counter.ContainsKey($base)) {
+            $counter[$base] = 1
+            $result += $base
+            continue
+        }
+
+        $counter[$base]++
+        $result += ($base + [string]$counter[$base])
+    }
+
+    return $result
+}
+
+$resolvedDepartmentInputPath = Resolve-LocalPath -Path $DepartmentInputPath
+$resolvedUserInputPath = Resolve-LocalPath -Path $UserInputPath
 $resolvedDepartmentOutputPath = Resolve-LocalPath -Path $DepartmentOutputPath
 $resolvedUserOutputPath = Resolve-LocalPath -Path $UserOutputPath
 
-$archive = [System.IO.Compression.ZipFile]::OpenRead($resolvedInputPath)
-try {
-    $sharedStrings = @(Get-SharedStrings -Archive $archive)
-    $workbookSheets = @(Get-WorkbookSheets -Archive $archive)
-    if (@($workbookSheets).Count -eq 0) {
-        throw "Excel 文件中未找到可读取的工作表"
+if (-not (Test-Path -LiteralPath $resolvedDepartmentInputPath -PathType Leaf)) {
+    throw "Department input file not found: $resolvedDepartmentInputPath"
+}
+if (-not (Test-Path -LiteralPath $resolvedUserInputPath -PathType Leaf)) {
+    throw "User input file not found: $resolvedUserInputPath"
+}
+
+$departmentWorksheet = Get-WorksheetData -InputPath $resolvedDepartmentInputPath -WorksheetName $DepartmentWorksheetName
+$userWorksheet = Get-WorksheetData -InputPath $resolvedUserInputPath -WorksheetName $UserWorksheetName
+
+$departmentNodes = [ordered]@{}
+$nextOrderByParent = @{}
+
+foreach ($row in $departmentWorksheet.Rows) {
+    $values = $row.Values
+    $departmentPath = Get-NormalizedValue -Value $values[$DepartmentPathColumn]
+    if ($null -eq $departmentPath) {
+        continue
     }
 
-    $metaConfig = Get-MetaConfiguration -Archive $archive -SharedStrings @($sharedStrings) -WorkbookSheets $workbookSheets
-    $dataStartRowNumber = if ($metaConfig -and $metaConfig.data_row_start) { [int]$metaConfig.data_row_start } else { 3 }
-    $headerRowNumber = $dataStartRowNumber - 1
-
-    $primarySheet = if ($WorksheetName) {
-        $workbookSheets | Where-Object { $_.Name -eq $WorksheetName } | Select-Object -First 1
-    }
-    else {
-        $workbookSheets | Where-Object { $_.Name -ne "meta" } | Select-Object -First 1
-    }
-    if (-not $primarySheet) {
-        throw "未找到要读取的工作表：$WorksheetName"
+    $segments = Get-DepartmentSegments -DepartmentPath $departmentPath
+    if (@($segments).Count -eq 0) {
+        throw "Empty department path on row $($row.RowNumber): $departmentPath"
     }
 
-    $worksheetRows = @(Get-WorksheetRows -Archive $archive -WorksheetEntryName $primarySheet.Target -SharedStrings @($sharedStrings))
-    $headerRow = $worksheetRows | Where-Object { $_.RowNumber -eq $headerRowNumber } | Select-Object -First 1
-    if (-not $headerRow) {
-        throw "未找到 Excel 表头行：第 $headerRowNumber 行"
-    }
-
-    Assert-RequiredHeaders -HeaderValues $headerRow.Cells -RequiredHeaders @("用户 ID", "姓名", "部门", "账号状态")
-
-    $rowMaps = @(Get-RowMaps -Rows $worksheetRows -HeaderRowNumber $headerRowNumber -DataStartRowNumber $dataStartRowNumber)
-    if (@($rowMaps).Count -eq 0) {
-        throw "Excel 中没有可转换的数据行"
-    }
-
-    $departmentNodes = [ordered]@{}
-    $nextOrderByParent = @{}
-    $userRows = @()
-    $rowOrder = 1
-
-    foreach ($row in $rowMaps) {
-        $values = $row.Values
-        $departmentPath = Get-NormalizedValue -Value $values["部门"]
-        if ($null -eq $departmentPath) {
-            throw "第 $($row.RowNumber) 行缺少部门路径"
+    $pathParts = New-Object System.Collections.Generic.List[string]
+    foreach ($segment in $segments) {
+        [void]$pathParts.Add($segment)
+        $currentPath = ($pathParts -join "/")
+        if ($departmentNodes.Contains($currentPath)) {
+            continue
         }
 
-        $segments = Get-DepartmentSegments -DepartmentPath $departmentPath
-        if (@($segments).Count -eq 0) {
-            throw "第 $($row.RowNumber) 行部门路径为空：$departmentPath"
-        }
+        $parentPath = if ($pathParts.Count -eq 1) { $null } else { ($pathParts.GetRange(0, $pathParts.Count - 1) -join "/") }
+        $parentKey = if ($parentPath) { $parentPath } else { "__ROOT__" }
+        $orderNo = if ($nextOrderByParent.ContainsKey($parentKey)) { $nextOrderByParent[$parentKey] + 1 } else { 1 }
+        $nextOrderByParent[$parentKey] = $orderNo
 
-        $pathParts = New-Object System.Collections.Generic.List[string]
-        foreach ($segment in $segments) {
-            [void]$pathParts.Add($segment)
-            $currentPath = ($pathParts -join "/")
-            if ($departmentNodes.Contains($currentPath)) {
-                continue
-            }
-
-            $parentPath = if ($pathParts.Count -eq 1) { $null } else { ($pathParts.GetRange(0, $pathParts.Count - 1) -join "/") }
-            $parentKey = if ($parentPath) { $parentPath } else { "__ROOT__" }
-            $orderNo = if ($nextOrderByParent.ContainsKey($parentKey)) { $nextOrderByParent[$parentKey] + 1 } else { 1 }
-            $nextOrderByParent[$parentKey] = $orderNo
-
-            $departmentNodes[$currentPath] = [pscustomobject]@{
-                Path             = $currentPath
-                Name             = $segment
-                ExternalId       = New-DepartmentExternalId -DepartmentPath $currentPath
-                DepartmentCode   = New-DepartmentCode -DepartmentPath $currentPath
-                ParentPath       = $parentPath
-                ParentExternalId = $null
-                Status           = 1
-                OrderNo          = $orderNo
-                Depth            = $pathParts.Count
-            }
-        }
-
-        $primaryUserId = Get-PreferredValue @(
-            $values["用户 ID（修改值）"],
-            $values["用户 ID"]
-        )
-        if ($null -eq $primaryUserId) {
-            throw "第 $($row.RowNumber) 行缺少用户 ID"
-        }
-
-        $userName = Get-UsernameFromRow -Values $values
-        if ($null -eq $userName) {
-            throw "第 $($row.RowNumber) 行无法推导 username，请补充工号、工作邮箱、联系手机或用户 ID"
-        }
-
-        $userRows += [pscustomobject]@{
-            RowNumber                 = $row.RowNumber
-            ExternalId                = $primaryUserId
-            Username                  = $userName
-            RealName                  = Get-NormalizedValue -Value $values["姓名"]
-            Email                     = Get-NormalizedValue -Value $values["工作邮箱"]
-            Mobile                    = Get-NormalizedValue -Value $values["联系手机"]
-            EmployeeNo                = Get-NormalizedValue -Value $values["工号"]
-            MainDepartmentPath        = $departmentPath
-            MainDepartmentExternalId  = $null
-            Status                    = Convert-UserStatus -AccountStatus $values["账号状态"]
-            OrderNo                   = $rowOrder
-        }
-        $rowOrder++
-    }
-
-    foreach ($departmentNode in $departmentNodes.Values) {
-        if ($departmentNode.ParentPath -and -not $departmentNodes.Contains($departmentNode.ParentPath)) {
-            throw "部门路径缺少父节点：$($departmentNode.Path)"
-        }
-        if ($departmentNode.ParentPath) {
-            $departmentNode.ParentExternalId = $departmentNodes[$departmentNode.ParentPath].ExternalId
+        $departmentNodes[$currentPath] = [pscustomobject]@{
+            Path             = $currentPath
+            Name             = $segment
+            ExternalId       = New-DepartmentExternalId -DepartmentPath $currentPath
+            DepartmentCode   = New-DepartmentCode -DepartmentPath $currentPath
+            ParentPath       = $parentPath
+            ParentExternalId = $null
+            Status           = 1
+            OrderNo          = $orderNo
         }
     }
+}
 
-    foreach ($userRow in $userRows) {
-        if (-not $departmentNodes.Contains($userRow.MainDepartmentPath)) {
-            throw "第 $($userRow.RowNumber) 行主部门不存在：$($userRow.MainDepartmentPath)"
-        }
-        $userRow.MainDepartmentExternalId = $departmentNodes[$userRow.MainDepartmentPath].ExternalId
+foreach ($departmentNode in $departmentNodes.Values) {
+    if ($departmentNode.ParentPath -and $departmentNodes.Contains($departmentNode.ParentPath)) {
+        $departmentNode.ParentExternalId = $departmentNodes[$departmentNode.ParentPath].ExternalId
+    }
+}
+
+$userRows = @()
+$rawNames = @()
+$rowOrder = 1
+
+foreach ($row in $userWorksheet.Rows) {
+    $values = $row.Values
+    $realName = Get-NormalizedValue -Value $values[$UserRealNameColumn]
+    if ($null -eq $realName) {
+        throw "Missing name on row $($row.RowNumber)"
     }
 
-    Assert-UniqueField -Rows $userRows -FieldName "ExternalId"
-    Assert-UniqueField -Rows $userRows -FieldName "Username"
-    Assert-UniqueField -Rows $userRows -FieldName "EmployeeNo"
+    $departmentName = Get-NormalizedValue -Value $values[$UserDepartmentColumn]
+    if ($null -eq $departmentName) {
+        throw "Missing department on row $($row.RowNumber)"
+    }
 
-    $departmentPayload = @(
-        foreach ($departmentNode in $departmentNodes.Values) {
-        [ordered]@{
-            externalId      = $departmentNode.ExternalId
-            departmentCode  = $departmentNode.DepartmentCode
-            departmentName  = $departmentNode.Name
-            parentExternalId = $departmentNode.ParentExternalId
-            status          = $departmentNode.Status
-            orderNo         = $departmentNode.OrderNo
-        }
-        }
+    $matchedPaths = @(
+        $departmentNodes.Values |
+            Where-Object { $_.Name -eq $departmentName } |
+            ForEach-Object { $_.Path }
     )
+    if (@($matchedPaths).Count -eq 0) {
+        throw "Department name cannot be mapped from users.xlsx: $departmentName (row $($row.RowNumber))"
+    }
+    if (@($matchedPaths).Count -gt 1) {
+        throw "Ambiguous department leaf name: $departmentName (row $($row.RowNumber))"
+    }
 
-    $userPayload = @(
-        foreach ($userRow in $userRows) {
+    $departmentPath = $matchedPaths[0]
+    $departmentNode = $departmentNodes[$departmentPath]
+    $employeeNo = Get-NormalizedValue -Value $values[$UserEmployeeNoColumn]
+    $mobile = Normalize-Mobile -Value $values[$UserMobileColumn]
+
+    $status = 1
+    if ($values.Contains("M")) {
+        $status = Convert-UserStatus -StatusValue $values["M"]
+    }
+
+    $userRows += [pscustomobject]@{
+        RowNumber                = $row.RowNumber
+        ExternalId               = New-UserExternalId -EmployeeNo $employeeNo -Mobile $mobile -RealName $realName -DepartmentPath $departmentPath
+        Username                 = $null
+        RealName                 = $realName
+        Email                    = $null
+        Mobile                   = $mobile
+        EmployeeNo               = $employeeNo
+        MainDepartmentExternalId = $departmentNode.ExternalId
+        Status                   = $status
+        OrderNo                  = $rowOrder
+    }
+    $rawNames += $realName
+    $rowOrder++
+}
+
+$baseUsernames = Convert-NamesToPinyinBase -Names $rawNames
+$uniqueUsernames = New-UniqueUsernameList -BaseUsernames $baseUsernames
+for ($index = 0; $index -lt $userRows.Count; $index++) {
+    $userRows[$index].Username = $uniqueUsernames[$index]
+}
+
+Assert-UniqueField -Rows $userRows -FieldName "ExternalId"
+Assert-UniqueField -Rows $userRows -FieldName "Username"
+Assert-UniqueField -Rows $userRows -FieldName "EmployeeNo"
+
+$departmentPayload = @(
+    foreach ($departmentNode in $departmentNodes.Values) {
+        [ordered]@{
+            externalId       = $departmentNode.ExternalId
+            departmentCode   = $departmentNode.DepartmentCode
+            departmentName   = $departmentNode.Name
+            parentExternalId = $departmentNode.ParentExternalId
+            status           = $departmentNode.Status
+            orderNo          = $departmentNode.OrderNo
+        }
+    }
+)
+
+$userPayload = @(
+    foreach ($userRow in $userRows) {
         [ordered]@{
             externalId               = $userRow.ExternalId
             username                 = $userRow.Username
@@ -625,39 +610,36 @@ try {
             status                   = $userRow.Status
             orderNo                  = $userRow.OrderNo
         }
-        }
-    )
-
-    $departmentJson = $departmentPayload | ConvertTo-Json -Depth 8
-    $userJson = $userPayload | ConvertTo-Json -Depth 8
-
-    Write-Utf8NoBomFile -Path $resolvedDepartmentOutputPath -Content $departmentJson
-    Write-Utf8NoBomFile -Path $resolvedUserOutputPath -Content $userJson
-
-    $departmentImportRoot = Resolve-LocalPath -Path "docs/feishu-import"
-    $departmentImportHint = if ($resolvedDepartmentOutputPath.StartsWith($departmentImportRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-        $resolvedDepartmentOutputPath.Substring($departmentImportRoot.Length).TrimStart("\", "/").Replace("\", "/")
     }
-    else {
-        $resolvedDepartmentOutputPath
-    }
-    $userImportHint = if ($resolvedUserOutputPath.StartsWith($departmentImportRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-        $resolvedUserOutputPath.Substring($departmentImportRoot.Length).TrimStart("\", "/").Replace("\", "/")
-    }
-    else {
-        $resolvedUserOutputPath
-    }
+)
 
-    Write-Host "转换完成。" -ForegroundColor Green
-    Write-Host "数据工作表: $($primarySheet.Name)"
-    Write-Host "用户数: $($userPayload.Count)"
-    Write-Host "部门数: $($departmentPayload.Count)"
-    Write-Host "部门 JSON: $resolvedDepartmentOutputPath"
-    Write-Host "用户 JSON: $resolvedUserOutputPath"
-    Write-Host "导入路径提示:"
-    Write-Host "  部门: $departmentImportHint"
-    Write-Host "  用户: $userImportHint"
+$departmentJson = $departmentPayload | ConvertTo-Json -Depth 8
+$userJson = $userPayload | ConvertTo-Json -Depth 8
+
+Write-Utf8NoBomFile -Path $resolvedDepartmentOutputPath -Content $departmentJson
+Write-Utf8NoBomFile -Path $resolvedUserOutputPath -Content $userJson
+
+$importRoot = Resolve-LocalPath -Path "docs/feishu-import"
+$departmentImportHint = if ($resolvedDepartmentOutputPath.StartsWith($importRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $resolvedDepartmentOutputPath.Substring($importRoot.Length).TrimStart("\", "/").Replace("\", "/")
 }
-finally {
-    $archive.Dispose()
+else {
+    $resolvedDepartmentOutputPath
 }
+$userImportHint = if ($resolvedUserOutputPath.StartsWith($importRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $resolvedUserOutputPath.Substring($importRoot.Length).TrimStart("\", "/").Replace("\", "/")
+}
+else {
+    $resolvedUserOutputPath
+}
+
+Write-Host "Conversion complete." -ForegroundColor Green
+Write-Host "Department worksheet: $($departmentWorksheet.WorksheetName)"
+Write-Host "User worksheet: $($userWorksheet.WorksheetName)"
+Write-Host "Department count: $($departmentPayload.Count)"
+Write-Host "User count: $($userPayload.Count)"
+Write-Host "Department JSON: $resolvedDepartmentOutputPath"
+Write-Host "User JSON: $resolvedUserOutputPath"
+Write-Host "Import path hints:"
+Write-Host "  Departments: $departmentImportHint"
+Write-Host "  Users: $userImportHint"
