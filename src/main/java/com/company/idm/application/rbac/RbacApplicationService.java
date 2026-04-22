@@ -28,6 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class RbacApplicationService {
 
+    private static final String AUTH_ME_PERMISSION_CODE = "AUTH_ME";
+    private static final int FULL_ACCESS_PERMISSION_LEVEL = 2;
+
     private final RoleRepository roleRepository;
     private final MenuRepository menuRepository;
     private final PermissionRepository permissionRepository;
@@ -115,6 +118,7 @@ public class RbacApplicationService {
             .remark(command.remark())
             .status(1)
             .build());
+        applyDefaultAccessGrants(role, true);
         auditLogRepository.save(AuditLog.builder()
             .operator(operator)
             .operationType("ROLE_CREATE")
@@ -143,6 +147,7 @@ public class RbacApplicationService {
             .status(role.getStatus())
             .remark(command.remark())
             .build());
+        applyDefaultAccessGrants(updated, false);
         auditLogRepository.save(AuditLog.builder()
             .operator(operator)
             .operationType("ROLE_UPDATE")
@@ -471,5 +476,36 @@ public class RbacApplicationService {
     private void ensureRoleExists(Long roleId) {
         roleRepository.findById(roleId)
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
+    }
+
+    /**
+     * 新角色默认授予查看当前用户权限；当权限等级为 1 或 2 时，自动授予全部菜单与接口权限。
+     */
+    private void applyDefaultAccessGrants(Role role, boolean createOperation) {
+        List<Permission> allPermissions = permissionRepository.findAll();
+        if (role.getPermissionLevel() != null && role.getPermissionLevel() <= FULL_ACCESS_PERMISSION_LEVEL) {
+            List<Long> permissionIds = allPermissions.stream()
+                .map(Permission::getId)
+                .toList();
+            List<Long> menuIds = menuRepository.findAllEnabled().stream()
+                .map(Menu::getId)
+                .toList();
+            roleRepository.assignPermissions(role.getId(), permissionIds);
+            roleRepository.bindMenus(role.getId(), menuIds);
+            policyRefreshService.refresh();
+            return;
+        }
+
+        if (!createOperation) {
+            return;
+        }
+
+        allPermissions.stream()
+            .filter(permission -> AUTH_ME_PERMISSION_CODE.equals(permission.getPermissionCode()))
+            .findFirst()
+            .ifPresent(permission -> {
+                roleRepository.assignPermissions(role.getId(), List.of(permission.getId()));
+                policyRefreshService.refresh();
+            });
     }
 }

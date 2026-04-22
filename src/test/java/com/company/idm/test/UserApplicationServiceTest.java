@@ -217,6 +217,7 @@ class UserApplicationServiceTest {
         verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", existing);
         verify(ldapGroupService).removeUserFromAllGroups("zhangsan");
         verify(ldapDirectoryService).deleteUser("zhangsan");
+        verify(userRepository).removeAllRoles(2L);
         verify(userRepository).logicalDelete(2L, "zhangsan__deleted__2", 3);
     }
 

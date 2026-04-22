@@ -110,6 +110,8 @@ class RbacApplicationServiceTest {
     @Test
     void shouldCreateRoleSuccessfully() {
         when(roleRepository.findByCode("DEV_ENGINEER")).thenReturn(Optional.empty());
+        when(permissionRepository.findAll()).thenReturn(List.of(Permission.builder()
+            .id(1L).permissionCode("AUTH_ME").permissionName("查看当前用户").permissionType(PermissionType.API).build()));
         when(roleRepository.save(any(Role.class))).thenReturn(Role.builder()
             .id(2L).roleCode("DEV_ENGINEER").roleName("开发工程师").permissionLevel(3).builtIn(0).status(1).remark("test").build());
 
@@ -118,7 +120,31 @@ class RbacApplicationServiceTest {
         assertThat(role.getRoleCode()).isEqualTo("DEV_ENGINEER");
         assertThat(role.getPermissionLevel()).isEqualTo(3);
         verify(permissionLevelRuleService).checkCanCreateRole("admin", 3);
+        verify(roleRepository).assignPermissions(2L, List.of(1L));
+        verify(policyRefreshService).refresh();
         verify(auditLogRepository).save(any());
+    }
+
+    @Test
+    void shouldCreateLowLevelRoleWithAllMenusAndPermissions() {
+        when(roleRepository.findByCode("SECURITY_ADMIN")).thenReturn(Optional.empty());
+        when(permissionRepository.findAll()).thenReturn(List.of(
+            Permission.builder().id(1L).permissionCode("AUTH_ME").permissionName("查看当前用户").permissionType(PermissionType.API).build(),
+            Permission.builder().id(2L).permissionCode("USER_READ").permissionName("用户查询").permissionType(PermissionType.API).build()
+        ));
+        when(menuRepository.findAllEnabled()).thenReturn(List.of(
+            Menu.builder().id(10L).menuCode("UINIT0").menuName("初始化").menuType(MenuType.CATALOG).parentId(0L).build(),
+            Menu.builder().id(11L).menuCode("SYSTEM_MANAGEMENT").menuName("系统管理").menuType(MenuType.CATALOG).parentId(10L).build()
+        ));
+        when(roleRepository.save(any(Role.class))).thenReturn(Role.builder()
+            .id(3L).roleCode("SECURITY_ADMIN").roleName("安全管理员").permissionLevel(2).builtIn(0).status(1).remark("auto").build());
+
+        Role role = rbacApplicationService.createRole(new CreateRoleCommand("SECURITY_ADMIN", "安全管理员", 2, "auto"), "admin");
+
+        assertThat(role.getPermissionLevel()).isEqualTo(2);
+        verify(roleRepository).assignPermissions(3L, List.of(1L, 2L));
+        verify(roleRepository).bindMenus(3L, List.of(10L, 11L));
+        verify(policyRefreshService).refresh();
     }
 
     @Test
@@ -135,6 +161,8 @@ class RbacApplicationServiceTest {
     void shouldUpdateRoleSuccessfully() {
         when(roleRepository.findById(2L)).thenReturn(Optional.of(Role.builder()
             .id(2L).roleCode("DEV_ENGINEER").roleName("开发工程师").permissionLevel(3).builtIn(0).status(1).remark("old").build()));
+        when(permissionRepository.findAll()).thenReturn(List.of(Permission.builder()
+            .id(1L).permissionCode("AUTH_ME").permissionName("查看当前用户").permissionType(PermissionType.API).build()));
         when(roleRepository.save(any(Role.class))).thenReturn(Role.builder()
             .id(2L).roleCode("DEV_ENGINEER").roleName("开发工程师-更新").permissionLevel(4).builtIn(0).status(1).remark("new").build());
 
@@ -142,6 +170,29 @@ class RbacApplicationServiceTest {
 
         assertThat(role.getRoleName()).isEqualTo("开发工程师-更新");
         assertThat(role.getPermissionLevel()).isEqualTo(4);
+    }
+
+    @Test
+    void shouldAutoGrantAllMenusAndPermissionsWhenUpdatingRoleToAdminLevel() {
+        when(roleRepository.findById(2L)).thenReturn(Optional.of(Role.builder()
+            .id(2L).roleCode("OPS_ADMIN").roleName("运维管理员").permissionLevel(4).builtIn(0).status(1).remark("old").build()));
+        when(permissionRepository.findAll()).thenReturn(List.of(
+            Permission.builder().id(1L).permissionCode("AUTH_ME").permissionName("查看当前用户").permissionType(PermissionType.API).build(),
+            Permission.builder().id(2L).permissionCode("USER_READ").permissionName("用户查询").permissionType(PermissionType.API).build()
+        ));
+        when(menuRepository.findAllEnabled()).thenReturn(List.of(
+            Menu.builder().id(10L).menuCode("UINIT0").menuName("初始化").menuType(MenuType.CATALOG).parentId(0L).build(),
+            Menu.builder().id(11L).menuCode("SYSTEM_MANAGEMENT").menuName("系统管理").menuType(MenuType.CATALOG).parentId(10L).build()
+        ));
+        when(roleRepository.save(any(Role.class))).thenReturn(Role.builder()
+            .id(2L).roleCode("OPS_ADMIN").roleName("运维管理员").permissionLevel(2).builtIn(0).status(1).remark("new").build());
+
+        Role role = rbacApplicationService.updateRole(new UpdateRoleCommand(2L, "运维管理员", 2, "new"), "admin");
+
+        assertThat(role.getPermissionLevel()).isEqualTo(2);
+        verify(roleRepository).assignPermissions(2L, List.of(1L, 2L));
+        verify(roleRepository).bindMenus(2L, List.of(10L, 11L));
+        verify(policyRefreshService).refresh();
     }
 
     @Test

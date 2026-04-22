@@ -151,7 +151,7 @@ public class MybatisRoleRepository implements RoleRepository {
 
     @Override
     public boolean existsUserBinding(Long roleId) {
-        return userRoleMapper.selectCount(new LambdaQueryWrapper<UserRoleDO>().eq(UserRoleDO::getRoleId, roleId)) > 0;
+        return userRoleMapper.countActiveBindingsByRoleId(roleId) > 0;
     }
 
     private Role toDomain(RoleDO dataObject) {

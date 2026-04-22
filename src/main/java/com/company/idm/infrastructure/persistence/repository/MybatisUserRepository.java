@@ -174,6 +174,11 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
+    public void removeAllRoles(Long userId) {
+        userRoleMapper.delete(new LambdaQueryWrapper<UserRoleDO>().eq(UserRoleDO::getUserId, userId));
+    }
+
+    @Override
     public Set<String> findRoleCodesByUsername(String username) {
         List<String> roleCodes = userRoleMapper.selectRoleCodesByUsername(username);
         if (roleCodes == null || roleCodes.isEmpty()) {

@@ -173,6 +173,8 @@ public class UserApplicationService {
         ldapGroupService.removeUserFromAllGroups(user.getUsername());
         // 目录侧先删条目，避免逻辑删除后仍可通过 LDAP 认证。
         ldapDirectoryService.deleteUser(user.getUsername());
+        // 删除用户后同步清理角色关系，避免角色仍被已删除用户占用。
+        userRepository.removeAllRoles(command.userId());
         // 业务库只做逻辑删除，保留审计和后续恢复基础。
         userRepository.logicalDelete(command.userId(), buildRecycledUsername(user), nextTokenVersion(user));
         auditLogRepository.save(AuditLog.builder()

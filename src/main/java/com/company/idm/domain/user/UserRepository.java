@@ -33,6 +33,8 @@ public interface UserRepository {
 
     void assignRoles(Long userId, List<Long> roleIds);
 
+    void removeAllRoles(Long userId);
+
     Set<String> findRoleCodesByUsername(String username);
 
     List<UserRoleBinding> listUserRoleBindings();

@@ -20,15 +20,19 @@ const emit = defineEmits<{
 
 const treeRef = ref<TreeInstance>()
 
-const checkedCount = computed(() => props.checkedPermissionIds.length)
+const autoGrantFullAccess = computed(() => (props.role?.permissionLevel || Number.MAX_SAFE_INTEGER) <= 2)
+const effectiveCheckedPermissionIds = computed(() =>
+  autoGrantFullAccess.value ? collectPermissionIds(props.permissionTree) : props.checkedPermissionIds,
+)
+const checkedCount = computed(() => effectiveCheckedPermissionIds.value.length)
 
 watch(
   () => [props.modelValue, props.checkedPermissionIds, props.permissionTree] as const,
-  ([visible, checkedPermissionIds]) => {
+  ([visible]) => {
     if (!visible) {
       return
     }
-    nextTick(() => treeRef.value?.setCheckedKeys([...checkedPermissionIds]))
+    nextTick(() => treeRef.value?.setCheckedKeys([...effectiveCheckedPermissionIds.value]))
   },
   { immediate: true, deep: true },
 )
@@ -38,8 +42,21 @@ function closeDialog() {
 }
 
 function handleSubmit() {
-  const checkedKeys = (treeRef.value?.getCheckedKeys(false) || []) as number[]
+  const checkedKeys = autoGrantFullAccess.value
+    ? effectiveCheckedPermissionIds.value
+    : ((treeRef.value?.getCheckedKeys(false) || []) as number[])
   emit('submit', checkedKeys)
+}
+
+function collectPermissionIds(nodes: PermissionTreeNode[]): number[] {
+  const ids: number[] = []
+  for (const node of nodes) {
+    ids.push(node.id)
+    if (node.children?.length) {
+      ids.push(...collectPermissionIds(node.children))
+    }
+  }
+  return ids
 }
 </script>
 
@@ -49,6 +66,15 @@ function handleSubmit() {
       <el-alert :closable="false" show-icon type="info">
         当前角色：{{ role.roleName }}（{{ role.roleCode }}），当前已勾选 {{ checkedCount }} 个权限点。
       </el-alert>
+
+      <el-alert
+        v-if="autoGrantFullAccess"
+        class="role-tree-dialog__alert"
+        :closable="false"
+        show-icon
+        title="当前角色权限等级为 1 或 2，系统将默认授予全部接口权限。"
+        type="warning"
+      />
 
       <div v-loading="initializing" class="role-tree-dialog__body">
         <el-tree
@@ -79,6 +105,10 @@ function handleSubmit() {
 </template>
 
 <style scoped lang="scss">
+.role-tree-dialog__alert {
+  margin-top: 12px;
+}
+
 .role-tree-dialog__body {
   min-height: 360px;
   margin-top: 16px;
@@ -95,6 +125,7 @@ function handleSubmit() {
 }
 
 .role-tree-dialog__node--column {
+  width: 100%;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
@@ -103,6 +134,21 @@ function handleSubmit() {
 .role-tree-dialog__node span {
   color: var(--idm-text-secondary);
   font-size: 12px;
+  line-height: 1.6;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.role-tree-dialog__body :deep(.el-tree-node__content) {
+  height: auto;
+  min-height: 34px;
+  padding: 6px 0;
+  align-items: flex-start;
+}
+
+.role-tree-dialog__body :deep(.el-tree-node__label) {
+  flex: 1;
+  min-width: 0;
 }
 
 .dialog-footer {

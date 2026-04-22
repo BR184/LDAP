@@ -20,15 +20,19 @@ const emit = defineEmits<{
 
 const treeRef = ref<TreeInstance>()
 
-const checkedCount = computed(() => props.checkedMenuIds.length)
+const autoGrantFullAccess = computed(() => (props.role?.permissionLevel || Number.MAX_SAFE_INTEGER) <= 2)
+const effectiveCheckedMenuIds = computed(() =>
+  autoGrantFullAccess.value ? collectMenuIds(props.menuTree) : props.checkedMenuIds,
+)
+const checkedCount = computed(() => effectiveCheckedMenuIds.value.length)
 
 watch(
   () => [props.modelValue, props.checkedMenuIds, props.menuTree] as const,
-  ([visible, checkedMenuIds]) => {
+  ([visible]) => {
     if (!visible) {
       return
     }
-    nextTick(() => treeRef.value?.setCheckedKeys([...checkedMenuIds]))
+    nextTick(() => treeRef.value?.setCheckedKeys([...effectiveCheckedMenuIds.value]))
   },
   { immediate: true, deep: true },
 )
@@ -38,8 +42,21 @@ function closeDialog() {
 }
 
 function handleSubmit() {
-  const checkedKeys = (treeRef.value?.getCheckedKeys(false) || []) as number[]
+  const checkedKeys = autoGrantFullAccess.value
+    ? effectiveCheckedMenuIds.value
+    : ((treeRef.value?.getCheckedKeys(false) || []) as number[])
   emit('submit', checkedKeys)
+}
+
+function collectMenuIds(nodes: MenuTreeNode[]): number[] {
+  const ids: number[] = []
+  for (const node of nodes) {
+    ids.push(node.id)
+    if (node.children?.length) {
+      ids.push(...collectMenuIds(node.children))
+    }
+  }
+  return ids
 }
 </script>
 
@@ -49,6 +66,15 @@ function handleSubmit() {
       <el-alert :closable="false" show-icon type="info">
         当前角色：{{ role.roleName }}（{{ role.roleCode }}），当前已勾选 {{ checkedCount }} 个菜单节点。
       </el-alert>
+
+      <el-alert
+        v-if="autoGrantFullAccess"
+        class="role-tree-dialog__alert"
+        :closable="false"
+        show-icon
+        title="当前角色权限等级为 1 或 2，系统将默认授予全部菜单。"
+        type="warning"
+      />
 
       <div v-loading="initializing" class="role-tree-dialog__body">
         <el-tree
@@ -79,6 +105,10 @@ function handleSubmit() {
 </template>
 
 <style scoped lang="scss">
+.role-tree-dialog__alert {
+  margin-top: 12px;
+}
+
 .role-tree-dialog__body {
   min-height: 360px;
   margin-top: 16px;

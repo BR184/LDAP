@@ -30,5 +30,13 @@ public interface UserRoleMapper extends BaseMapper<UserRoleDO> {
         WHERE u.deleted = 0 AND r.status = 1
         """)
     List<UserRoleBindingRecord> selectUserRoleBindings();
+
+    @Select("""
+        SELECT COUNT(1)
+        FROM sys_user_role ur
+        INNER JOIN sys_user u ON ur.user_id = u.id
+        WHERE ur.role_id = #{roleId} AND u.deleted = 0
+        """)
+    long countActiveBindingsByRoleId(Long roleId);
 }
 

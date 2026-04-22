@@ -27,6 +27,7 @@ const form = reactive<RoleFormValue>(buildDefaultForm())
 
 const isCreate = computed(() => props.mode === 'create')
 const title = computed(() => (isCreate.value ? '新增角色' : '编辑角色'))
+const autoGrantFullAccess = computed(() => form.permissionLevel <= 2)
 
 const rules = computed<FormRules<RoleFormValue>>(() => ({
   roleCode: isCreate.value
@@ -117,6 +118,15 @@ function closeDrawer() {
         type="warning"
       />
     </template>
+
+    <el-alert
+      v-if="autoGrantFullAccess"
+      class="role-form-drawer__alert"
+      :closable="false"
+      show-icon
+      title="权限等级为 1 或 2 时，系统会在保存后自动授予全部菜单和接口权限。"
+      type="info"
+    />
 
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-form-item v-if="isCreate" label="角色编码" prop="roleCode">
