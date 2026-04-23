@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class FeishuDepartmentRemoteService {
 
+    private static final String ROOT_DEPARTMENT_ID = "0";
+
     private final FeishuOpenApiClient openApiClient;
     private final FeishuOpenApiProperties properties;
 
@@ -35,10 +37,13 @@ public class FeishuDepartmentRemoteService {
             if (pageToken != null && !pageToken.isBlank()) {
                 queryParameters.put("page_token", pageToken);
             }
-            JsonNode root = openApiClient.get("/open-apis/contact/v3/departments", queryParameters);
+            JsonNode root = openApiClient.get(
+                "/open-apis/contact/v3/departments/" + ROOT_DEPARTMENT_ID + "/children",
+                queryParameters
+            );
             JsonNode items = root.path("data").path("items");
             if (!items.isArray()) {
-                throw new BizException("FEISHU_DEPARTMENT_FETCH_FAILED", "飞书部门列表响应格式错误");
+                throw new BizException("FEISHU_DEPARTMENT_FETCH_FAILED", "飞书部门列表接口返回结构不符合预期");
             }
             for (JsonNode item : items) {
                 String externalId = firstNonBlank(item.path("open_department_id").asText(null), item.path("department_id").asText(null));

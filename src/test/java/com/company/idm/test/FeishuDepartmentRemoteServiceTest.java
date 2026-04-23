@@ -38,7 +38,7 @@ class FeishuDepartmentRemoteServiceTest {
     @Test
     void shouldFetchDepartmentsAcrossPagesAndOmitNullPageToken() throws Exception {
         FeishuDepartmentRemoteService service = new FeishuDepartmentRemoteService(openApiClient, buildProperties());
-        when(openApiClient.get(eq("/open-apis/contact/v3/departments"), anyMap()))
+        when(openApiClient.get(eq("/open-apis/contact/v3/departments/0/children"), anyMap()))
             .thenReturn(json("""
                 {
                   "code": 0,
@@ -86,7 +86,7 @@ class FeishuDepartmentRemoteServiceTest {
             assertThat(payload.departmentName()).isEqualTo("Platform Center");
         });
         ArgumentCaptor<Map<String, String>> queryCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(openApiClient, times(2)).get(eq("/open-apis/contact/v3/departments"), queryCaptor.capture());
+        verify(openApiClient, times(2)).get(eq("/open-apis/contact/v3/departments/0/children"), queryCaptor.capture());
         assertThat(queryCaptor.getAllValues().get(0))
             .containsEntry("department_id_type", "open_department_id")
             .containsEntry("page_size", "100")
@@ -98,7 +98,7 @@ class FeishuDepartmentRemoteServiceTest {
     @Test
     void shouldRejectWhenRequiredDepartmentFieldMissing() throws Exception {
         FeishuDepartmentRemoteService service = new FeishuDepartmentRemoteService(openApiClient, buildProperties());
-        when(openApiClient.get(eq("/open-apis/contact/v3/departments"), anyMap()))
+        when(openApiClient.get(eq("/open-apis/contact/v3/departments/0/children"), anyMap()))
             .thenReturn(json("""
                 {
                   "code": 0,

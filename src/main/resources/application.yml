@@ -72,10 +72,10 @@ app:
   sync:
     feishu:
       # 飞书开放平台接入配置。
-      enabled: ${APP_SYNC_FEISHU_ENABLED:false}
+      enabled: ${APP_SYNC_FEISHU_ENABLED:true}
       base-url: ${APP_SYNC_FEISHU_BASE_URL:https://open.feishu.cn}
-      app-id: ${APP_SYNC_FEISHU_APP_ID:}
-      app-secret: ${APP_SYNC_FEISHU_APP_SECRET:}
+      app-id: ${APP_SYNC_FEISHU_APP_ID:cli_a9545c78fea1dcba}
+      app-secret: ${APP_SYNC_FEISHU_APP_SECRET:WhvzwOhXoNKUVqRWKZnlzgT7GxitMXe7}
       page-size: ${APP_SYNC_FEISHU_PAGE_SIZE:50}
       connect-timeout-ms: ${APP_SYNC_FEISHU_CONNECT_TIMEOUT_MS:5000}
       read-timeout-ms: ${APP_SYNC_FEISHU_READ_TIMEOUT_MS:10000}
