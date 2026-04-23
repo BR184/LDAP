@@ -47,10 +47,10 @@ export const navigationItems: NavigationItem[] = [
     description: '维护后台导航与页面挂载关系',
   },
   {
-    title: '权限树',
-    path: '/permissions',
+    title: 'LDAP 控制面',
+    path: '/ldap',
     icon: Connection,
-    description: '查看后端 API 权限点结构',
+    description: '查看 LDAP 接入框架并执行联调预检',
   },
   {
     title: '同步任务',

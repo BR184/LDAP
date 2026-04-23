@@ -50,10 +50,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '菜单管理' },
       },
       {
-        path: 'permissions',
-        name: 'permissions',
-        component: () => import('@/views/permission/PermissionTreeView.vue'),
-        meta: { title: '权限树' },
+        path: 'ldap',
+        name: 'ldap',
+        component: () => import('@/views/ldap/LdapControlView.vue'),
+        meta: { title: 'LDAP 控制面' },
       },
       {
         path: 'sync/jobs',

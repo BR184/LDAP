@@ -7,7 +7,7 @@ spring:
     name: corp-idm-platform
   profiles:
     # 默认使用 local，便于本地快速启动原型环境。
-    default: local
+    default: dev
   flyway:
     # 数据库迁移脚本统一放在 classpath:db/migration。
     enabled: true

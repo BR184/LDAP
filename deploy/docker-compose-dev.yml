@@ -10,7 +10,7 @@ services:
       MYSQL_PASSWORD: corp_idm
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "3307:3306"
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_general_ci

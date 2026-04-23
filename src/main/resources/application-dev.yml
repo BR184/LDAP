@@ -4,7 +4,8 @@
 spring:
   datasource:
     # 开发环境允许提供默认值，减少首次联调成本。
-    url: ${APP_DB_URL:jdbc:mysql://127.0.0.1:3306/corp_idm?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    # 当前本机已验证可用的默认联调端口为 3307。
+    url: ${APP_DB_URL:jdbc:mysql://127.0.0.1:3307/corp_idm?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${APP_DB_USERNAME:corp_idm}
     password: ${APP_DB_PASSWORD:corp_idm}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -21,8 +22,9 @@ spring:
 app:
   ldap:
     # 开发环境切换到真实 LDAP 连接模式。
+    # 当前本机已验证可用的默认联调端口为 3389。
     mode: spring
-    url: ${APP_LDAP_URL:ldap://127.0.0.1:389}
+    url: ${APP_LDAP_URL:ldap://127.0.0.1:3389}
     bind-dn: ${APP_LDAP_BIND_DN:cn=admin,dc=corp,dc=local}
     bind-password: ${APP_LDAP_BIND_PASSWORD:admin}
   startup-check:
