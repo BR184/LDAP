@@ -19,4 +19,3 @@ public class IdmBootApplication {
         SpringApplication.run(IdmBootApplication.class, args);
     }
 }
-

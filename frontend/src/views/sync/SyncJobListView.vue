@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { notifyPlanned } from '@/utils/placeholder'
+import { computed } from 'vue'
+import { useMutation } from '@tanstack/vue-query'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { executeSyncReconcile, previewSyncReconcile } from '@/api/modules/sync'
+import type { SyncBatchDetail } from '@/types/sync'
 
 const rows = [
   {
@@ -18,11 +22,62 @@ const rows = [
   },
 ]
 
+const previewMutation = useMutation({
+  mutationFn: previewSyncReconcile,
+})
+
+const executeMutation = useMutation({
+  mutationFn: () => executeSyncReconcile(true),
+})
+
+const actionLoading = computed(() => previewMutation.isPending.value || executeMutation.isPending.value)
+
 function statusType(status: string) {
   if (status === 'SUCCESS') return 'success'
   if (status === 'RUNNING') return 'warning'
   if (status === 'FAIL') return 'danger'
   return 'info'
+}
+
+function buildSummary(detail: SyncBatchDetail) {
+  return [
+    `批次号：${detail.batch.batchNo}`,
+    `批次类型：${detail.batch.batchType}`,
+    `批次状态：${detail.batch.status}`,
+    `任务数量：${detail.jobs.length}`,
+    `差异数量：${detail.diffs.length}`,
+  ].join('\n')
+}
+
+async function handlePreview() {
+  const detail = await previewMutation.mutateAsync()
+  await ElMessageBox.alert(buildSummary(detail), '对账预览结果', {
+    type: 'info',
+    confirmButtonText: '知道了',
+  })
+}
+
+async function handleExecute() {
+  try {
+    await ElMessageBox.confirm(
+      '确认执行一次 LDAP 对账吗？当前将按默认策略启用自动修复可修复差异。',
+      '执行对账',
+      {
+        type: 'warning',
+        confirmButtonText: '确认执行',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch {
+    return
+  }
+
+  const detail = await executeMutation.mutateAsync()
+  ElMessage.success('对账执行完成')
+  await ElMessageBox.alert(buildSummary(detail), '对账执行结果', {
+    type: detail.batch.status === 'FAIL' ? 'error' : 'success',
+    confirmButtonText: '知道了',
+  })
 }
 </script>
 
@@ -30,8 +85,8 @@ function statusType(status: string) {
   <PageContainer title="同步任务" description="同步中心页用于查看任务执行、批次详情和对账结果，是后续飞书导入与 LDAP 对账的统一入口。">
     <template #extra>
       <el-space>
-        <el-button @click="notifyPlanned('对账预览')">对账预览</el-button>
-        <el-button type="primary" @click="notifyPlanned('执行对账')">执行对账</el-button>
+        <el-button :loading="actionLoading" @click="handlePreview">对账预览</el-button>
+        <el-button type="primary" :loading="actionLoading" @click="handleExecute">执行对账</el-button>
       </el-space>
     </template>
 
@@ -48,8 +103,8 @@ function statusType(status: string) {
         <el-table-column label="操作" min-width="220" fixed="right">
           <template #default="{ row }">
             <el-space wrap>
-              <el-button link type="primary" @click="notifyPlanned(`查看批次 ${row.batchNo}`)">批次详情</el-button>
-              <el-button link type="warning" @click="notifyPlanned(`重试任务 ${row.id}`)">任务重试</el-button>
+              <el-button link type="primary" disabled>批次详情</el-button>
+              <el-button link type="warning" disabled>任务重试</el-button>
             </el-space>
           </template>
         </el-table-column>

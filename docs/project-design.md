@@ -984,6 +984,27 @@ GitLab 等系统直接配置 LDAP 参数连接 OpenLDAP：
 - 新增数据库迁移 `V10__third_party_ldap_framework.sql`，将框架查询、模板查询和预检执行纳入 Casbin 权限体系，确保该能力默认只向管理员开放
 - 该阶段仍然坚持“平台不进入第三方系统运行时认证链路”的边界，接口只负责生成模板、输出标准和做接入前校验，不托管第三方系统自身配置
 
+当前真实联调已完成说明如下：
+
+- 已使用真实 `dev` 环境完成一轮 GitLab LDAP 联调，联调对象包括：
+  - GitLab：`corp-idm-gitlab-test`
+  - OpenLDAP：`corp-idm-realtest-openldap`
+  - MySQL：`corp-idm-realtest-mysql`
+- 已验证平台 `/api/v1/ldap/framework`、`/api/v1/ldap/templates/gitlab`、`/api/v1/ldap/precheck` 在真实 `spring` 模式下可用
+- 已验证 GitLab 容器内 `gitlab-rake gitlab:ldap:check` 成功
+- 已验证启用样本用户可登录 GitLab
+- 已验证禁用样本用户不可登录 GitLab
+- 已验证错误密码登录被拦截
+- 已验证不存在用户登录被拦截
+- 已验证 GitLab 本地 `root` 账号标准登录仍可用，可作为回滚入口
+- 已验证 LDAP 首登自动创建 GitLab 本地用户
+- 已验证禁用用户后，GitLab 新会话能够立即回到登录页，本轮联调未观察到明显缓存延迟问题
+- 已根据真实联调结果修正 GitLab 模板输出逻辑：
+  - 平台统一目录契约 `framework.userFilter` 继续保留标准表达
+  - GitLab 模板的 `user_filter` 调整为仅输出附加约束 `(&(objectClass=inetOrgPerson)(employeeType=ENABLED))`
+  - 明确 GitLab 会自动追加 `uid=%{username}`，后台 `user_filter` 不应重复填写 `uid={login}`
+- 已对本轮联调创建的测试账号完成项目系统、LDAP、GitLab 三侧清理，避免残留联调脏数据
+
 该通用接入框架的核心价值，不是新增一层认证系统，而是把“第三方系统直接接 LDAP”的能力标准化，确保不同系统在同一身份源下保持一致的登录字段、启用规则、联调流程和验收口径。
 
 ### 5.6 飞书数据集成设计（后续预留）
@@ -2157,6 +2178,25 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 - 明确第二期交付边界为“统一身份认证”，不是 SSO
 - 保证用户在第三方系统中使用同账号同密码，但仍需再次输入密码
 
+当前已完成的第三方 LDAP 接入项包括：
+
+- 已完成 GitLab 作为首个标准样板的真实 LDAP 联调
+- 已完成 GitLab 运行配置、平台 LDAP 控制面接口和真实 OpenLDAP 目录的端到端串联验证
+- 已完成启用用户、禁用用户、错误密码、不存在用户四类登录场景验证
+- 已完成 GitLab 首登自动建号验证
+- 已完成本地管理员回滚入口验证
+- 已完成 GitLab 专属 `user_filter` 配置修正并同步更新模板与联调文档
+- 已形成 GitLab 模板、联调操作单、预检清单、验收清单和回滚文档
+
+后续仍需推进的第三方 LDAP 接入项包括：
+
+- 将本次 GitLab 联调过程沉淀为标准化联调记录模板和脱敏配置归档模板
+- 视需要补充联调测试账号批量清理脚本或受控接口，降低多轮联调后的环境收口成本
+- 继续推进 Jenkins 真实 LDAP 联调
+- 继续推进 Nexus 真实 LDAP 联调
+- 继续推进禅道真实 LDAP 联调
+- 对每个第三方系统沉淀最终生效配置的脱敏快照、验收结论和回滚记录
+
 8. 前端 Web 页面补充
 
 - 登录页
@@ -2207,6 +2247,8 @@ MySQL 与 LDAP 对账补偿建议采用“**MySQL 为主数据源，LDAP 为目�
 其中，一期优先完成用户管理与角色权限管理，并同步补充部门树、部门 CRUD 与 LDAP group 映射等组织架构基础能力，通过 Spring LDAP、Spring Security、JWT、Casbin、MyBatis-Plus 建立统一身份底座。
 
 第二期重点是把系统切换到真实生产形态，并围绕“统一身份认证”完成飞书导入、MySQL 与 LDAP 夜间对账、预留接口实现和 GitLab 等第三方系统真实 LDAP 接入。这里的统一账号平台含义是“同账号、同密码、同身份源”，而不是 SSO 免密跳转。
+
+其中，GitLab 真实 LDAP 接入已经作为首个标准样板完成联调并验证通过，后续第三方系统接入应复用本次沉淀的模板、预检、验收与回滚方法，继续向 Jenkins、Nexus、禅道等系统推广。
 
 第三期再逐步扩展 API 网关、消息管理、流程中心、调度引擎和插件管理等平台级模块，而无需推翻前两期的整体架构。
 
