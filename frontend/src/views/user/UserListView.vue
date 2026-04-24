@@ -21,7 +21,7 @@ import { fetchDepartmentTree } from '@/api/modules/department'
 import UserDetailDrawer from '@/views/user/components/UserDetailDrawer.vue'
 import UserFormDrawer from '@/views/user/components/UserFormDrawer.vue'
 import UserRoleDrawer from '@/views/user/components/UserRoleDrawer.vue'
-import type { DepartmentTreeOption } from '@/types/department'
+import type { DepartmentTreeNode, DepartmentTreeOption } from '@/types/department'
 import type { CreateUserPayload, UpdateUserPayload, UserItem, UserListQuery } from '@/types/user'
 
 const queryClient = useQueryClient()
@@ -166,12 +166,12 @@ const importFeishuMutation = useMutation({
     importUsersFromFeishuFile(documentPath, remark),
 })
 
-function buildDepartmentOptions(options: { deptCode: string; deptName: string; status: number; children: unknown[] }[]): DepartmentTreeOption[] {
-  return options.map((item) => ({
+function buildDepartmentOptions(nodes: DepartmentTreeNode[]): DepartmentTreeOption[] {
+  return nodes.map((item) => ({
     value: item.deptCode,
     label: `${item.deptName} (${item.deptCode})`,
     disabled: item.status !== 1,
-    children: buildDepartmentOptions(item.children as never[]),
+    children: buildDepartmentOptions(item.children || []),
   }))
 }
 
@@ -262,11 +262,15 @@ async function handleToggleStatus(user: UserItem) {
   const targetText = nextStatus === 1 ? '启用' : '禁用'
 
   try {
-    await ElMessageBox.confirm(`确认${targetText}用户 ${user.realName}（${user.username}）吗？`, `${targetText}用户`, {
-      type: 'warning',
-      confirmButtonText: '确认',
-      cancelButtonText: '取消',
-    })
+    await ElMessageBox.confirm(
+      `确认${targetText}用户 ${user.realName}（${user.username}）吗？`,
+      `${targetText}用户`,
+      {
+        type: 'warning',
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+      },
+    )
 
     await updateStatusMutation.mutateAsync({
       userId: user.id,
@@ -298,7 +302,7 @@ async function handleDelete(user: UserItem) {
 async function handleResetPassword(user: UserItem) {
   try {
     await ElMessageBox.confirm(
-      `确认将用户 ${user.realName}（${user.username}）的密码重置为系统默认密码吗？`,
+      `确认为用户 ${user.realName}（${user.username}）将密码重置为默认密码 123456 吗？`,
       '重置密码',
       {
         type: 'warning',
@@ -307,16 +311,8 @@ async function handleResetPassword(user: UserItem) {
       },
     )
 
-    const result = await resetPasswordMutation.mutateAsync(user.id)
-
-    await ElMessageBox.alert(
-      `用户 ${user.username} 的新密码为：${result.resetPassword}`,
-      '密码重置成功',
-      {
-        type: 'success',
-        confirmButtonText: '我已知晓',
-      },
-    )
+    await resetPasswordMutation.mutateAsync(user.id)
+    ElMessage.success(`用户 ${user.username} 的密码已重置为 123456`)
   } catch {
     // 用户取消操作时不做额外处理。
   }

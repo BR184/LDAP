@@ -2,6 +2,7 @@ package com.company.idm.test;
 
 import com.company.idm.application.auth.AuthApplicationService;
 import com.company.idm.application.auth.LoginResult;
+import com.company.idm.application.user.PasswordResetApplicationService;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.UserStatus;
 import com.company.idm.domain.user.User;
@@ -32,6 +33,9 @@ class AuthControllerTest extends AbstractControllerMvcTest {
     @MockBean
     private AuthApplicationService authApplicationService;
 
+    @MockBean
+    private PasswordResetApplicationService passwordResetApplicationService;
+
     @Test
     void shouldLoginSuccessfully() throws Exception {
         when(authApplicationService.login(argThat(command ->
@@ -57,6 +61,22 @@ class AuthControllerTest extends AbstractControllerMvcTest {
             .andExpect(jsonPath("$.data.userId").value(1))
             .andExpect(jsonPath("$.data.username").value("admin"))
             .andExpect(jsonPath("$.data.accessToken").value("token-value"));
+    }
+
+    @Test
+    void shouldAcceptForgotPasswordRequestAnonymously() throws Exception {
+        when(passwordResetApplicationService.forgotPasswordSuccessNotice()).thenReturn("如账号信息有效，系统已发送重置邮件，请注意查收");
+
+        mockMvc.perform(post("/api/v1/auth/password/forgot")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "zhangsan"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data").value("如账号信息有效，系统已发送重置邮件，请注意查收"));
     }
 
     @Test

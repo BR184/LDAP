@@ -40,10 +40,6 @@ export interface AssignUserRolesPayload {
   roleIds: number[]
 }
 
-export interface ResetPasswordResult {
-  resetPassword: string
-}
-
 export interface ChangePasswordPayload {
   oldPassword: string
   newPassword: string

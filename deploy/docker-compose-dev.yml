@@ -33,7 +33,56 @@ services:
       - openldap-config:/etc/ldap/slapd.d
       - ./openldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
 
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    container_name: corp-idm-gitlab-test
+    hostname: corp-idm-gitlab-test
+    restart: unless-stopped
+    shm_size: "256m"
+    environment:
+      TZ: Asia/Shanghai
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://127.0.0.1:8929'
+        nginx['listen_port'] = 8929
+        gitlab_rails['gitlab_shell_ssh_port'] = 2224
+        letsencrypt['enable'] = false
+        gitlab_rails['ldap_enabled'] = true
+        gitlab_rails['prevent_ldap_sign_in'] = false
+        gitlab_rails['ldap_servers'] = {
+          'main' => {
+            'label' => 'Corp LDAP',
+            'host' => 'host.docker.internal',
+            'port' => 3389,
+            'uid' => 'uid',
+            'bind_dn' => 'cn=admin,dc=corp,dc=local',
+            'password' => 'admin',
+            'encryption' => 'plain',
+            'verify_certificates' => false,
+            'timeout' => 10,
+            'active_directory' => false,
+            'allow_username_or_email_login' => false,
+            'block_auto_created_users' => false,
+            'base' => 'ou=people,dc=corp,dc=local',
+            'user_filter' => '(&(objectClass=inetOrgPerson)(employeeType=ENABLED))',
+            'attributes' => {
+              'username' => ['uid'],
+              'email' => ['mail'],
+              'name' => 'cn'
+            }
+          }
+        }
+    ports:
+      - "8929:8929"
+      - "2224:22"
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+
 volumes:
   mysql-data:
   openldap-data:
   openldap-config:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:

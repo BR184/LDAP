@@ -29,7 +29,14 @@ public class ControllerTestSecurityConfig {
                 .accessDeniedHandler(restAccessDeniedHandler)
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/v1/auth/login", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health")
+                .requestMatchers(
+                    "/api/v1/auth/login",
+                    "/api/v1/auth/password/forgot",
+                    "/v3/api-docs/**",
+                    "/swagger-ui/**",
+                    "/swagger-ui.html",
+                    "/actuator/health"
+                )
                 .permitAll()
                 .anyRequest()
                 .authenticated()

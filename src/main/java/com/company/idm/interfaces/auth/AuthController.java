@@ -3,8 +3,11 @@ package com.company.idm.interfaces.auth;
 import com.company.idm.application.auth.AuthApplicationService;
 import com.company.idm.application.auth.LoginCommand;
 import com.company.idm.application.auth.LoginResult;
+import com.company.idm.application.user.ForgotPasswordCommand;
+import com.company.idm.application.user.PasswordResetApplicationService;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.domain.user.User;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthApplicationService authApplicationService;
+    private final PasswordResetApplicationService passwordResetApplicationService;
 
     @PostMapping("/login")
     public ApiResponse<AuthLoginResponse> login(@Valid @RequestBody AuthLoginRequest request) {
@@ -35,6 +39,18 @@ public class AuthController {
             result.accessToken(),
             result.expiresAt()
         ));
+    }
+
+    @PostMapping("/password/forgot")
+    public ApiResponse<String> forgotPassword(
+        @Valid @RequestBody ForgotPasswordRequest request,
+        HttpServletRequest httpServletRequest
+    ) {
+        passwordResetApplicationService.forgotPassword(new ForgotPasswordCommand(
+            request.username(),
+            resolveClientIp(httpServletRequest)
+        ));
+        return ApiResponse.success(passwordResetApplicationService.forgotPasswordSuccessNotice());
     }
 
     @GetMapping("/me")
@@ -50,5 +66,15 @@ public class AuthController {
             user.getDeptCode(),
             user.getRoleCodes()
         ));
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            int delimiterIndex = forwardedFor.indexOf(',');
+            return delimiterIndex >= 0 ? forwardedFor.substring(0, delimiterIndex).trim() : forwardedFor.trim();
+        }
+        String remoteAddr = request.getRemoteAddr();
+        return remoteAddr == null || remoteAddr.isBlank() ? "UNKNOWN" : remoteAddr;
     }
 }

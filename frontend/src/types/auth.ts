@@ -3,6 +3,10 @@ export interface LoginCommand {
   password: string
 }
 
+export interface ForgotPasswordPayload {
+  username: string
+}
+
 export interface LoginResult {
   userId: number
   username: string

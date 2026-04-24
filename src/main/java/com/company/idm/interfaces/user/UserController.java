@@ -3,7 +3,8 @@ package com.company.idm.interfaces.user;
 import com.company.idm.application.user.ChangePasswordCommand;
 import com.company.idm.application.user.CreateUserCommand;
 import com.company.idm.application.user.DeleteUserCommand;
-import com.company.idm.application.user.ResetPasswordCommand;
+import com.company.idm.application.user.AdminResetPasswordCommand;
+import com.company.idm.application.user.PasswordResetApplicationService;
 import com.company.idm.application.user.UpdateUserCommand;
 import com.company.idm.application.user.UpdateUserStatusCommand;
 import com.company.idm.application.user.UserApplicationService;
@@ -44,6 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserApplicationService userApplicationService;
+    private final PasswordResetApplicationService passwordResetApplicationService;
     private final RbacApplicationService rbacApplicationService;
     private final SyncApplicationService syncApplicationService;
     private final SyncResponseAssembler syncResponseAssembler;
@@ -143,12 +145,12 @@ public class UserController {
 
     @PutMapping("/{id}/password/reset")
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/password/reset', 'PUT')")
-    public ApiResponse<ResetPasswordResponse> resetPassword(
+    public ApiResponse<Void> resetPassword(
         @PathVariable Long id,
         @AuthenticationPrincipal(expression = "username") String username
     ) {
-        String resetPassword = userApplicationService.resetPassword(new ResetPasswordCommand(id, username));
-        return ApiResponse.success(new ResetPasswordResponse(resetPassword));
+        passwordResetApplicationService.adminResetPassword(new AdminResetPasswordCommand(id, username));
+        return ApiResponse.success();
     }
 
     @PutMapping("/{id}/roles")

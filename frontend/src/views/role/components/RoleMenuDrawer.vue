@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { TreeInstance } from 'element-plus'
 import type { MenuTreeNode } from '@/types/menu'
 import type { RoleItem } from '@/types/role'
+import { normalizeMenuTreeForDisplay } from '@/utils/menu-tree'
 
 const props = defineProps<{
   modelValue: boolean
@@ -20,14 +21,16 @@ const emit = defineEmits<{
 
 const treeRef = ref<TreeInstance>()
 
+const displayMenuTree = computed(() => normalizeMenuTreeForDisplay(props.menuTree))
+
 const autoGrantFullAccess = computed(() => (props.role?.permissionLevel || Number.MAX_SAFE_INTEGER) <= 2)
 const effectiveCheckedMenuIds = computed(() =>
-  autoGrantFullAccess.value ? collectMenuIds(props.menuTree) : props.checkedMenuIds,
+  autoGrantFullAccess.value ? collectMenuIds(displayMenuTree.value) : props.checkedMenuIds,
 )
 const checkedCount = computed(() => effectiveCheckedMenuIds.value.length)
 
 watch(
-  () => [props.modelValue, props.checkedMenuIds, props.menuTree] as const,
+  () => [props.modelValue, props.checkedMenuIds, displayMenuTree.value] as const,
   ([visible]) => {
     if (!visible) {
       return
@@ -79,7 +82,7 @@ function collectMenuIds(nodes: MenuTreeNode[]): number[] {
       <div v-loading="initializing" class="role-tree-dialog__body">
         <el-tree
           ref="treeRef"
-          :data="menuTree"
+          :data="displayMenuTree"
           :check-strictly="true"
           default-expand-all
           node-key="id"

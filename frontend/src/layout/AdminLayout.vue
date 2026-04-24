@@ -120,7 +120,7 @@ function handleMenuSelect(index: string) {
 
         <div class="admin-layout__header-right">
           <el-button text @click="router.push('/profile')">
-            {{ authStore.displayName }}
+            个人中心
           </el-button>
           <el-button circle text @click="handleLogout">
             <el-icon><SwitchButton /></el-icon>

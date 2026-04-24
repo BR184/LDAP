@@ -7,7 +7,8 @@ import com.company.idm.application.sync.SyncBatchDetail;
 import com.company.idm.application.user.ChangePasswordCommand;
 import com.company.idm.application.user.CreateUserCommand;
 import com.company.idm.application.user.DeleteUserCommand;
-import com.company.idm.application.user.ResetPasswordCommand;
+import com.company.idm.application.user.AdminResetPasswordCommand;
+import com.company.idm.application.user.PasswordResetApplicationService;
 import com.company.idm.application.user.UpdateUserCommand;
 import com.company.idm.application.user.UpdateUserStatusCommand;
 import com.company.idm.application.user.UserApplicationService;
@@ -54,6 +55,9 @@ class UserControllerTest extends AbstractControllerMvcTest {
 
     @MockBean
     private UserApplicationService userApplicationService;
+
+    @MockBean
+    private PasswordResetApplicationService passwordResetApplicationService;
 
     @MockBean
     private RbacApplicationService rbacApplicationService;
@@ -283,13 +287,14 @@ class UserControllerTest extends AbstractControllerMvcTest {
     @WithMockUser(username = "admin")
     void shouldResetPasswordSuccessfully() throws Exception {
         allow("/api/v1/users/2/password/reset", "PUT");
-        when(userApplicationService.resetPassword(argThat((ResetPasswordCommand command) ->
+        org.mockito.Mockito.doNothing().when(passwordResetApplicationService).adminResetPassword(argThat((AdminResetPasswordCommand command) ->
             command.userId().equals(2L) && "admin".equals(command.operator())
-        ))).thenReturn("123456");
+        ));
 
         mockMvc.perform(put("/api/v1/users/{id}/password/reset", 2L))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.resetPassword").value("123456"));
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data").doesNotExist());
     }
 
     @Test

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { Lock, User } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
+import { forgotPassword } from '@/api/modules/auth'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -10,6 +11,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(false)
+const forgotPasswordLoading = ref(false)
 const loginFormRef = ref()
 const form = reactive({
   username: 'admin',
@@ -46,22 +48,43 @@ async function handleSubmit() {
     loading.value = false
   }
 }
+
+async function handleForgotPassword() {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '请输入需要重置密码的用户名，系统会将新密码发送到绑定邮箱。',
+      '忘记密码',
+      {
+        confirmButtonText: '发送邮件',
+        cancelButtonText: '取消',
+        inputPlaceholder: '请输入用户名',
+        inputValidator: (inputValue) => (inputValue && inputValue.trim() ? true : '请输入用户名'),
+      },
+    )
+
+    forgotPasswordLoading.value = true
+    const notice = await forgotPassword({
+      username: value.trim(),
+    })
+    ElMessage.success(notice || '如账号信息有效，系统已发送重置邮件，请注意查收')
+  } catch {
+    // 用户取消时不做额外处理
+  } finally {
+    forgotPasswordLoading.value = false
+  }
+}
 </script>
 
 <template>
   <div class="login-view">
     <div class="login-view__hero">
-      <div class="login-view__hero-badge">企业后台 / Vue 3 / Element Plus</div>
-      <h1>统一身份平台管理台</h1>
-      <p>
-        面向用户、部门、角色、菜单、同步任务和 LDAP 接入控制面的统一后台骨架。
-      </p>
-
-      <ul class="login-view__feature-list">
-        <li>统一认证与 JWT 登录态管理</li>
-        <li>标准化列表页、树页和关系配置页</li>
-        <li>与现有后端接口直接对齐，便于逐页接入</li>
-      </ul>
+      <img class="login-view__hero-logo" src="/login-logo.png" alt="统一身份管理平台 Logo" />
+      <div class="login-view__hero-copy">
+        <h1>统一身份管理平台</h1>
+      </div>
+      <div class="login-view__hero-illustration-wrap">
+        <img class="login-view__hero-illustration" src="/login-hero.png" alt="统一身份管理平台品牌视觉" />
+      </div>
     </div>
 
     <el-card class="login-view__card" shadow="never">
@@ -90,6 +113,11 @@ async function handleSubmit() {
         <el-button class="login-view__submit" type="primary" :loading="loading" @click="handleSubmit">
           登录管理台
         </el-button>
+        <div class="login-view__assist">
+          <el-button link type="primary" :loading="forgotPasswordLoading" @click="handleForgotPassword">
+            忘记密码
+          </el-button>
+        </div>
       </el-form>
     </el-card>
   </div>
@@ -109,54 +137,43 @@ async function handleSubmit() {
     linear-gradient(135deg, #eef3ff 0%, #f7f9fd 42%, #ffffff 100%);
 }
 
-.login-view__hero-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: rgba(22, 119, 255, 0.1);
-  color: var(--idm-primary);
-  font-size: 13px;
-  font-weight: 600;
+.login-view__hero {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 96px);
+}
+
+.login-view__hero-logo {
+  width: 190px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.login-view__hero-copy {
+  margin-top: 64px;
 }
 
 .login-view__hero h1 {
-  margin: 20px 0 16px;
-  font-size: 42px;
+  margin: 0;
+  color: var(--idm-text-primary);
+  font-size: 56px;
   line-height: 1.1;
 }
 
-.login-view__hero p {
-  max-width: 560px;
-  margin: 0;
-  color: var(--idm-text-secondary);
-  font-size: 16px;
-  line-height: 1.8;
+.login-view__hero-illustration-wrap {
+  display: flex;
+  align-items: flex-end;
+  flex: 1;
+  min-height: 0;
+  padding-top: 20px;
+  margin-left: -72px;
+  margin-bottom: -48px;
 }
 
-.login-view__feature-list {
-  display: grid;
-  gap: 12px;
-  padding: 0;
-  margin: 32px 0 0;
-  list-style: none;
-}
-
-.login-view__feature-list li {
-  position: relative;
-  padding-left: 18px;
-  color: var(--idm-text-primary);
-}
-
-.login-view__feature-list li::before {
-  content: '';
-  position: absolute;
-  top: 10px;
-  left: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--idm-primary), var(--idm-accent));
+.login-view__hero-illustration {
+  width: min(960px, 150%);
+  object-fit: contain;
+  object-position: left bottom;
 }
 
 .login-view__card {
@@ -180,5 +197,11 @@ async function handleSubmit() {
 .login-view__submit {
   width: 100%;
   margin-top: 8px;
+}
+
+.login-view__assist {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 </style>

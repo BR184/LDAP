@@ -69,6 +69,13 @@ app:
     verify-placeholder-user: true
     placeholder-uid: placeholder
     db-validation-timeout-seconds: 2
+  password-reset:
+    mail-subject: ${APP_PASSWORD_RESET_MAIL_SUBJECT:统一身份管理平台密码重置通知}
+    mail-from: ${APP_PASSWORD_RESET_MAIL_FROM:}
+    forgot-password-success-notice: ${APP_PASSWORD_RESET_FORGOT_NOTICE:如账号信息有效，系统已发送重置邮件，请注意查收}
+    username-cooldown-seconds: ${APP_PASSWORD_RESET_USERNAME_COOLDOWN_SECONDS:300}
+    ip-window-seconds: ${APP_PASSWORD_RESET_IP_WINDOW_SECONDS:300}
+    ip-max-attempts: ${APP_PASSWORD_RESET_IP_MAX_ATTEMPTS:10}
   sync:
     feishu:
       # 飞书开放平台接入配置。

@@ -12,6 +12,7 @@ import {
 } from '@/api/modules/menu'
 import MenuFormDrawer from '@/views/menu/components/MenuFormDrawer.vue'
 import type { CreateMenuPayload, MenuItem, MenuTreeNode, MenuTreeOption, UpdateMenuPayload } from '@/types/menu'
+import { normalizeMenuTreeForDisplay } from '@/utils/menu-tree'
 
 const queryClient = useQueryClient()
 
@@ -57,7 +58,7 @@ const deleteMenuMutation = useMutation({
   },
 })
 
-const menuTree = computed(() => menuTreeQuery.data.value || [])
+const menuTree = computed(() => normalizeMenuTreeForDisplay(menuTreeQuery.data.value || []))
 const menuOptions = computed<MenuTreeOption[]>(() => buildMenuOptions(menuTree.value))
 
 function buildMenuOptions(nodes: MenuTreeNode[]): MenuTreeOption[] {
@@ -73,6 +74,13 @@ function buildMenuOptions(nodes: MenuTreeNode[]): MenuTreeOption[] {
       children: buildMenuOptions(node.children || []).filter((item) => item.value !== 0),
     })),
   ]
+}
+
+function displayMenuName(menu: Pick<MenuTreeNode, 'menuCode' | 'menuName'> | Pick<MenuItem, 'menuCode' | 'menuName'>) {
+  if (menu.menuCode === 'GROUP_MANAGEMENT') {
+    return '部门管理'
+  }
+  return menu.menuName
 }
 
 async function refreshMenus() {
@@ -189,7 +197,7 @@ function canCreateChild(menu: MenuItem | null) {
         >
           <template #default="{ data }">
             <div class="menu-tree-node">
-              <strong>{{ data.menuName }}</strong>
+              <strong>{{ displayMenuName(data) }}</strong>
               <span>{{ data.menuCode }}</span>
             </div>
           </template>
@@ -224,7 +232,7 @@ function canCreateChild(menu: MenuItem | null) {
           <template v-if="currentMenu">
             <el-descriptions :column="2" border>
               <el-descriptions-item label="菜单编码">{{ currentMenu.menuCode }}</el-descriptions-item>
-              <el-descriptions-item label="菜单名称">{{ currentMenu.menuName }}</el-descriptions-item>
+              <el-descriptions-item label="菜单名称">{{ displayMenuName(currentMenu) }}</el-descriptions-item>
               <el-descriptions-item label="菜单类型">{{ menuTypeText(currentMenu.menuType) }}</el-descriptions-item>
               <el-descriptions-item label="父菜单 ID">
                 {{ currentMenu.parentId === 0 ? '根菜单' : currentMenu.parentId }}

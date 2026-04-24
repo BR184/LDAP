@@ -4,7 +4,6 @@ import type {
   AssignUserRolesPayload,
   ChangePasswordPayload,
   CreateUserPayload,
-  ResetPasswordResult,
   UpdateUserPayload,
   UserItem,
   UserListQuery,
@@ -35,7 +34,7 @@ export function deleteUser(userId: number) {
 }
 
 export function resetUserPassword(userId: number) {
-  return request.put<never, ResetPasswordResult>(`/v1/users/${userId}/password/reset`)
+  return request.put<never, void>(`/v1/users/${userId}/password/reset`)
 }
 
 export function changeMyPassword(payload: ChangePasswordPayload) {

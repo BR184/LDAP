@@ -254,6 +254,37 @@ java -jar corp-idm-platform.jar
 - [ ] LDAP 中占位用户存在
 - [ ] bind 账号具备最小必要权限
 
+## 8.1 推荐部署步骤
+
+建议按以下步骤执行正式部署：
+
+1. 准备依赖环境
+   - 确认 MySQL 可访问
+   - 确认 OpenLDAP 可访问
+2. 生成应用包
+   - 使用 Maven 生成最新可执行 jar
+3. 注入生产环境变量
+   - 数据库
+   - LDAP
+   - JWT
+   - 飞书（如启用）
+4. 显式启用 `prod`
+5. 启动应用并观察日志
+6. 访问健康检查并验证基础接口
+7. 确认默认管理员与关键第三方认证入口可用
+
+建议构建命令：
+
+```powershell
+.tools\apache-maven-3.9.6\bin\mvn.cmd clean package -DskipTests
+```
+
+建议启动命令：
+
+```powershell
+java -jar target\corp-idm-platform-0.1.0-SNAPSHOT.jar --spring.profiles.active=prod
+```
+
 ## 9. 启动后验证项
 
 应用启动成功后建议确认：
@@ -264,6 +295,27 @@ java -jar corp-idm-platform.jar
 - [ ] 认证接口可正常工作
 - [ ] 关键后端接口可正常访问
 - [ ] 日志中未输出敏感参数明文
+
+补充建议验证项：
+
+- [ ] `GET /api/v1/ldap/framework` 可正常返回
+- [ ] `POST /api/v1/ldap/precheck` 可正常执行
+- [ ] 最近一次同步任务列表可正常查询
+- [ ] GitLab 等已接入系统认证链路可用
+
+## 9.1 最小运维手册要点
+
+正式交付时建议至少准备以下运维信息：
+
+- 服务启动命令
+- 服务停止命令
+- jar 包位置
+- 日志查看方式
+- 健康检查地址
+- 常见环境变量对照表
+- 同步任务排障入口
+- LDAP 控制面预检入口
+- 第三方系统 LDAP 回滚入口
 
 ## 10. 与当前代码配置的对应关系
 
