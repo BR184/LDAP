@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { fetchCurrentUserMenuTree } from '@/api/modules/menu'
-import { navigationItems } from '@/constants/navigation'
+import { flatNavigationItems } from '@/constants/navigation'
 import type { MenuTreeNode } from '@/types/menu'
 
 const ALWAYS_ALLOWED_PATHS = new Set(['/dashboard', '/profile'])
@@ -15,7 +15,7 @@ export const useMenuStore = defineStore('menu', () => {
 
   const allowedPathSet = computed(() => {
     if (adminOverride.value) {
-      return new Set<string>(navigationItems.map((item) => item.path).concat([...ALWAYS_ALLOWED_PATHS]))
+      return new Set<string>(flatNavigationItems.map((item) => item.path).concat([...ALWAYS_ALLOWED_PATHS]))
     }
 
     const paths = new Set<string>(ALWAYS_ALLOWED_PATHS)
@@ -25,8 +25,8 @@ export const useMenuStore = defineStore('menu', () => {
 
   const visibleNavigation = computed(() =>
     adminOverride.value
-      ? navigationItems
-      : navigationItems.filter((item) => allowedPathSet.value.has(item.path) || item.path === '/dashboard'),
+      ? flatNavigationItems
+      : flatNavigationItems.filter((item) => allowedPathSet.value.has(item.path) || item.path === '/dashboard'),
   )
 
   async function loadMenus(force = false) {

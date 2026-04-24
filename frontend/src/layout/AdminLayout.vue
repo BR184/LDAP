@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Fold, Expand, SwitchButton } from '@element-plus/icons-vue'
+import { DataBoard, Fold, Expand, SwitchButton } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useMenuStore } from '@/stores/menu'
+import { sidebarNavigationGroups } from '@/constants/navigation'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +18,15 @@ const activeMenu = computed(() => {
   const match = menuStore.visibleNavigation.find((item) => route.path.startsWith(item.path))
   return match?.path || '/dashboard'
 })
+
+const visibleSidebarGroups = computed(() =>
+  sidebarNavigationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => menuStore.visibleNavigation.some((visible) => visible.path === item.path)),
+    }))
+    .filter((group) => group.items.length > 0),
+)
 
 const breadcrumbs = computed(() =>
   route.matched
@@ -68,10 +78,26 @@ function handleMenuSelect(index: string) {
           :default-active="activeMenu"
           @select="handleMenuSelect"
         >
-          <el-menu-item v-for="item in menuStore.visibleNavigation" :key="item.path" :index="item.path">
-            <el-icon><component :is="item.icon" /></el-icon>
-            <template #title>{{ item.title }}</template>
+          <el-menu-item index="/dashboard">
+            <el-icon><DataBoard /></el-icon>
+            <template #title>首页</template>
           </el-menu-item>
+
+          <el-sub-menu
+            v-for="group in visibleSidebarGroups"
+            :key="group.title"
+            :index="group.title"
+          >
+            <template #title>
+              <el-icon><component :is="group.icon" /></el-icon>
+              <span>{{ group.title }}</span>
+            </template>
+
+            <el-menu-item v-for="item in group.items" :key="item.path" :index="item.path">
+              <el-icon><component :is="item.icon" /></el-icon>
+              <template #title>{{ item.title }}</template>
+            </el-menu-item>
+          </el-sub-menu>
         </el-menu>
       </el-scrollbar>
     </el-aside>

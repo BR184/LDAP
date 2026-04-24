@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { navigationItems } from '@/constants/navigation'
+import { flatNavigationItems } from '@/constants/navigation'
 
 const router = useRouter()
 </script>
@@ -17,7 +17,7 @@ const router = useRouter()
 
       <div class="dashboard-shortcuts">
         <button
-          v-for="item in navigationItems"
+          v-for="item in flatNavigationItems"
           :key="item.path"
           class="dashboard-shortcuts__item"
           type="button"

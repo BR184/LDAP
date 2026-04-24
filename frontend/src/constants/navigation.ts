@@ -1,10 +1,12 @@
 import {
   Connection,
   DataBoard,
+  FolderOpened,
   Lock,
   Menu as MenuIcon,
   OfficeBuilding,
   RefreshRight,
+  Setting,
   User,
 } from '@element-plus/icons-vue'
 
@@ -15,7 +17,13 @@ export interface NavigationItem {
   description: string
 }
 
-export const navigationItems: NavigationItem[] = [
+export interface NavigationGroup {
+  title: string
+  icon: object
+  items: NavigationItem[]
+}
+
+export const flatNavigationItems: NavigationItem[] = [
   {
     title: '首页',
     path: '/dashboard',
@@ -57,5 +65,62 @@ export const navigationItems: NavigationItem[] = [
     path: '/sync/jobs',
     icon: RefreshRight,
     description: '查看同步任务、批次与执行状态',
+  },
+]
+
+export const sidebarNavigationGroups: NavigationGroup[] = [
+  {
+    title: '人员管理',
+    icon: User,
+    items: [
+      {
+        title: '用户管理',
+        path: '/users',
+        icon: User,
+        description: '管理用户、角色分配与状态',
+      },
+      {
+        title: '部门管理',
+        path: '/departments',
+        icon: OfficeBuilding,
+        description: '维护部门树与 LDAP 分组映射',
+      },
+    ],
+  },
+  {
+    title: '系统管理',
+    icon: Setting,
+    items: [
+      {
+        title: '菜单管理',
+        path: '/menus',
+        icon: MenuIcon,
+        description: '维护后台导航与页面挂载关系',
+      },
+      {
+        title: '角色管理',
+        path: '/roles',
+        icon: Lock,
+        description: '维护角色、菜单与权限绑定',
+      },
+      {
+        title: 'LDAP 控制面',
+        path: '/ldap',
+        icon: Connection,
+        description: '查看 LDAP 接入框架并执行联调预检',
+      },
+    ],
+  },
+  {
+    title: '日志管理',
+    icon: FolderOpened,
+    items: [
+      {
+        title: '同步任务',
+        path: '/sync/jobs',
+        icon: RefreshRight,
+        description: '查看同步任务、批次与执行状态',
+      },
+    ],
   },
 ]
