@@ -56,6 +56,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'LDAP 控制面' },
       },
       {
+        path: 'system/imports',
+        name: 'system-imports',
+        component: () => import('@/views/system/SystemImportView.vue'),
+        meta: { title: '文件导入' },
+      },
+      {
         path: 'sync/jobs',
         name: 'sync-jobs',
         component: () => import('@/views/sync/SyncJobListView.vue'),

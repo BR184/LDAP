@@ -1,16 +1,13 @@
-# dev 环境：
-# 1. 用于开发联调
-# 2. 已切换到真实 MySQL + OpenLDAP
+server:
+  port: ${APP_SERVER_PORT:8081}
+
 spring:
   datasource:
-    # 开发环境允许提供默认值，减少首次联调成本。
-    # 当前本机已验证可用的默认联调端口为 3307。
     url: ${APP_DB_URL:jdbc:mysql://127.0.0.1:3307/corp_idm?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${APP_DB_USERNAME:corp_idm}
     password: ${APP_DB_PASSWORD:corp_idm}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      # 开发环境连接池规模适中，兼顾资源占用与联调并发。
       maximum-pool-size: ${APP_DB_MAX_POOL_SIZE:15}
       minimum-idle: ${APP_DB_MIN_IDLE:5}
       connection-timeout: ${APP_DB_CONNECTION_TIMEOUT_MS:30000}
@@ -21,19 +18,15 @@ spring:
 
 app:
   ldap:
-    # 开发环境切换到真实 LDAP 连接模式。
-    # 当前本机已验证可用的默认联调端口为 3389。
     mode: spring
     url: ${APP_LDAP_URL:ldap://127.0.0.1:3389}
     bind-dn: ${APP_LDAP_BIND_DN:cn=admin,dc=corp,dc=local}
     bind-password: ${APP_LDAP_BIND_PASSWORD:admin}
   startup-check:
-    # 开发联调时开启启动校验，尽早暴露 DB / LDAP 配置问题。
     enabled: true
 
 springdoc:
   api-docs:
-    # 开发环境保留 Swagger，便于联调验证接口。
     enabled: true
   swagger-ui:
     enabled: true

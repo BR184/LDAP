@@ -34,7 +34,7 @@ export const flatNavigationItems: NavigationItem[] = [
     title: '用户管理',
     path: '/users',
     icon: User,
-    description: '管理用户、角色分配与状态',
+    description: '管理用户、角色分配与状态维护',
   },
   {
     title: '部门管理',
@@ -61,6 +61,12 @@ export const flatNavigationItems: NavigationItem[] = [
     description: '查看 LDAP 接入框架并执行联调预检',
   },
   {
+    title: '文件导入',
+    path: '/system/imports',
+    icon: FolderOpened,
+    description: '统一执行飞书组织数据一键导入，支持补充导入与对齐导入',
+  },
+  {
     title: '同步任务',
     path: '/sync/jobs',
     icon: RefreshRight,
@@ -77,7 +83,7 @@ export const sidebarNavigationGroups: NavigationGroup[] = [
         title: '用户管理',
         path: '/users',
         icon: User,
-        description: '管理用户、角色分配与状态',
+        description: '管理用户、角色分配与状态维护',
       },
       {
         title: '部门管理',
@@ -108,6 +114,12 @@ export const sidebarNavigationGroups: NavigationGroup[] = [
         path: '/ldap',
         icon: Connection,
         description: '查看 LDAP 接入框架并执行联调预检',
+      },
+      {
+        title: '文件导入',
+        path: '/system/imports',
+        icon: FolderOpened,
+        description: '统一执行飞书组织数据一键导入，支持补充导入与对齐导入',
       },
     ],
   },

@@ -1,5 +1,6 @@
 package com.company.idm.application.sync;
 
+import com.company.idm.common.enums.ImportMode;
 import com.company.idm.common.enums.SyncBatchType;
 import com.company.idm.common.enums.SyncDiffStatus;
 import com.company.idm.common.enums.SyncJobType;
@@ -133,6 +134,33 @@ public class SyncApplicationService {
     }
 
     /**
+     * 手工执行飞书一键文件导入批次。
+     */
+    @Transactional
+    public SyncBatchDetail executeFeishuFullFileImport(
+        String documentPath,
+        ImportMode importMode,
+        String remark,
+        String operator,
+        SyncTriggerMode triggerMode
+    ) {
+        return runBatch(
+            SyncBatchType.FEISHU_IMPORT,
+            SyncSourceType.FEISHU,
+            importMode == ImportMode.ALIGN,
+            remark,
+            false,
+            operator,
+            triggerMode,
+            List.of(SyncJobType.FEISHU_FULL_IMPORT),
+            false,
+            documentPath,
+            null,
+            importMode
+        );
+    }
+
+    /**
      * 手工或定时预览 LDAP 对账批次。
      */
     @Transactional
@@ -199,7 +227,8 @@ public class SyncApplicationService {
             List.of(job.getJobType()),
             false,
             payload.documentPath(),
-            job.getBatchNo()
+            job.getBatchNo(),
+            payload.importMode()
         );
     }
 
@@ -236,6 +265,36 @@ public class SyncApplicationService {
         String documentPath,
         String correlationBatchNo
     ) {
+        return runBatch(
+            batchType,
+            sourceType,
+            forceFullSync,
+            remark,
+            autoRepair,
+            operator,
+            triggerMode,
+            jobTypes,
+            preview,
+            documentPath,
+            correlationBatchNo,
+            forceFullSync ? ImportMode.ALIGN : ImportMode.SUPPLEMENT
+        );
+    }
+
+    private SyncBatchDetail runBatch(
+        SyncBatchType batchType,
+        SyncSourceType sourceType,
+        boolean forceFullSync,
+        String remark,
+        boolean autoRepair,
+        String operator,
+        SyncTriggerMode triggerMode,
+        List<SyncJobType> jobTypes,
+        boolean preview,
+        String documentPath,
+        String correlationBatchNo,
+        ImportMode importMode
+    ) {
         if (syncBatchRepository.existsRunningBatch(batchType)) {
             throw new BizException("SYNC_BATCH_RUNNING", "当前已有同类型同步任务正在执行");
         }
@@ -246,7 +305,7 @@ public class SyncApplicationService {
             .sourceType(sourceType)
             .triggerMode(triggerMode)
             .fileName(documentPath)
-            .fileHash(forceFullSync ? "FULL_SYNC" : null)
+            .fileHash(importMode == null ? null : importMode.name())
             .status(SyncRunStatus.RUNNING)
             .operator(operator)
             .correlationBatchNo(correlationBatchNo)
@@ -263,7 +322,8 @@ public class SyncApplicationService {
                 autoRepair,
                 operator,
                 triggerMode,
-                documentPath
+                documentPath,
+                importMode
             );
             SyncJob job = syncJobRepository.save(SyncJob.builder()
                 .batchNo(batchNo)
@@ -349,20 +409,21 @@ public class SyncApplicationService {
 
     private SyncBatchType resolveBatchType(SyncJobType jobType) {
         return switch (jobType) {
-            case FEISHU_DEPARTMENT_IMPORT, FEISHU_USER_IMPORT -> SyncBatchType.FEISHU_IMPORT;
+            case FEISHU_FULL_IMPORT, FEISHU_DEPARTMENT_IMPORT, FEISHU_USER_IMPORT -> SyncBatchType.FEISHU_IMPORT;
             case LDAP_RECONCILE_DEPARTMENT, LDAP_RECONCILE_USER, LDAP_RECONCILE_MEMBERSHIP -> SyncBatchType.LDAP_RECONCILE;
         };
     }
 
     private SyncSourceType resolveSourceType(SyncJobType jobType) {
         return switch (jobType) {
-            case FEISHU_DEPARTMENT_IMPORT, FEISHU_USER_IMPORT -> SyncSourceType.FEISHU;
+            case FEISHU_FULL_IMPORT, FEISHU_DEPARTMENT_IMPORT, FEISHU_USER_IMPORT -> SyncSourceType.FEISHU;
             case LDAP_RECONCILE_DEPARTMENT, LDAP_RECONCILE_USER, LDAP_RECONCILE_MEMBERSHIP -> SyncSourceType.SYSTEM;
         };
     }
 
     private SyncTargetType resolveTargetType(SyncJobType jobType) {
         return switch (jobType) {
+            case FEISHU_FULL_IMPORT -> SyncTargetType.IMPORT;
             case FEISHU_DEPARTMENT_IMPORT, LDAP_RECONCILE_DEPARTMENT -> SyncTargetType.DEPARTMENT;
             case FEISHU_USER_IMPORT, LDAP_RECONCILE_USER -> SyncTargetType.USER;
             case LDAP_RECONCILE_MEMBERSHIP -> SyncTargetType.MEMBERSHIP;

@@ -97,6 +97,10 @@ public class FeishuUserImportService {
         return executePlan(plan);
     }
 
+    public FeishuUserImportResult executeFromPayloads(List<FeishuUserPayload> users) {
+        return executePlan(buildPlan(users, false));
+    }
+
     private FeishuUserImportResult executePlan(ImportPlan plan) {
         passwordPolicyValidator.validate(DEFAULT_IMPORTED_PASSWORD);
         Role normalUserRole = roleRepository.findByCode(NORMAL_USER_ROLE_CODE)

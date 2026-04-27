@@ -62,6 +62,10 @@ public class FeishuDepartmentImportService {
         return executePlan(plan);
     }
 
+    public FeishuDepartmentImportResult executeFromPayloads(List<FeishuDepartmentPayload> departments) {
+        return executePlan(buildPlan(departments));
+    }
+
     private FeishuDepartmentImportResult executePlan(ImportPlan plan) {
         List<PlanItem> executableItems = plan.items.stream()
             .filter(item -> item.changeType() != ChangeType.NO_CHANGE || item.ldapRepairRequired())

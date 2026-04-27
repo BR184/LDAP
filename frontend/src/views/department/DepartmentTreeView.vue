@@ -2,13 +2,12 @@
 import { computed, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { FolderAdd, RefreshRight, Upload } from '@element-plus/icons-vue'
+import { FolderAdd, RefreshRight } from '@element-plus/icons-vue'
 import {
   createDepartment,
   deleteDepartment,
   fetchDepartmentDetail,
   fetchDepartmentTree,
-  importDepartmentsFromFeishuFile,
   syncDepartmentToLdap,
   syncDepartmentsFromFeishu,
   updateDepartment,
@@ -36,9 +35,7 @@ const departmentTreeQuery = useQuery({
 })
 
 const departmentTree = computed(() => departmentTreeQuery.data.value || [])
-const departmentOptions = computed<DepartmentTreeOption[]>(() =>
-  buildDepartmentOptions(departmentTree.value),
-)
+const departmentOptions = computed<DepartmentTreeOption[]>(() => buildDepartmentOptions(departmentTree.value))
 
 const createDepartmentMutation = useMutation({
   mutationFn: createDepartment,
@@ -72,11 +69,6 @@ const syncLdapMutation = useMutation({
 
 const syncFeishuMutation = useMutation({
   mutationFn: syncDepartmentsFromFeishu,
-})
-
-const importFeishuMutation = useMutation({
-  mutationFn: ({ documentPath, remark }: { documentPath: string; remark?: string }) =>
-    importDepartmentsFromFeishuFile(documentPath, remark),
 })
 
 function buildDepartmentOptions(nodes: DepartmentTreeNode[]): DepartmentTreeOption[] {
@@ -139,7 +131,7 @@ async function handleDelete() {
     currentDepartment.value = null
     await refreshDepartments()
   } catch {
-    // 用户取消时不做额外处理。
+    // 用户取消时不额外处理
   }
 }
 
@@ -154,30 +146,6 @@ async function handleSyncLdap() {
 async function handleSyncFeishu() {
   const result = await syncFeishuMutation.mutateAsync('manual-sync')
   ElMessage.success(`部门飞书同步任务已触发，批次号：${result.batch.batchNo}`)
-}
-
-async function handleImportFeishuFile() {
-  try {
-    const { value } = await ElMessageBox.prompt('请输入受控目录中的 JSON 文件路径，例如 departments/demo.json', '飞书文件导入', {
-      confirmButtonText: '导入',
-      cancelButtonText: '取消',
-      inputPlaceholder: 'departments/demo.json',
-    })
-
-    if (!value || !value.trim()) {
-      return
-    }
-
-    const result = await importFeishuMutation.mutateAsync({
-      documentPath: value.trim(),
-      remark: 'manual-file-import',
-    })
-
-    ElMessage.success(`部门文件导入任务已触发，批次号：${result.batch.batchNo}`)
-    await refreshDepartments()
-  } catch {
-    // 用户取消时不做额外处理。
-  }
 }
 
 async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentPayload) {
@@ -203,9 +171,6 @@ async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentP
       <el-space>
         <el-button :icon="RefreshRight" :loading="syncFeishuMutation.isPending.value" @click="handleSyncFeishu">
           飞书同步
-        </el-button>
-        <el-button :icon="Upload" :loading="importFeishuMutation.isPending.value" @click="handleImportFeishuFile">
-          文件导入
         </el-button>
         <el-button type="primary" :icon="FolderAdd" @click="openCreate">新增部门</el-button>
       </el-space>
@@ -236,7 +201,7 @@ async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentP
         <template #header>
           <div class="view-toolbar">
             <strong>部门详情</strong>
-            <div class="view-toolbar__actions" v-if="currentDepartment">
+            <div v-if="currentDepartment" class="view-toolbar__actions">
               <el-button @click="openEdit">编辑</el-button>
               <el-button type="success" :loading="syncLdapMutation.isPending.value" @click="handleSyncLdap">
                 同步 LDAP

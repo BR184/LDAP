@@ -2,14 +2,13 @@
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MoreFilled, Plus, RefreshRight, Search, Upload } from '@element-plus/icons-vue'
+import { MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import {
   assignUserRoles,
   createUser,
   deleteUser,
   fetchUserDetail,
   fetchUsers,
-  importUsersFromFeishuFile,
   resetUserPassword,
   syncUserToLdap,
   syncUsersFromFeishu,
@@ -60,12 +59,7 @@ const roleUser = ref<UserItem | null>(null)
 const selectedRoleIds = ref<number[]>([])
 
 const usersQuery = useQuery({
-  queryKey: computed(() => [
-    'users',
-    appliedQuery.username || '',
-    appliedQuery.deptCode || '',
-    appliedQuery.status ?? 'all',
-  ]),
+  queryKey: computed(() => ['users', appliedQuery.username || '', appliedQuery.deptCode || '', appliedQuery.status ?? 'all']),
   queryFn: () =>
     fetchUsers({
       username: appliedQuery.username || undefined,
@@ -86,21 +80,19 @@ const departmentsQuery = useQuery({
 
 const users = computed(() => usersQuery.data.value || [])
 const roles = computed(() => rolesQuery.data.value || [])
-const departmentOptions = computed<DepartmentTreeOption[]>(() =>
-  buildDepartmentOptions(departmentsQuery.data.value || []),
-)
+const total = computed(() => users.value.length)
+const pagedUsers = computed(() => {
+  const start = (pagination.page - 1) * pagination.pageSize
+  return users.value.slice(start, start + pagination.pageSize)
+})
+
+const departmentOptions = computed<DepartmentTreeOption[]>(() => buildDepartmentOptions(departmentsQuery.data.value || []))
 const roleIdMapByCode = computed<Record<string, number>>(() =>
   roles.value.reduce<Record<string, number>>((accumulator, role) => {
     accumulator[role.roleCode] = role.id
     return accumulator
   }, {}),
 )
-
-const total = computed(() => users.value.length)
-const pagedUsers = computed(() => {
-  const start = (pagination.page - 1) * pagination.pageSize
-  return users.value.slice(start, start + pagination.pageSize)
-})
 
 const createUserMutation = useMutation({
   mutationFn: (payload: CreateUserPayload) => createUser(payload),
@@ -159,11 +151,6 @@ const syncLdapMutation = useMutation({
 
 const syncFeishuMutation = useMutation({
   mutationFn: syncUsersFromFeishu,
-})
-
-const importFeishuMutation = useMutation({
-  mutationFn: ({ documentPath, remark }: { documentPath: string; remark?: string }) =>
-    importUsersFromFeishuFile(documentPath, remark),
 })
 
 function buildDepartmentOptions(nodes: DepartmentTreeNode[]): DepartmentTreeOption[] {
@@ -259,25 +246,21 @@ async function handleRoleSubmit(roleIds: number[]) {
 
 async function handleToggleStatus(user: UserItem) {
   const nextStatus = user.status === 1 ? 0 : 1
-  const targetText = nextStatus === 1 ? '启用' : '禁用'
+  const actionText = nextStatus === 1 ? '启用' : '禁用'
 
   try {
-    await ElMessageBox.confirm(
-      `确认${targetText}用户 ${user.realName}（${user.username}）吗？`,
-      `${targetText}用户`,
-      {
-        type: 'warning',
-        confirmButtonText: '确认',
-        cancelButtonText: '取消',
-      },
-    )
+    await ElMessageBox.confirm(`确认${actionText}用户 ${user.realName}（${user.username}）吗？`, `${actionText}用户`, {
+      type: 'warning',
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+    })
 
     await updateStatusMutation.mutateAsync({
       userId: user.id,
       statusCode: nextStatus,
     })
   } catch {
-    // 用户取消操作时不做额外处理。
+    // 用户取消时不额外处理
   }
 }
 
@@ -295,14 +278,14 @@ async function handleDelete(user: UserItem) {
 
     await deleteUserMutation.mutateAsync(user.id)
   } catch {
-    // 用户取消操作时不做额外处理。
+    // 用户取消时不额外处理
   }
 }
 
 async function handleResetPassword(user: UserItem) {
   try {
     await ElMessageBox.confirm(
-      `确认为用户 ${user.realName}（${user.username}）将密码重置为默认密码 123456 吗？`,
+      `确认将用户 ${user.realName}（${user.username}）的密码重置为默认密码 123456 吗？`,
       '重置密码',
       {
         type: 'warning',
@@ -314,7 +297,7 @@ async function handleResetPassword(user: UserItem) {
     await resetPasswordMutation.mutateAsync(user.id)
     ElMessage.success(`用户 ${user.username} 的密码已重置为 123456`)
   } catch {
-    // 用户取消操作时不做额外处理。
+    // 用户取消时不额外处理
   }
 }
 
@@ -325,34 +308,6 @@ async function handleSyncLdap(user: UserItem) {
 async function handleSyncFeishu() {
   const result = await syncFeishuMutation.mutateAsync()
   ElMessage.success(`飞书同步任务已触发，批次号：${result.batch.batchNo}`)
-}
-
-async function handleImportFeishuFile() {
-  try {
-    const { value } = await ElMessageBox.prompt(
-      '请输入受控目录中的 JSON 文件路径，例如 users/demo.json',
-      '用户文件导入',
-      {
-        confirmButtonText: '导入',
-        cancelButtonText: '取消',
-        inputPlaceholder: 'users/demo.json',
-      },
-    )
-
-    if (!value || !value.trim()) {
-      return
-    }
-
-    const result = await importFeishuMutation.mutateAsync({
-      documentPath: value.trim(),
-      remark: 'manual-file-import',
-    })
-
-    ElMessage.success(`用户文件导入任务已触发，批次号：${result.batch.batchNo}`)
-    await refreshUsers()
-  } catch {
-    // 用户取消时不做额外处理。
-  }
 }
 
 function statusText(status: number) {
@@ -400,9 +355,6 @@ function statusTagType(status: number) {
 
           <div class="view-toolbar__actions">
             <el-button type="primary" :icon="Plus" @click="openCreate">新增用户</el-button>
-            <el-button :icon="Upload" :loading="importFeishuMutation.isPending.value" @click="handleImportFeishuFile">
-              文件导入
-            </el-button>
             <el-button :icon="RefreshRight" :loading="syncFeishuMutation.isPending.value" @click="handleSyncFeishu">
               飞书同步
             </el-button>
