@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { DataBoard, Fold, Expand, SwitchButton } from '@element-plus/icons-vue'
-import { useRoute, useRouter } from 'vue-router'
+import { DataBoard, Expand, Fold, SwitchButton } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useMenuStore } from '@/stores/menu'
@@ -67,7 +67,7 @@ function handleMenuSelect(index: string) {
         <div class="admin-layout__logo">ID</div>
         <div v-if="!appStore.sidebarCollapsed" class="admin-layout__brand-copy">
           <strong>Corp IDM</strong>
-          <span>统一身份管理台</span>
+          <span>统一身份管理平台</span>
         </div>
       </div>
 
@@ -83,11 +83,7 @@ function handleMenuSelect(index: string) {
             <template #title>首页</template>
           </el-menu-item>
 
-          <el-sub-menu
-            v-for="group in visibleSidebarGroups"
-            :key="group.title"
-            :index="group.title"
-          >
+          <el-sub-menu v-for="group in visibleSidebarGroups" :key="group.title" :index="group.title">
             <template #title>
               <el-icon><component :is="group.icon" /></el-icon>
               <span>{{ group.title }}</span>
@@ -119,7 +115,8 @@ function handleMenuSelect(index: string) {
         </div>
 
         <div class="admin-layout__header-right">
-          <el-button text @click="router.push('/profile')">
+          <span class="admin-layout__username">{{ authStore.displayName }}</span>
+          <el-button class="admin-layout__profile-button" type="primary" @click="router.push('/profile')">
             个人中心
           </el-button>
           <el-button circle text @click="handleLogout">
@@ -215,6 +212,17 @@ function handleMenuSelect(index: string) {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.admin-layout__username {
+  color: var(--idm-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-layout__profile-button {
+  min-width: 96px;
+  font-weight: 500;
 }
 
 .admin-layout__main {

@@ -6,7 +6,7 @@ spring:
   application:
     name: corp-idm-platform
   profiles:
-    # 默认使用 local，便于本地快速启动原型环境。
+    # 默认使用 dev，便于当前联调环境直接启动。
     default: dev
   flyway:
     # 数据库迁移脚本统一放在 classpath:db/migration。
@@ -70,6 +70,7 @@ app:
     placeholder-uid: placeholder
     db-validation-timeout-seconds: 2
   password-reset:
+    # 密码重置邮件的默认主题与提示文案，可通过环境变量覆盖。
     mail-subject: ${APP_PASSWORD_RESET_MAIL_SUBJECT:统一身份管理平台密码重置通知}
     mail-from: ${APP_PASSWORD_RESET_MAIL_FROM:}
     forgot-password-success-notice: ${APP_PASSWORD_RESET_FORGOT_NOTICE:如账号信息有效，系统已发送重置邮件，请注意查收}
@@ -87,7 +88,7 @@ app:
       connect-timeout-ms: ${APP_SYNC_FEISHU_CONNECT_TIMEOUT_MS:5000}
       read-timeout-ms: ${APP_SYNC_FEISHU_READ_TIMEOUT_MS:10000}
       file-import:
-        # 手工文件导入默认开启，用于内网开发和应急补数。
+        # 手工文件导入默认开启，用于内网开发和应急补录。
         enabled: ${APP_SYNC_FEISHU_FILE_IMPORT_ENABLED:true}
         root-dir: ${APP_SYNC_FEISHU_FILE_IMPORT_ROOT_DIR:docs/feishu-import}
         max-file-size-bytes: ${APP_SYNC_FEISHU_FILE_IMPORT_MAX_SIZE:2097152}
