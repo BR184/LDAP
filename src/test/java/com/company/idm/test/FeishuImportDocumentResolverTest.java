@@ -65,29 +65,13 @@ class FeishuImportDocumentResolverTest {
         Path rootDir = tempDir.resolve("imports");
         Path document = rootDir.resolve("bundle/quoted-roster.xlsx");
         Files.createDirectories(document.getParent());
-
-        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
-            XSSFSheet rosterSheet = workbook.createSheet("在职人员");
-            rosterSheet.createRow(0).createCell(0).setCellValue("姓名");
-            rosterSheet.getRow(0).createCell(1).setCellValue("手机号码");
-            rosterSheet.getRow(0).createCell(2).setCellValue("工号");
-            rosterSheet.getRow(0).createCell(3).setCellValue("人员状态");
-            rosterSheet.getRow(0).createCell(4).setCellValue("部门");
-            rosterSheet.getRow(0).createCell(5).setCellValue("部门 (全路径)");
-            rosterSheet.getRow(0).createCell(6).setCellValue("一级部门");
-            rosterSheet.getRow(0).createCell(9).setCellValue("用户 ID");
-            rosterSheet.createRow(1).createCell(0).setCellValue("于善鹏");
-            rosterSheet.getRow(1).createCell(1).setCellValue("+86 13964112234");
-            rosterSheet.getRow(1).createCell(2).setCellValue("3");
-            rosterSheet.getRow(1).createCell(3).setCellValue("在职");
-            rosterSheet.getRow(1).createCell(4).setCellValue("开发部门");
-            rosterSheet.getRow(1).createCell(5).setCellValue("用户725015的组织/开发部门");
-            rosterSheet.getRow(1).createCell(6).setCellValue("开发部门");
-            rosterSheet.getRow(1).createCell(9).setCellValue("276b33cd");
-            try (java.io.OutputStream outputStream = Files.newOutputStream(document)) {
-                workbook.write(outputStream);
-            }
-        }
+        writeRosterWorkbook(
+            document,
+            List.<Object[]>of(new Object[] {
+                "于善鹏", "+86 13964112234", "3", "在职", "开发部门",
+                "用户725015的组织/开发部门", "开发部门", null, null, "276b33cd", null, null
+            })
+        );
 
         FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(rootDir), new ObjectMapper());
 
@@ -141,11 +125,72 @@ class FeishuImportDocumentResolverTest {
     }
 
     @Test
-    void shouldResolveRosterWorkbookDocument() throws Exception {
+    void shouldResolveRosterWorkbookDocumentWithRootDepartment() throws Exception {
         Path rootDir = tempDir.resolve("imports");
         Path document = rootDir.resolve("bundle/roster-demo.xlsx");
         Files.createDirectories(document.getParent());
+        writeRosterWorkbook(
+            document,
+            List.of(
+                new Object[] {
+                    "于善鹏", "+86 13964112234", "3", "在职", "开发部门",
+                    "用户725015的组织/开发部门", "开发部门", null, null, "276b33cd", null, null
+                },
+                new Object[] {
+                    "戴佳伟", "+86 13964113374", "2", "在职", "效能平台",
+                    "用户725015的组织/开发部门/平台开发部门/效能平台", "开发部门", "平台开发部门", "效能平台",
+                    "78fe8e9b", "daijiawei@corp.local", null
+                }
+            )
+        );
 
+        FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(rootDir), new ObjectMapper());
+
+        FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/roster-demo.xlsx");
+
+        assertThat(fullImportDocument.departments()).hasSize(4);
+        assertThat(fullImportDocument.departments()).extracting(FeishuDepartmentPayload::departmentName)
+            .containsExactly("用户725015的组织", "开发部门", "平台开发部门", "效能平台");
+        assertThat(fullImportDocument.departments()).allSatisfy(payload -> {
+            assertThat(payload.externalId()).startsWith("roster_dept_");
+            assertThat(payload.departmentCode()).startsWith("FD_");
+        });
+        assertThat(fullImportDocument.users()).hasSize(2);
+        assertThat(fullImportDocument.users().get(0).externalId()).isEqualTo("276b33cd");
+        assertThat(fullImportDocument.users().get(0).username()).isEqualTo("yushanpeng");
+        assertThat(fullImportDocument.users().get(0).mobile()).isEqualTo("13964112234");
+        assertThat(fullImportDocument.users().get(1).username()).isEqualTo("daijiawei");
+        assertThat(fullImportDocument.users().get(1).email()).isEqualTo("daijiawei@corp.local");
+        assertThat(fullImportDocument.users().get(1).mainDepartmentExternalId())
+            .isEqualTo(fullImportDocument.departments().get(3).externalId());
+    }
+
+    @Test
+    void shouldPreferLevelColumnsButKeepRosterRootWhenWorkbookUpdated() throws Exception {
+        Path rootDir = tempDir.resolve("imports");
+        Path document = rootDir.resolve("bundle/roster-updated.xlsx");
+        Files.createDirectories(document.getParent());
+        writeRosterWorkbook(
+            document,
+            List.<Object[]>of(new Object[] {
+                "戴佳伟", "+86 13964113374", "2", "在职", "新平台",
+                "用户725015的组织/开发部门/平台开发部门/效能平台", "开发部门", "平台开发部门", "新平台",
+                "78fe8e9b", null, null
+            })
+        );
+
+        FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(rootDir), new ObjectMapper());
+
+        FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/roster-updated.xlsx");
+
+        assertThat(fullImportDocument.departments()).extracting(FeishuDepartmentPayload::departmentName)
+            .containsExactly("用户725015的组织", "开发部门", "平台开发部门", "新平台");
+        assertThat(fullImportDocument.users()).singleElement().satisfies(user ->
+            assertThat(user.mainDepartmentExternalId()).isEqualTo(fullImportDocument.departments().get(3).externalId())
+        );
+    }
+
+    private void writeRosterWorkbook(Path document, List<Object[]> rows) throws Exception {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             XSSFSheet rosterSheet = workbook.createSheet("在职人员");
             rosterSheet.createRow(0).createCell(0).setCellValue("姓名");
@@ -161,51 +206,22 @@ class FeishuImportDocumentResolverTest {
             rosterSheet.getRow(0).createCell(10).setCellValue("工作邮箱");
             rosterSheet.getRow(0).createCell(11).setCellValue("个人邮箱");
 
-            rosterSheet.createRow(1).createCell(0).setCellValue("于善鹏");
-            rosterSheet.getRow(1).createCell(1).setCellValue("+86 13964112234");
-            rosterSheet.getRow(1).createCell(2).setCellValue("3");
-            rosterSheet.getRow(1).createCell(3).setCellValue("在职");
-            rosterSheet.getRow(1).createCell(4).setCellValue("开发部门");
-            rosterSheet.getRow(1).createCell(5).setCellValue("用户725015的组织/开发部门");
-            rosterSheet.getRow(1).createCell(6).setCellValue("开发部门");
-            rosterSheet.getRow(1).createCell(9).setCellValue("276b33cd");
-
-            rosterSheet.createRow(2).createCell(0).setCellValue("戴佳伟");
-            rosterSheet.getRow(2).createCell(1).setCellValue("+86 13964113374");
-            rosterSheet.getRow(2).createCell(2).setCellValue("2");
-            rosterSheet.getRow(2).createCell(3).setCellValue("在职");
-            rosterSheet.getRow(2).createCell(4).setCellValue("效能平台");
-            rosterSheet.getRow(2).createCell(5).setCellValue("用户725015的组织/开发部门/平台开发部门/效能平台");
-            rosterSheet.getRow(2).createCell(6).setCellValue("开发部门");
-            rosterSheet.getRow(2).createCell(7).setCellValue("平台开发部门");
-            rosterSheet.getRow(2).createCell(8).setCellValue("效能平台");
-            rosterSheet.getRow(2).createCell(9).setCellValue("78fe8e9b");
-            rosterSheet.getRow(2).createCell(10).setCellValue("daijiawei@corp.local");
+            int rowIndex = 1;
+            for (Object[] rowData : rows) {
+                var row = rosterSheet.createRow(rowIndex++);
+                for (int cellIndex = 0; cellIndex < rowData.length; cellIndex++) {
+                    Object value = rowData[cellIndex];
+                    if (value == null) {
+                        continue;
+                    }
+                    row.createCell(cellIndex).setCellValue(String.valueOf(value));
+                }
+            }
 
             try (java.io.OutputStream outputStream = Files.newOutputStream(document)) {
                 workbook.write(outputStream);
             }
         }
-
-        FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(rootDir), new ObjectMapper());
-
-        FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/roster-demo.xlsx");
-
-        assertThat(fullImportDocument.departments()).hasSize(3);
-        assertThat(fullImportDocument.departments()).extracting(FeishuDepartmentPayload::departmentName)
-            .containsExactly("开发部门", "平台开发部门", "效能平台");
-        assertThat(fullImportDocument.departments()).allSatisfy(payload -> {
-            assertThat(payload.externalId()).startsWith("roster_dept_");
-            assertThat(payload.departmentCode()).startsWith("FD_");
-        });
-        assertThat(fullImportDocument.users()).hasSize(2);
-        assertThat(fullImportDocument.users().get(0).externalId()).isEqualTo("276b33cd");
-        assertThat(fullImportDocument.users().get(0).username()).isEqualTo("yushanpeng");
-        assertThat(fullImportDocument.users().get(0).mobile()).isEqualTo("13964112234");
-        assertThat(fullImportDocument.users().get(1).username()).isEqualTo("daijiawei");
-        assertThat(fullImportDocument.users().get(1).email()).isEqualTo("daijiawei@corp.local");
-        assertThat(fullImportDocument.users().get(1).mainDepartmentExternalId())
-            .isEqualTo(fullImportDocument.departments().get(2).externalId());
     }
 
     private FeishuFileImportProperties buildProperties(Path rootDir) {

@@ -226,41 +226,35 @@ public class FeishuImportDocumentResolver {
     }
 
     private List<String> resolveDepartmentHierarchy(Row row, Map<String, Integer> headerIndex, DataFormatter formatter) {
-        List<String> hierarchy = new ArrayList<>();
-        addIfPresent(hierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_1));
-        addIfPresent(hierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_2));
-        addIfPresent(hierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_3));
-        addIfPresent(hierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_4));
-        addIfPresent(hierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_5));
-        if (!hierarchy.isEmpty()) {
+        List<String> levelHierarchy = new ArrayList<>();
+        addIfPresent(levelHierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_1));
+        addIfPresent(levelHierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_2));
+        addIfPresent(levelHierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_3));
+        addIfPresent(levelHierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_4));
+        addIfPresent(levelHierarchy, readOptionalCell(row, headerIndex, formatter, HEADER_LEVEL_5));
+
+        List<String> fullPathHierarchy = resolveFullPathHierarchy(readOptionalCell(row, headerIndex, formatter, HEADER_DEPARTMENT_FULL_PATH));
+        String departmentName = readOptionalCell(row, headerIndex, formatter, HEADER_DEPARTMENT);
+
+        if (!levelHierarchy.isEmpty()) {
+            List<String> hierarchy = new ArrayList<>(levelHierarchy);
+            if (!fullPathHierarchy.isEmpty() && fullPathHierarchy.size() == levelHierarchy.size() + 1) {
+                hierarchy.add(0, fullPathHierarchy.get(0));
+            }
+            applyLeafDepartmentName(hierarchy, departmentName);
             return hierarchy;
         }
 
-        String fullPath = readOptionalCell(row, headerIndex, formatter, HEADER_DEPARTMENT_FULL_PATH);
-        if (fullPath != null && !fullPath.isBlank()) {
-            List<String> segments = java.util.Arrays.stream(fullPath.split("[/\\\\]"))
-                .map(String::trim)
-                .filter(segment -> !segment.isBlank())
-                .toList();
-            List<String> filtered = new ArrayList<>(segments);
-            while (filtered.size() > 1 && isSyntheticRootSegment(filtered.get(0))) {
-                filtered.remove(0);
-            }
-            if (!filtered.isEmpty()) {
-                return filtered;
-            }
+        if (!fullPathHierarchy.isEmpty()) {
+            applyLeafDepartmentName(fullPathHierarchy, departmentName);
+            return fullPathHierarchy;
         }
 
-        String departmentName = readOptionalCell(row, headerIndex, formatter, HEADER_DEPARTMENT);
         if (departmentName != null && !departmentName.isBlank()) {
-            return List.of(departmentName);
+            return List.of(departmentName.trim());
         }
 
         throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "飞书花名册中存在缺少部门信息的用户行");
-    }
-
-    private boolean isSyntheticRootSegment(String segment) {
-        return segment.contains("组织") || segment.contains("公司") || segment.contains("集团");
     }
 
     private String generateUsername(String realName, String email, String externalId, Set<String> usedUsernames) {
@@ -524,6 +518,23 @@ public class FeishuImportDocumentResolver {
         if (bucket.isEmpty() || !bucket.get(bucket.size() - 1).equals(normalized)) {
             bucket.add(normalized);
         }
+    }
+
+    private List<String> resolveFullPathHierarchy(String fullPath) {
+        if (fullPath == null || fullPath.isBlank()) {
+            return new ArrayList<>();
+        }
+        return java.util.Arrays.stream(fullPath.split("[/\\\\]"))
+            .map(String::trim)
+            .filter(segment -> !segment.isBlank())
+            .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+    }
+
+    private void applyLeafDepartmentName(List<String> hierarchy, String departmentName) {
+        if (hierarchy.isEmpty() || departmentName == null || departmentName.isBlank()) {
+            return;
+        }
+        hierarchy.set(hierarchy.size() - 1, departmentName.trim());
     }
 
     private String blankToNull(String value) {

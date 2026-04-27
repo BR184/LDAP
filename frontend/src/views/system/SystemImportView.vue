@@ -25,6 +25,8 @@ const importMutation = useMutation({
   mutationFn: executeFeishuFullImport,
   onSuccess: async (detail, payload) => {
     await queryClient.invalidateQueries({ queryKey: ['sync', 'jobs'] })
+    await queryClient.invalidateQueries({ queryKey: ['department-tree'] })
+    await queryClient.invalidateQueries({ queryKey: ['users'] })
     ElMessage.success(
       payload.importMode === 'ALIGN'
         ? `对齐导入已触发，批次号：${detail.batch.batchNo}`
