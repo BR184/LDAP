@@ -12,6 +12,7 @@ public record UserResponse(
     String email,
     String mobile,
     String employeeNo,
+    String deptName,
     String deptCode,
     Integer status,
     String ldapDn,

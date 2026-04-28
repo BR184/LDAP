@@ -94,18 +94,19 @@ class UserControllerTest extends AbstractControllerMvcTest {
         mockMvc.perform(get("/api/v1/users"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data[0].id").value(1))
-            .andExpect(jsonPath("$.data[0].username").value("admin"));
+            .andExpect(jsonPath("$.data[0].username").value("admin"))
+            .andExpect(jsonPath("$.data[0].deptName").value("研发中心"));
     }
 
     @Test
     @WithMockUser(username = "admin")
     void shouldListUsersWithConditionsSuccessfully() throws Exception {
         allow("/api/v1/users", "GET");
-        when(userApplicationService.listUsers("adm", "D001", 1)).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED)));
+        when(userApplicationService.listUsers("adm", "研发", 1)).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED)));
 
         mockMvc.perform(get("/api/v1/users")
                 .param("username", "adm")
-                .param("deptCode", "D001")
+                .param("deptName", "研发")
                 .param("status", "1"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data[0].username").value("admin"));
@@ -420,6 +421,7 @@ class UserControllerTest extends AbstractControllerMvcTest {
             .email(username + "@corp.local")
             .mobile("13900000000")
             .employeeNo("E10001")
+            .deptName("研发中心")
             .deptCode("D001")
             .status(status)
             .sourceType(SourceType.MANUAL)

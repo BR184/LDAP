@@ -75,22 +75,50 @@ class UserApplicationServiceTest {
 
     @Test
     void shouldListUsers() {
+        when(departmentRepository.findAll()).thenReturn(List.of(
+            Department.builder().deptCode("D001").deptName("研发中心").ancestorPath("/D001").status(1).build()
+        ));
         when(userRepository.findByConditions(null, null, null)).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED, 0)));
 
         List<User> users = userApplicationService.listUsers(null, null, null);
 
         assertThat(users).hasSize(1);
+        assertThat(users.get(0).getDeptName()).isEqualTo("研发中心");
     }
 
     @Test
-    void shouldListUsersWithNormalizedConditions() {
-        when(userRepository.findByConditions("admin", "D001", UserStatus.ENABLED.getCode()))
+    void shouldListUsersWithNormalizedDepartmentNameConditions() {
+        when(departmentRepository.findAll()).thenReturn(List.of(
+            Department.builder().deptCode("D001").deptName("研发中心").ancestorPath("/D001").status(1).build()
+        ));
+        when(userRepository.findByConditions("admin", null, UserStatus.ENABLED.getCode()))
             .thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED, 0)));
 
-        List<User> users = userApplicationService.listUsers(" admin ", " D001 ", UserStatus.ENABLED.getCode());
+        List<User> users = userApplicationService.listUsers(" admin ", " 研发 ", UserStatus.ENABLED.getCode());
 
         assertThat(users).hasSize(1);
-        verify(userRepository).findByConditions("admin", "D001", UserStatus.ENABLED.getCode());
+        verify(userRepository).findByConditions("admin", null, UserStatus.ENABLED.getCode());
+    }
+
+    @Test
+    void shouldListAdminsBeforeDepartmentClusters() {
+        Department rootDepartment = Department.builder().deptCode("D001").deptName("开发部门").ancestorPath("/ORG/D001").status(1).build();
+        Department platformDepartment = Department.builder().deptCode("D002").deptName("平台开发部门").ancestorPath("/ORG/D001/D002").status(1).build();
+        Department opsDepartment = Department.builder().deptCode("D003").deptName("运维部").ancestorPath("/ORG/D003").status(1).build();
+        when(departmentRepository.findAll()).thenReturn(List.of(rootDepartment, platformDepartment, opsDepartment));
+        when(userRepository.findByConditions(null, null, null)).thenReturn(List.of(
+            buildUser(1L, "normal-b", UserStatus.ENABLED, 0).toBuilder().realName("普通员工B").employeeNo("E002").deptCode("D002").roleCodes(Set.of("NORMAL_USER")).build(),
+            buildUser(2L, "admin-user", UserStatus.ENABLED, 0).toBuilder().realName("管理员").employeeNo("E001").deptCode("D003").roleCodes(Set.of("ADMIN")).build(),
+            buildUser(3L, "super-admin", UserStatus.ENABLED, 0).toBuilder().realName("超级管理员").employeeNo("E000").deptCode("D001").roleCodes(Set.of("SUPER_ADMIN")).build(),
+            buildUser(4L, "normal-a", UserStatus.ENABLED, 0).toBuilder().realName("普通员工A").employeeNo("E001").deptCode("D001").roleCodes(Set.of("NORMAL_USER")).build()
+        ));
+
+        List<User> users = userApplicationService.listUsers(null, null, null);
+
+        assertThat(users).extracting(User::getUsername)
+            .containsExactly("super-admin", "admin-user", "normal-a", "normal-b");
+        assertThat(users).extracting(User::getDeptName)
+            .containsExactly("开发部门", "运维部", "开发部门", "平台开发部门");
     }
 
     @Test
@@ -276,11 +304,15 @@ class UserApplicationServiceTest {
     @Test
     void shouldGetUserDetailSuccessfully() {
         User existing = buildUser(2L, "zhangsan", UserStatus.ENABLED, 2);
+        when(departmentRepository.findAll()).thenReturn(List.of(
+            Department.builder().deptCode("D001").deptName("研发中心").ancestorPath("/D001").status(1).build()
+        ));
         when(userRepository.findById(2L)).thenReturn(Optional.of(existing));
 
         User detail = userApplicationService.getUser(2L);
 
         assertThat(detail.getUsername()).isEqualTo("zhangsan");
+        assertThat(detail.getDeptName()).isEqualTo("研发中心");
     }
 
     @Test
@@ -312,6 +344,7 @@ class UserApplicationServiceTest {
             .mobile("13800000000")
             .employeeNo("E001")
             .deptCode("D001")
+            .deptName("研发中心")
             .status(status)
             .sourceType(SourceType.MANUAL)
             .ldapDn("uid=" + username + ",ou=people,dc=corp,dc=local")

@@ -3,24 +3,37 @@ package com.company.idm.test;
 import com.company.idm.application.sync.feishu.FeishuDepartmentPayload;
 import com.company.idm.application.sync.feishu.FeishuFullImportDocument;
 import com.company.idm.application.sync.feishu.FeishuImportDocumentResolver;
+import com.company.idm.common.enums.SourceType;
+import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
+import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.FeishuFileImportProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class FeishuImportDocumentResolverTest {
 
     @TempDir
     Path tempDir;
+
+    @Mock
+    private UserRepository userRepository;
 
     @Test
     void shouldResolveDepartmentDocumentUnderConfiguredRoot() throws Exception {
@@ -40,7 +53,7 @@ class FeishuImportDocumentResolverTest {
             ]
             """);
 
-        FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(rootDir), new ObjectMapper());
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
 
         List<FeishuDepartmentPayload> payloads = resolver.resolveDepartments("departments/demo.json");
 
@@ -52,7 +65,7 @@ class FeishuImportDocumentResolverTest {
 
     @Test
     void shouldRejectDocumentOutsideConfiguredRoot() {
-        FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(tempDir.resolve("imports")), new ObjectMapper());
+        FeishuImportDocumentResolver resolver = buildResolver(tempDir.resolve("imports"));
 
         assertThatThrownBy(() -> resolver.resolveDepartments("../outside.json"))
             .isInstanceOf(BizException.class)
@@ -72,8 +85,9 @@ class FeishuImportDocumentResolverTest {
                 "用户725015的组织/开发部门", "开发部门", null, null, "276b33cd", null, null
             })
         );
+        when(userRepository.findAll()).thenReturn(List.of());
 
-        FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(rootDir), new ObjectMapper());
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
 
         FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("\"" + document.toString() + "\"");
 
@@ -114,7 +128,7 @@ class FeishuImportDocumentResolverTest {
             }
             """);
 
-        FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(rootDir), new ObjectMapper());
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
 
         FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/full-demo.json");
 
@@ -143,8 +157,9 @@ class FeishuImportDocumentResolverTest {
                 }
             )
         );
+        when(userRepository.findAll()).thenReturn(List.of());
 
-        FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(rootDir), new ObjectMapper());
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
 
         FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/roster-demo.xlsx");
 
@@ -178,8 +193,9 @@ class FeishuImportDocumentResolverTest {
                 "78fe8e9b", null, null
             })
         );
+        when(userRepository.findAll()).thenReturn(List.of());
 
-        FeishuImportDocumentResolver resolver = new FeishuImportDocumentResolver(buildProperties(rootDir), new ObjectMapper());
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
 
         FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/roster-updated.xlsx");
 
@@ -188,6 +204,46 @@ class FeishuImportDocumentResolverTest {
         assertThat(fullImportDocument.users()).singleElement().satisfies(user ->
             assertThat(user.mainDepartmentExternalId()).isEqualTo(fullImportDocument.departments().get(3).externalId())
         );
+    }
+
+    @Test
+    void shouldKeepExistingUsernameAndAppendEmployeeNoForNewDuplicateName() throws Exception {
+        Path rootDir = tempDir.resolve("imports");
+        Path document = rootDir.resolve("bundle/duplicate-name.xlsx");
+        Files.createDirectories(document.getParent());
+        writeRosterWorkbook(
+            document,
+            List.of(
+                new Object[] {
+                    "于善鹏", "+86 13964112234", "3", "在职", "开发部门",
+                    "用户725015的组织/开发部门", "开发部门", null, null, "old-user-id", null, null
+                },
+                new Object[] {
+                    "于善鹏", "+86 13964117777", "10023", "在职", "基础开发部门",
+                    "用户725015的组织/开发部门/基础开发部门", "开发部门", "基础开发部门", null,
+                    "new-user-id", null, null
+                }
+            )
+        );
+        when(userRepository.findAll()).thenReturn(List.of(
+            User.builder()
+                .id(1L)
+                .username("yushanpeng")
+                .realName("于善鹏")
+                .employeeNo("3")
+                .status(UserStatus.ENABLED)
+                .sourceType(SourceType.FEISHU)
+                .externalId("old-user-id")
+                .roleCodes(Set.of())
+                .build()
+        ));
+
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
+
+        FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/duplicate-name.xlsx");
+
+        assertThat(fullImportDocument.users()).extracting(user -> user.username())
+            .containsExactly("yushanpeng", "yushanpeng_10023");
     }
 
     private void writeRosterWorkbook(Path document, List<Object[]> rows) throws Exception {
@@ -224,11 +280,11 @@ class FeishuImportDocumentResolverTest {
         }
     }
 
-    private FeishuFileImportProperties buildProperties(Path rootDir) {
+    private FeishuImportDocumentResolver buildResolver(Path rootDir) {
         FeishuFileImportProperties properties = new FeishuFileImportProperties();
         properties.setEnabled(true);
         properties.setRootDir(rootDir.toString());
         properties.setMaxFileSizeBytes(1024 * 1024);
-        return properties;
+        return new FeishuImportDocumentResolver(properties, new ObjectMapper(), userRepository);
     }
 }

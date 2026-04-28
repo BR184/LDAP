@@ -54,10 +54,12 @@ public class UserController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'GET')")
     public ApiResponse<List<UserResponse>> list(
         @RequestParam(required = false) String username,
+        @RequestParam(required = false) String deptName,
         @RequestParam(required = false) String deptCode,
         @RequestParam(required = false) Integer status
     ) {
-        List<UserResponse> users = userApplicationService.listUsers(username, deptCode, status).stream()
+        String departmentKeyword = deptName != null && !deptName.isBlank() ? deptName : deptCode;
+        List<UserResponse> users = userApplicationService.listUsers(username, departmentKeyword, status).stream()
             .map(this::toResponse)
             .toList();
         return ApiResponse.success(users);
@@ -221,6 +223,7 @@ public class UserController {
             user.getEmail(),
             user.getMobile(),
             user.getEmployeeNo(),
+            user.getDeptName(),
             user.getDeptCode(),
             user.getStatus().getCode(),
             user.getLdapDn(),

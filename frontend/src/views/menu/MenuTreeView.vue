@@ -70,7 +70,7 @@ function buildMenuOptions(nodes: MenuTreeNode[]): MenuTreeOption[] {
     },
     ...nodes.map((node) => ({
       value: node.id,
-      label: `${node.menuName} (${node.menuCode})`,
+      label: `${displayMenuName(node)} (${node.menuCode})`,
       children: buildMenuOptions(node.children || []).filter((item) => item.value !== 0),
     })),
   ]
@@ -79,6 +79,9 @@ function buildMenuOptions(nodes: MenuTreeNode[]): MenuTreeOption[] {
 function displayMenuName(menu: Pick<MenuTreeNode, 'menuCode' | 'menuName'> | Pick<MenuItem, 'menuCode' | 'menuName'>) {
   if (menu.menuCode === 'GROUP_MANAGEMENT') {
     return '部门管理'
+  }
+  if (menu.menuCode === 'OPERATION_LOG') {
+    return '同步任务'
   }
   return menu.menuName
 }
@@ -130,7 +133,7 @@ async function handleDelete() {
 
   try {
     await ElMessageBox.confirm(
-      `确认删除菜单 ${currentMenu.value.menuName}（${currentMenu.value.menuCode}）吗？`,
+      `确认删除菜单 ${displayMenuName(currentMenu.value)}（${currentMenu.value.menuCode}）吗？`,
       '删除菜单',
       {
         type: 'warning',
@@ -141,7 +144,7 @@ async function handleDelete() {
 
     await deleteMenuMutation.mutateAsync(currentMenu.value.id)
   } catch {
-    // 用户取消时不做额外处理。
+    // 用户取消时不额外处理
   }
 }
 

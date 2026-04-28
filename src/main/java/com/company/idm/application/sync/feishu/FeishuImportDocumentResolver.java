@@ -1,6 +1,8 @@
 package com.company.idm.application.sync.feishu;
 
 import com.company.idm.common.exception.BizException;
+import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.FeishuFileImportProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -70,10 +72,16 @@ public class FeishuImportDocumentResolver {
 
     private final FeishuFileImportProperties properties;
     private final ObjectMapper objectMapper;
+    private final UserRepository userRepository;
 
-    public FeishuImportDocumentResolver(FeishuFileImportProperties properties, ObjectMapper objectMapper) {
+    public FeishuImportDocumentResolver(
+        FeishuFileImportProperties properties,
+        ObjectMapper objectMapper,
+        UserRepository userRepository
+    ) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.userRepository = userRepository;
     }
 
     public List<FeishuDepartmentPayload> resolveDepartments(String documentPath) {
@@ -148,7 +156,9 @@ public class FeishuImportDocumentResolver {
         DataFormatter formatter = new DataFormatter();
         Map<String, FeishuDepartmentPayload> departmentMap = new LinkedHashMap<>();
         List<RosterUserRow> rosterUsers = new ArrayList<>();
-        Set<String> usedUsernames = new LinkedHashSet<>();
+        List<User> existingUsers = userRepository.findAll();
+        Map<String, User> existingUserByExternalId = buildExistingUserByExternalId(existingUsers);
+        Set<String> usedUsernames = buildReservedUsernames(existingUsers);
 
         int userOrder = 1;
         for (int rowIndex = sheet.getFirstRowNum() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
@@ -165,7 +175,12 @@ public class FeishuImportDocumentResolver {
                 readOptionalCell(row, headerIndex, formatter, HEADER_WORK_EMAIL),
                 readOptionalCell(row, headerIndex, formatter, HEADER_PERSONAL_EMAIL)
             );
-            String username = generateUsername(realName, email, externalId, usedUsernames);
+            String employeeNo = blankToNull(readOptionalCell(row, headerIndex, formatter, HEADER_EMPLOYEE_NO));
+            User existingUser = existingUserByExternalId.get(externalId);
+            String username = existingUser != null
+                ? existingUser.getUsername()
+                : generateUsername(realName, employeeNo, externalId, usedUsernames);
+            usedUsernames.add(username);
 
             rosterUsers.add(new RosterUserRow(
                 externalId,
@@ -173,7 +188,7 @@ public class FeishuImportDocumentResolver {
                 realName,
                 normalizeEmail(email),
                 normalizeMobile(readOptionalCell(row, headerIndex, formatter, HEADER_MOBILE)),
-                blankToNull(readOptionalCell(row, headerIndex, formatter, HEADER_EMPLOYEE_NO)),
+                employeeNo,
                 mainDepartmentExternalId,
                 resolveUserStatus(readOptionalCell(row, headerIndex, formatter, HEADER_STATUS)),
                 userOrder++
@@ -257,11 +272,8 @@ public class FeishuImportDocumentResolver {
         throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "飞书花名册中存在缺少部门信息的用户行");
     }
 
-    private String generateUsername(String realName, String email, String externalId, Set<String> usedUsernames) {
-        String base = extractEmailLocalPart(email);
-        if (base == null || base.isBlank()) {
-            base = toPinyin(realName);
-        }
+    private String generateUsername(String realName, String employeeNo, String externalId, Set<String> usedUsernames) {
+        String base = toPinyin(realName);
         if (base == null || base.isBlank()) {
             base = "user";
         }
@@ -275,7 +287,10 @@ public class FeishuImportDocumentResolver {
             return candidate;
         }
 
-        String suffix = sanitizeUsername(externalId);
+        String suffix = sanitizeUsername(employeeNo);
+        if (suffix == null || suffix.isBlank()) {
+            suffix = sanitizeUsername(externalId);
+        }
         if (suffix.length() > 6) {
             suffix = suffix.substring(0, 6);
         }
@@ -322,12 +337,26 @@ public class FeishuImportDocumentResolver {
             .replaceAll("[^a-z0-9]", "");
     }
 
-    private String extractEmailLocalPart(String email) {
-        if (email == null || email.isBlank() || !email.contains("@")) {
-            return null;
+    private Map<String, User> buildExistingUserByExternalId(List<User> existingUsers) {
+        Map<String, User> result = new LinkedHashMap<>();
+        for (User user : existingUsers) {
+            if (user.getExternalId() == null || user.getExternalId().isBlank()) {
+                continue;
+            }
+            result.putIfAbsent(user.getExternalId(), user);
         }
-        String localPart = email.substring(0, email.indexOf('@'));
-        return sanitizeUsername(localPart);
+        return result;
+    }
+
+    private Set<String> buildReservedUsernames(List<User> existingUsers) {
+        Set<String> usernames = new LinkedHashSet<>();
+        for (User user : existingUsers) {
+            if (user.getUsername() == null || user.getUsername().isBlank()) {
+                continue;
+            }
+            usernames.add(user.getUsername());
+        }
+        return usernames;
     }
 
     private String normalizeMobile(String mobile) {

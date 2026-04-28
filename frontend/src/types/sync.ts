@@ -21,6 +21,7 @@ export interface SyncJob {
   batchNo: string
   jobType: string
   targetType: string
+  startTime?: string | null
   status: string
   requestJson?: string | null
   resultJson?: string | null

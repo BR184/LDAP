@@ -58,6 +58,13 @@ function statusType(status: string) {
   return 'info'
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return '--'
+  }
+  return value.replace('T', ' ')
+}
+
 function buildSummary(detail: SyncBatchDetail) {
   return [
     `批次号：${detail.batch.batchNo}`,
@@ -153,6 +160,11 @@ async function handleRetry(job: SyncJob) {
       <el-table v-loading="jobsQuery.isLoading.value || jobsQuery.isFetching.value" :data="pagedRows" border>
         <el-table-column prop="batchNo" label="批次号" min-width="260" />
         <el-table-column prop="jobType" label="任务类型" min-width="220" />
+        <el-table-column label="任务开始时间" min-width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.startTime) }}
+          </template>
+        </el-table-column>
         <el-table-column label="状态" min-width="140">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
@@ -207,6 +219,11 @@ async function handleRetry(job: SyncJob) {
         <el-table :data="currentBatchDetail.jobs" border>
           <el-table-column prop="jobType" label="任务类型" min-width="220" />
           <el-table-column prop="targetType" label="目标类型" min-width="140" />
+          <el-table-column label="开始时间" min-width="180">
+            <template #default="{ row }">
+              {{ formatDateTime(row.startTime) }}
+            </template>
+          </el-table-column>
           <el-table-column label="状态" min-width="120">
             <template #default="{ row }">
               <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>

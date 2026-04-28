@@ -16,20 +16,23 @@ import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.AppLdapProperties;
 import com.company.idm.infrastructure.ldap.LdapDnHelper;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * 用户应用服务，负责用户创建、状态变更与 LDAP 协调。
- */
 @Service
 @RequiredArgsConstructor
 public class UserApplicationService {
 
     private static final String DEFAULT_INITIAL_PASSWORD = "123456";
     private static final String DEFAULT_RESET_PASSWORD = "123456";
+    private static final String SUPER_ADMIN_ROLE_CODE = "SUPER_ADMIN";
+    private static final String ADMIN_ROLE_CODE = "ADMIN";
 
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
@@ -41,25 +44,23 @@ public class UserApplicationService {
     private final PermissionLevelRuleService permissionLevelRuleService;
     private final AppLdapProperties ldapProperties;
 
-    /**
-     * 查询当前所有未逻辑删除的用户，用于后台用户列表展示。
-     */
-    public List<User> listUsers(String username, String deptCode, Integer statusCode) {
-        return userRepository.findByConditions(normalize(username), normalize(deptCode), statusCode);
+    public List<User> listUsers(String username, String departmentKeyword, Integer statusCode) {
+        String normalizedUsername = normalize(username);
+        String normalizedDepartmentKeyword = normalize(departmentKeyword);
+        Map<String, Department> departmentByCode = loadDepartmentMap();
+        return userRepository.findByConditions(normalizedUsername, null, statusCode).stream()
+            .map(user -> enrichDepartment(user, departmentByCode))
+            .filter(user -> matchesDepartmentKeyword(user, normalizedDepartmentKeyword))
+            .sorted((left, right) -> compareUsersForList(left, right, departmentByCode))
+            .toList();
     }
 
-    /**
-     * 查询用户详情。
-     */
     public User getUser(Long userId) {
-        return userRepository.findById(userId)
+        User user = userRepository.findById(userId)
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        return enrichDepartment(user, loadDepartmentMap());
     }
 
-    /**
-     * 创建用户并同步写入 LDAP。
-     * 先完成基础校验和数据库落库，再补写 LDAP DN，最后建立用户与角色关系并刷新权限策略。
-     */
     @Transactional
     public User createUser(CreateUserCommand command) {
         passwordPolicyValidator.validate(DEFAULT_INITIAL_PASSWORD);
@@ -101,10 +102,6 @@ public class UserApplicationService {
         return saved;
     }
 
-    /**
-     * 更新用户基础资料。
-     * 用户名、来源等身份主键属性不在此方法中修改，仅维护展示信息与组织归属。
-     */
     @Transactional
     public User updateUser(UpdateUserCommand command) {
         User user = userRepository.findById(command.userId())
@@ -135,10 +132,6 @@ public class UserApplicationService {
         return updated;
     }
 
-    /**
-     * 更新用户启停状态，并同步使历史 token 失效。
-     * 当用户状态切换时，同时驱动 LDAP 账户启停，保证平台认证与目录认证口径一致。
-     */
     @Transactional
     public void updateStatus(UpdateUserStatusCommand command) {
         User user = userRepository.findById(command.userId())
@@ -161,21 +154,14 @@ public class UserApplicationService {
             .build());
     }
 
-    /**
-     * 删除用户。
-     * 按当前业务规则，先在 LDAP 中物理删除，再在 MySQL 中逻辑删除，便于再次入职时恢复业务数据。
-     */
     @Transactional
     public void deleteUser(DeleteUserCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
         ldapGroupService.removeUserFromAllGroups(user.getUsername());
-        // 目录侧先删条目，避免逻辑删除后仍可通过 LDAP 认证。
         ldapDirectoryService.deleteUser(user.getUsername());
-        // 删除用户后同步清理角色关系，避免角色仍被已删除用户占用。
         userRepository.removeAllRoles(command.userId());
-        // 业务库只做逻辑删除，保留审计和后续恢复基础。
         userRepository.logicalDelete(command.userId(), buildRecycledUsername(user), nextTokenVersion(user));
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
@@ -187,10 +173,6 @@ public class UserApplicationService {
             .build());
     }
 
-    /**
-     * 用户本人修改密码。
-     * 通过 LDAP 校验旧密码正确性，改密成功后递增 tokenVersion，使旧登录态立即失效。
-     */
     @Transactional
     public void changePassword(ChangePasswordCommand command) {
         User user = userRepository.findByUsername(command.operator())
@@ -217,10 +199,6 @@ public class UserApplicationService {
             .build());
     }
 
-    /**
-     * 管理员重置目标用户密码。
-     * 当前阶段按固定密码 123456 重置，且不启用首次登录强制改密逻辑。
-     */
     @Transactional
     public String resetPassword(ResetPasswordCommand command) {
         User user = userRepository.findById(command.userId())
@@ -240,10 +218,6 @@ public class UserApplicationService {
         return DEFAULT_RESET_PASSWORD;
     }
 
-    /**
-     * 手工同步单个用户到 LDAP。
-     * 用于首次初始化、紧急修复或对账后人工补偿。
-     */
     @Transactional
     public User syncUserToLdap(Long userId, String operator) {
         User user = userRepository.findById(userId)
@@ -289,17 +263,128 @@ public class UserApplicationService {
         return synced;
     }
 
-    /**
-     * 统一计算用户下一次 tokenVersion。
-     * 用于禁用、删除、改密、重置密码等需要立即踢出旧会话的场景。
-     */
     private int nextTokenVersion(User user) {
         return user.getTokenVersion() == null ? 1 : user.getTokenVersion() + 1;
     }
 
-    /**
-     * 按固定映射规则同步用户所属部门到 LDAP 分组。
-     */
+    private Map<String, Department> loadDepartmentMap() {
+        return departmentRepository.findAll().stream()
+            .filter(department -> department.getDeptCode() != null && !department.getDeptCode().isBlank())
+            .collect(
+                LinkedHashMap::new,
+                (accumulator, department) -> accumulator.putIfAbsent(department.getDeptCode(), department),
+                LinkedHashMap::putAll
+            );
+    }
+
+    private User enrichDepartment(User user, Map<String, Department> departmentByCode) {
+        if (user == null) {
+            return null;
+        }
+        Department department = user.getDeptCode() == null ? null : departmentByCode.get(user.getDeptCode());
+        return user.toBuilder()
+            .deptName(department == null ? null : department.getDeptName())
+            .build();
+    }
+
+    private boolean matchesDepartmentKeyword(User user, String departmentKeyword) {
+        if (departmentKeyword == null || departmentKeyword.isBlank()) {
+            return true;
+        }
+        String keyword = departmentKeyword.toLowerCase(Locale.ROOT);
+        boolean deptNameMatches = user.getDeptName() != null
+            && user.getDeptName().toLowerCase(Locale.ROOT).contains(keyword);
+        boolean deptCodeMatches = user.getDeptCode() != null
+            && user.getDeptCode().equalsIgnoreCase(departmentKeyword);
+        return deptNameMatches || deptCodeMatches;
+    }
+
+    private int compareUsersForList(User left, User right, Map<String, Department> departmentByCode) {
+        int leftAdminRank = adminDisplayRank(left);
+        int rightAdminRank = adminDisplayRank(right);
+        if (leftAdminRank != rightAdminRank) {
+            return Integer.compare(leftAdminRank, rightAdminRank);
+        }
+        if (leftAdminRank < 2) {
+            return compareAdminUsers(left, right);
+        }
+        return compareDepartmentUsers(left, right, departmentByCode);
+    }
+
+    private int compareAdminUsers(User left, User right) {
+        int byStatus = compareNullable(
+            left.getStatus() == null ? null : left.getStatus().getCode(),
+            right.getStatus() == null ? null : right.getStatus().getCode()
+        );
+        if (byStatus != 0) {
+            return byStatus;
+        }
+        int byRealName = compareNullable(safe(left.getRealName()), safe(right.getRealName()));
+        if (byRealName != 0) {
+            return byRealName;
+        }
+        return compareNullable(safe(left.getUsername()), safe(right.getUsername()));
+    }
+
+    private int compareDepartmentUsers(User left, User right, Map<String, Department> departmentByCode) {
+        int byDepartmentPresence = Integer.compare(
+            isDepartmentMissing(left, departmentByCode) ? 1 : 0,
+            isDepartmentMissing(right, departmentByCode) ? 1 : 0
+        );
+        if (byDepartmentPresence != 0) {
+            return byDepartmentPresence;
+        }
+        int byAncestorPath = compareNullable(resolveAncestorPath(left, departmentByCode), resolveAncestorPath(right, departmentByCode));
+        if (byAncestorPath != 0) {
+            return byAncestorPath;
+        }
+        int byDeptName = compareNullable(safe(left.getDeptName()), safe(right.getDeptName()));
+        if (byDeptName != 0) {
+            return byDeptName;
+        }
+        int byEmployeeNo = compareNullable(safe(left.getEmployeeNo()), safe(right.getEmployeeNo()));
+        if (byEmployeeNo != 0) {
+            return byEmployeeNo;
+        }
+        int byRealName = compareNullable(safe(left.getRealName()), safe(right.getRealName()));
+        if (byRealName != 0) {
+            return byRealName;
+        }
+        return compareNullable(safe(left.getUsername()), safe(right.getUsername()));
+    }
+
+    private int adminDisplayRank(User user) {
+        if (user == null || user.getRoleCodes() == null || user.getRoleCodes().isEmpty()) {
+            return 2;
+        }
+        if (user.getRoleCodes().contains(SUPER_ADMIN_ROLE_CODE)) {
+            return 0;
+        }
+        if (user.getRoleCodes().contains(ADMIN_ROLE_CODE)) {
+            return 1;
+        }
+        return 2;
+    }
+
+    private boolean isDepartmentMissing(User user, Map<String, Department> departmentByCode) {
+        return user == null || user.getDeptCode() == null || !departmentByCode.containsKey(user.getDeptCode());
+    }
+
+    private String resolveAncestorPath(User user, Map<String, Department> departmentByCode) {
+        if (user == null || user.getDeptCode() == null || user.getDeptCode().isBlank()) {
+            return "~~~~";
+        }
+        Department department = departmentByCode.get(user.getDeptCode());
+        if (department == null || department.getAncestorPath() == null || department.getAncestorPath().isBlank()) {
+            return "~~~~/" + user.getDeptCode();
+        }
+        return department.getAncestorPath();
+    }
+
+    private <T extends Comparable<T>> int compareNullable(T left, T right) {
+        return Comparator.nullsLast(Comparator.<T>naturalOrder()).compare(left, right);
+    }
+
     private void syncUserDepartmentGroup(User user, Department department) {
         if (department == null) {
             return;
@@ -309,9 +394,6 @@ public class UserApplicationService {
         ldapGroupService.addUserToGroup(user.getUsername(), department.getDeptCode());
     }
 
-    /**
-     * 在用户部门变更时同步更新 LDAP 分组成员关系。
-     */
     private void syncUserDepartmentMembership(User originalUser, User updatedUser, Department newDepartment) {
         String oldDeptCode = originalUser.getDeptCode();
         String newDeptCode = updatedUser.getDeptCode();
@@ -329,9 +411,6 @@ public class UserApplicationService {
         }
     }
 
-    /**
-     * 当 LDAP group 由用户流程首次补建或重新映射时，回写部门的当前 LDAP DN。
-     */
     private void updateDepartmentLdapDn(Department department, String ldapDn) {
         if (department == null || ldapDn == null || ldapDn.isBlank()) {
             return;
@@ -364,5 +443,9 @@ public class UserApplicationService {
             return null;
         }
         return value.trim();
+    }
+
+    private String safe(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

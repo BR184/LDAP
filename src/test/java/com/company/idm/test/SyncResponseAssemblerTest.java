@@ -14,6 +14,7 @@ import com.company.idm.domain.sync.SyncDiff;
 import com.company.idm.domain.sync.SyncJob;
 import com.company.idm.interfaces.sync.SyncBatchDetailResponse;
 import com.company.idm.interfaces.sync.SyncResponseAssembler;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -44,6 +45,7 @@ class SyncResponseAssemblerTest {
             .batchNo("BATCH-001")
             .jobType(SyncJobType.FEISHU_USER_IMPORT)
             .targetType(SyncTargetType.USER)
+            .startTime(LocalDateTime.of(2026, 4, 28, 9, 45))
             .status(SyncRunStatus.SUCCESS)
             .requestJson("{\"force\":false}")
             .resultJson("{\"imported\":1}")
@@ -72,6 +74,7 @@ class SyncResponseAssemblerTest {
         assertThat(response.jobs()).singleElement().satisfies(item -> {
             assertThat(item.jobType()).isEqualTo("FEISHU_USER_IMPORT");
             assertThat(item.targetType()).isEqualTo("USER");
+            assertThat(item.startTime()).isEqualTo(LocalDateTime.of(2026, 4, 28, 9, 45));
             assertThat(item.status()).isEqualTo("SUCCESS");
         });
         assertThat(response.diffs()).singleElement().satisfies(item -> {

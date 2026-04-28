@@ -24,6 +24,7 @@ public class User {
     private String mobile;
     private String employeeNo;
     private String deptCode;
+    private String deptName;
     private UserStatus status;
     private SourceType sourceType;
     private String externalId;

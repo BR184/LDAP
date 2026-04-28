@@ -5,6 +5,7 @@ export interface UserItem {
   email: string | null
   mobile: string | null
   employeeNo: string | null
+  deptName: string | null
   deptCode: string | null
   status: number
   ldapDn: string | null
@@ -13,7 +14,7 @@ export interface UserItem {
 
 export interface UserListQuery {
   username?: string
-  deptCode?: string
+  deptName?: string
   status?: number
 }
 

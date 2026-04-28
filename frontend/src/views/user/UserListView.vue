@@ -27,17 +27,17 @@ const queryClient = useQueryClient()
 
 const searchForm = reactive<{
   username: string
-  deptCode: string
+  deptName: string
   status: number | undefined
 }>({
   username: '',
-  deptCode: '',
+  deptName: '',
   status: undefined,
 })
 
 const appliedQuery = reactive<UserListQuery>({
   username: '',
-  deptCode: '',
+  deptName: '',
   status: undefined,
 })
 
@@ -59,11 +59,11 @@ const roleUser = ref<UserItem | null>(null)
 const selectedRoleIds = ref<number[]>([])
 
 const usersQuery = useQuery({
-  queryKey: computed(() => ['users', appliedQuery.username || '', appliedQuery.deptCode || '', appliedQuery.status ?? 'all']),
+  queryKey: computed(() => ['users', appliedQuery.username || '', appliedQuery.deptName || '', appliedQuery.status ?? 'all']),
   queryFn: () =>
     fetchUsers({
       username: appliedQuery.username || undefined,
-      deptCode: appliedQuery.deptCode || undefined,
+      deptName: appliedQuery.deptName || undefined,
       status: appliedQuery.status,
     }),
 })
@@ -169,14 +169,14 @@ function normalizeText(value: string) {
 
 function applySearch() {
   appliedQuery.username = normalizeText(searchForm.username)
-  appliedQuery.deptCode = normalizeText(searchForm.deptCode)
+  appliedQuery.deptName = normalizeText(searchForm.deptName)
   appliedQuery.status = typeof searchForm.status === 'number' ? searchForm.status : undefined
   pagination.page = 1
 }
 
 function resetSearch() {
   searchForm.username = ''
-  searchForm.deptCode = ''
+  searchForm.deptName = ''
   searchForm.status = undefined
   applySearch()
 }
@@ -329,8 +329,8 @@ function statusTagType(status: number) {
         <el-form-item label="用户名">
           <el-input v-model="searchForm.username" clearable placeholder="请输入用户名" />
         </el-form-item>
-        <el-form-item label="部门编码">
-          <el-input v-model="searchForm.deptCode" clearable placeholder="请输入部门编码" />
+        <el-form-item label="部门名称">
+          <el-input v-model="searchForm.deptName" clearable placeholder="请输入部门名称" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" clearable placeholder="全部状态" style="width: 160px">
@@ -366,6 +366,11 @@ function statusTagType(status: number) {
         <el-table-column prop="username" label="用户名" min-width="150" />
         <el-table-column prop="realName" label="姓名" min-width="120" />
         <el-table-column prop="employeeNo" label="工号" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="deptName" label="部门名称" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.deptName || '--' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="deptCode" label="部门编码" min-width="120" />
         <el-table-column prop="email" label="邮箱" min-width="220" show-overflow-tooltip />
         <el-table-column prop="mobile" label="手机号" min-width="140" />

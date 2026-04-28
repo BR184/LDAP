@@ -10,6 +10,7 @@ import com.company.idm.interfaces.sync.SyncJobResponse;
 import com.company.idm.interfaces.sync.SyncResponseAssembler;
 import com.company.idm.test.support.AbstractControllerMvcTest;
 import com.company.idm.test.support.ControllerMvcSlice;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -106,12 +107,13 @@ class SyncControllerTest extends AbstractControllerMvcTest {
         SyncJob job = mock(SyncJob.class);
         when(syncApplicationService.listJobs()).thenReturn(List.of(job));
         when(syncResponseAssembler.toJobResponse(job)).thenReturn(new SyncJobResponse(
-            1L, "BATCH_001", "LDAP_RECONCILE_USER", "USER", "SUCCESS", "{}", "{}", null, "admin", 0
+            1L, "BATCH_001", "LDAP_RECONCILE_USER", "USER", LocalDateTime.of(2026, 4, 28, 9, 30), "SUCCESS", "{}", "{}", null, "admin", 0
         ));
 
         mockMvc.perform(get("/api/v1/sync/jobs"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data[0].batchNo").value("BATCH_001"));
+            .andExpect(jsonPath("$.data[0].batchNo").value("BATCH_001"))
+            .andExpect(jsonPath("$.data[0].startTime").value("2026-04-28T09:30:00"));
     }
 
     @Test

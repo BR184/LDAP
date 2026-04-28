@@ -42,6 +42,7 @@ public class SyncResponseAssembler {
             job.getBatchNo(),
             job.getJobType().name(),
             job.getTargetType().name(),
+            job.getStartTime(),
             job.getStatus().name(),
             job.getRequestJson(),
             job.getResultJson(),
