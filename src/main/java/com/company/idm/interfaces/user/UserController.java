@@ -1,6 +1,8 @@
 package com.company.idm.interfaces.user;
 
 import com.company.idm.application.user.ChangePasswordCommand;
+import com.company.idm.application.user.BatchDeleteUsersCommand;
+import com.company.idm.application.user.BatchDeleteUsersResult;
 import com.company.idm.application.user.CreateUserCommand;
 import com.company.idm.application.user.DeleteUserCommand;
 import com.company.idm.application.user.AdminResetPasswordCommand;
@@ -129,6 +131,19 @@ public class UserController {
     ) {
         userApplicationService.deleteUser(new DeleteUserCommand(id, username));
         return ApiResponse.success();
+    }
+
+    @PostMapping("/batch-delete")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/batch-delete', 'POST')")
+    public ApiResponse<BatchDeleteUsersResponse> batchDelete(
+        @Valid @RequestBody BatchDeleteUsersRequest request,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        BatchDeleteUsersResult result = userApplicationService.batchDeleteUsers(new BatchDeleteUsersCommand(
+            request.userIds(),
+            username
+        ));
+        return ApiResponse.success(new BatchDeleteUsersResponse(result.totalCount(), result.deletedCount()));
     }
 
     @PutMapping("/me/password")

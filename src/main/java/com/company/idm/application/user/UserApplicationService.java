@@ -18,9 +18,11 @@ import com.company.idm.infrastructure.config.AppLdapProperties;
 import com.company.idm.infrastructure.ldap.LdapDnHelper;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -159,18 +161,48 @@ public class UserApplicationService {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
-        ldapGroupService.removeUserFromAllGroups(user.getUsername());
-        ldapDirectoryService.deleteUser(user.getUsername());
-        userRepository.removeAllRoles(command.userId());
-        userRepository.logicalDelete(command.userId(), buildRecycledUsername(user), nextTokenVersion(user));
+        deleteUserInternal(user, command.operator());
+    }
+
+    @Transactional
+    public BatchDeleteUsersResult batchDeleteUsers(BatchDeleteUsersCommand command) {
+        List<Long> uniqueUserIds = command.userIds().stream()
+            .filter(java.util.Objects::nonNull)
+            .collect(java.util.stream.Collectors.collectingAndThen(
+                java.util.stream.Collectors.toCollection(LinkedHashSet::new),
+                List::copyOf
+            ));
+        if (uniqueUserIds.isEmpty()) {
+            throw new BizException("USER_BATCH_DELETE_EMPTY", "待删除用户不能为空");
+        }
+
+        List<User> users = uniqueUserIds.stream()
+            .map(userId -> userRepository.findById(userId)
+                .orElseThrow(() -> new BizException("USER_NOT_FOUND", "存在待删除用户不存在")))
+            .toList();
+
+        for (User user : users) {
+            if (command.operator().equals(user.getUsername())) {
+                throw new BizException("USER_BATCH_DELETE_SELF_FORBIDDEN", "不允许批量删除当前登录用户");
+            }
+            permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
+        }
+
+        for (User user : users) {
+            deleteUserInternal(user, command.operator());
+        }
+
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
-            .operationType("USER_DELETE")
+            .operationType("USER_BATCH_DELETE")
             .bizType("USER")
-            .bizId(String.valueOf(command.userId()))
-            .afterJson("DELETED")
+            .bizId(uniqueUserIds.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")))
+            .afterJson("""
+                {"totalCount":%s,"deletedCount":%s}
+                """.formatted(uniqueUserIds.size(), users.size()))
             .result("SUCCESS")
             .build());
+        return new BatchDeleteUsersResult(uniqueUserIds.size(), users.size());
     }
 
     @Transactional
@@ -436,6 +468,21 @@ public class UserApplicationService {
 
     private String buildRecycledUsername(User user) {
         return user.getUsername() + "__deleted__" + user.getId();
+    }
+
+    private void deleteUserInternal(User user, String operator) {
+        ldapGroupService.removeUserFromAllGroups(user.getUsername());
+        ldapDirectoryService.deleteUser(user.getUsername());
+        userRepository.removeAllRoles(user.getId());
+        userRepository.logicalDelete(user.getId(), buildRecycledUsername(user), nextTokenVersion(user));
+        auditLogRepository.save(AuditLog.builder()
+            .operator(operator)
+            .operationType("USER_DELETE")
+            .bizType("USER")
+            .bizId(String.valueOf(user.getId()))
+            .afterJson("DELETED")
+            .result("SUCCESS")
+            .build());
     }
 
     private String normalize(String value) {

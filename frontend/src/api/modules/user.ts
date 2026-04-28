@@ -2,6 +2,8 @@ import request from '@/api/request'
 import type { SyncBatchSummary } from '@/types/sync'
 import type {
   AssignUserRolesPayload,
+  BatchDeleteUsersPayload,
+  BatchDeleteUsersResult,
   ChangePasswordPayload,
   CreateUserPayload,
   UpdateUserPayload,
@@ -31,6 +33,10 @@ export function updateUserStatus(userId: number, statusCode: number) {
 
 export function deleteUser(userId: number) {
   return request.delete<never, void>(`/v1/users/${userId}`)
+}
+
+export function batchDeleteUsers(payload: BatchDeleteUsersPayload) {
+  return request.post<never, BatchDeleteUsersResult>('/v1/users/batch-delete', payload)
 }
 
 export function resetUserPassword(userId: number) {

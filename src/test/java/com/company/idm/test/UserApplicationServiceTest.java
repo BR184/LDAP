@@ -250,6 +250,41 @@ class UserApplicationServiceTest {
     }
 
     @Test
+    void shouldBatchDeleteUsersSuccessfullyAfterFullPreValidation() {
+        User first = buildUser(2L, "zhangsan", UserStatus.ENABLED, 2).toBuilder().roleCodes(Set.of("NORMAL_USER")).build();
+        User second = buildUser(3L, "lisi", UserStatus.ENABLED, 1).toBuilder().roleCodes(Set.of("NORMAL_USER")).build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(first));
+        when(userRepository.findById(3L)).thenReturn(Optional.of(second));
+
+        com.company.idm.application.user.BatchDeleteUsersResult result = userApplicationService.batchDeleteUsers(
+            new com.company.idm.application.user.BatchDeleteUsersCommand(List.of(2L, 3L), "admin")
+        );
+
+        assertThat(result.totalCount()).isEqualTo(2);
+        assertThat(result.deletedCount()).isEqualTo(2);
+        verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", first);
+        verify(permissionLevelRuleService).checkCanModifySensitiveUser("admin", second);
+        verify(ldapGroupService).removeUserFromAllGroups("zhangsan");
+        verify(ldapGroupService).removeUserFromAllGroups("lisi");
+        verify(ldapDirectoryService).deleteUser("zhangsan");
+        verify(ldapDirectoryService).deleteUser("lisi");
+        verify(userRepository).logicalDelete(2L, "zhangsan__deleted__2", 3);
+        verify(userRepository).logicalDelete(3L, "lisi__deleted__3", 2);
+    }
+
+    @Test
+    void shouldRejectBatchDeleteWhenContainsCurrentOperator() {
+        User self = buildUser(2L, "admin", UserStatus.ENABLED, 2);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(self));
+
+        assertThatThrownBy(() -> userApplicationService.batchDeleteUsers(
+            new com.company.idm.application.user.BatchDeleteUsersCommand(List.of(2L), "admin")
+        ))
+            .isInstanceOf(BizException.class)
+            .hasMessage("不允许批量删除当前登录用户");
+    }
+
+    @Test
     void shouldChangePasswordSuccessfully() {
         User existing = buildUser(2L, "zhangsan", UserStatus.ENABLED, 2);
         when(userRepository.findByUsername("zhangsan")).thenReturn(Optional.of(existing));

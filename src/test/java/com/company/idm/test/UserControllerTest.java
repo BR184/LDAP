@@ -270,6 +270,26 @@ class UserControllerTest extends AbstractControllerMvcTest {
 
     @Test
     @WithMockUser(username = "admin")
+    void shouldBatchDeleteUsersSuccessfully() throws Exception {
+        allow("/api/v1/users/batch-delete", "POST");
+        when(userApplicationService.batchDeleteUsers(argThat((com.company.idm.application.user.BatchDeleteUsersCommand command) ->
+            command.operator().equals("admin") && command.userIds().equals(List.of(2L, 3L))
+        ))).thenReturn(new com.company.idm.application.user.BatchDeleteUsersResult(2, 2));
+
+        mockMvc.perform(post("/api/v1/users/batch-delete")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "userIds": [2, 3]
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalCount").value(2))
+            .andExpect(jsonPath("$.data.deletedCount").value(2));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
     void shouldChangePasswordSuccessfully() throws Exception {
         mockMvc.perform(put("/api/v1/users/me/password")
                 .contentType(APPLICATION_JSON)

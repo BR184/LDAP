@@ -2,9 +2,10 @@
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
+import { Delete, MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import {
   assignUserRoles,
+  batchDeleteUsers,
   createUser,
   deleteUser,
   fetchUserDetail,
@@ -17,6 +18,7 @@ import {
 } from '@/api/modules/user'
 import { fetchRoles } from '@/api/modules/role'
 import { fetchDepartmentTree } from '@/api/modules/department'
+import { useAuthStore } from '@/stores/auth'
 import UserDetailDrawer from '@/views/user/components/UserDetailDrawer.vue'
 import UserFormDrawer from '@/views/user/components/UserFormDrawer.vue'
 import UserRoleDrawer from '@/views/user/components/UserRoleDrawer.vue'
@@ -24,6 +26,8 @@ import type { DepartmentTreeNode, DepartmentTreeOption } from '@/types/departmen
 import type { CreateUserPayload, UpdateUserPayload, UserItem, UserListQuery } from '@/types/user'
 
 const queryClient = useQueryClient()
+const authStore = useAuthStore()
+const tableRef = ref<{ clearSelection?: () => void } | null>(null)
 
 const searchForm = reactive<{
   username: string
@@ -57,6 +61,7 @@ const formUser = ref<UserItem | null>(null)
 const roleVisible = ref(false)
 const roleUser = ref<UserItem | null>(null)
 const selectedRoleIds = ref<number[]>([])
+const selectedUsers = ref<UserItem[]>([])
 
 const usersQuery = useQuery({
   queryKey: computed(() => ['users', appliedQuery.username || '', appliedQuery.deptName || '', appliedQuery.status ?? 'all']),
@@ -85,6 +90,7 @@ const pagedUsers = computed(() => {
   const start = (pagination.page - 1) * pagination.pageSize
   return users.value.slice(start, start + pagination.pageSize)
 })
+const hasSelectedUsers = computed(() => selectedUsers.value.length > 0)
 
 const departmentOptions = computed<DepartmentTreeOption[]>(() => buildDepartmentOptions(departmentsQuery.data.value || []))
 const roleIdMapByCode = computed<Record<string, number>>(() =>
@@ -137,6 +143,16 @@ const deleteUserMutation = useMutation({
   },
 })
 
+const batchDeleteUsersMutation = useMutation({
+  mutationFn: batchDeleteUsers,
+  onSuccess: async (result) => {
+    ElMessage.success(`已批量删除 ${result.deletedCount} 个用户`)
+    selectedUsers.value = []
+    tableRef.value?.clearSelection?.()
+    await refreshUsers()
+  },
+})
+
 const resetPasswordMutation = useMutation({
   mutationFn: (userId: number) => resetUserPassword(userId),
 })
@@ -183,6 +199,14 @@ function resetSearch() {
 
 async function refreshUsers() {
   await queryClient.invalidateQueries({ queryKey: ['users'] })
+}
+
+function handleSelectionChange(rows: UserItem[]) {
+  selectedUsers.value = rows
+}
+
+function selectableUser(row: UserItem) {
+  return row.id !== authStore.currentUser?.userId
 }
 
 async function openDetail(userId: number) {
@@ -282,6 +306,35 @@ async function handleDelete(user: UserItem) {
   }
 }
 
+async function handleBatchDelete() {
+  if (!selectedUsers.value.length) {
+    return
+  }
+
+  const previewUsers = selectedUsers.value.slice(0, 5).map((user) => `${user.realName}（${user.username}）`)
+  const previewText = previewUsers.join('、')
+  const moreCount = selectedUsers.value.length - previewUsers.length
+  const summaryText = moreCount > 0 ? `${previewText} 等 ${selectedUsers.value.length} 人` : previewText
+
+  try {
+    await ElMessageBox.confirm(
+      `删除后将同步清理 LDAP 账号映射、角色绑定与登录能力。确认批量删除以下用户吗？\n${summaryText}`,
+      '确认批量删除',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch {
+    return
+  }
+
+  await batchDeleteUsersMutation.mutateAsync({
+    userIds: selectedUsers.value.map((user) => user.id),
+  })
+}
+
 async function handleResetPassword(user: UserItem) {
   try {
     await ElMessageBox.confirm(
@@ -355,6 +408,16 @@ function statusTagType(status: number) {
 
           <div class="view-toolbar__actions">
             <el-button type="primary" :icon="Plus" @click="openCreate">新增用户</el-button>
+            <el-button
+              type="danger"
+              plain
+              :icon="Delete"
+              :disabled="!hasSelectedUsers"
+              :loading="batchDeleteUsersMutation.isPending.value"
+              @click="handleBatchDelete"
+            >
+              批量删除
+            </el-button>
             <el-button :icon="RefreshRight" :loading="syncFeishuMutation.isPending.value" @click="handleSyncFeishu">
               飞书同步
             </el-button>
@@ -362,7 +425,14 @@ function statusTagType(status: number) {
         </div>
       </template>
 
-      <el-table v-loading="usersQuery.isLoading.value || usersQuery.isFetching.value" :data="pagedUsers" border>
+      <el-table
+        ref="tableRef"
+        v-loading="usersQuery.isLoading.value || usersQuery.isFetching.value"
+        :data="pagedUsers"
+        border
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="52" :selectable="selectableUser" />
         <el-table-column prop="username" label="用户名" min-width="150" />
         <el-table-column prop="realName" label="姓名" min-width="120" />
         <el-table-column prop="employeeNo" label="工号" min-width="120" show-overflow-tooltip />
