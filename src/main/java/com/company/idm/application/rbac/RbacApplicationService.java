@@ -1,7 +1,7 @@
 package com.company.idm.application.rbac;
 
-import com.company.idm.common.exception.BizException;
 import com.company.idm.common.enums.MenuType;
+import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.audit.AuditLog;
 import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.rbac.Menu;
@@ -21,9 +21,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * 角色权限应用服务，负责角色、菜单、授权关系与权限规则编排。
- */
 @Service
 @RequiredArgsConstructor
 public class RbacApplicationService {
@@ -39,70 +36,43 @@ public class RbacApplicationService {
     private final PolicyRefreshService policyRefreshService;
     private final PermissionLevelRuleService permissionLevelRuleService;
 
-    /**
-     * 查询全部角色。
-     */
     public List<Role> listRoles() {
         return roleRepository.findAll();
     }
 
-    /**
-     * 查询角色详情。
-     */
     public Role getRole(Long roleId) {
         return roleRepository.findById(roleId)
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
     }
 
-    /**
-     * 查询角色当前已绑定的菜单 ID 列表。
-     */
     public List<Long> listRoleMenuIds(Long roleId) {
         ensureRoleExists(roleId);
         return roleRepository.findMenuIdsByRoleId(roleId);
     }
 
-    /**
-     * 查询角色当前已授权的权限 ID 列表。
-     */
     public List<Long> listRolePermissionIds(Long roleId) {
         ensureRoleExists(roleId);
         return roleRepository.findPermissionIdsByRoleId(roleId);
     }
 
-    /**
-     * 查询接口权限点列表。
-     */
     public List<Permission> listPermissions() {
         return permissionRepository.findAll();
     }
 
-    /**
-     * 查询全部启用菜单，用于后台配置菜单树。
-     */
     public List<Menu> listAllMenus() {
         return menuRepository.findAllEnabled();
     }
 
-    /**
-     * 查询菜单详情。
-     */
     public Menu getMenu(Long menuId) {
         return menuRepository.findById(menuId)
             .orElseThrow(() -> new BizException("MENU_NOT_FOUND", "菜单不存在"));
     }
 
-    /**
-     * 查询当前用户可见菜单树数据。
-     */
     public List<Menu> listCurrentUserMenus(String username) {
         Set<String> roleCodes = userRepository.findRoleCodesByUsername(username);
         return menuRepository.findByRoleCodes(roleCodes);
     }
 
-    /**
-     * 创建角色并设置权限等级。
-     */
     @Transactional
     public Role createRole(CreateRoleCommand command, String operator) {
         permissionLevelRuleService.checkCanCreateRole(operator, command.permissionLevel());
@@ -130,9 +100,6 @@ public class RbacApplicationService {
         return role;
     }
 
-    /**
-     * 更新角色基础信息和权限等级。
-     */
     @Transactional
     public Role updateRole(UpdateRoleCommand command, String operator) {
         Role role = roleRepository.findById(command.roleId())
@@ -159,9 +126,6 @@ public class RbacApplicationService {
         return updated;
     }
 
-    /**
-     * 更新角色启停状态。
-     */
     @Transactional
     public void updateRoleStatus(UpdateRoleStatusCommand command) {
         Role role = roleRepository.findById(command.roleId())
@@ -179,32 +143,53 @@ public class RbacApplicationService {
             .build());
     }
 
-    /**
-     * 删除角色。
-     */
     @Transactional
     public void deleteRole(DeleteRoleCommand command) {
         Role role = roleRepository.findById(command.roleId())
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
-        permissionLevelRuleService.checkCanDeleteRole(command.operator(), role);
-        if (roleRepository.existsUserBinding(command.roleId())) {
-            throw new BizException("ROLE_IN_USE", "当前角色已绑定用户，不能直接删除");
+        validateRoleDeletion(role, command.operator());
+        deleteRoleInternal(role, command.operator());
+        policyRefreshService.refresh();
+    }
+
+    @Transactional
+    public BatchDeleteRolesResult batchDeleteRoles(BatchDeleteRolesCommand command) {
+        List<Long> uniqueRoleIds = command.roleIds().stream()
+            .filter(java.util.Objects::nonNull)
+            .collect(java.util.stream.Collectors.collectingAndThen(
+                java.util.stream.Collectors.toCollection(LinkedHashSet::new),
+                List::copyOf
+            ));
+        if (uniqueRoleIds.isEmpty()) {
+            throw new BizException("ROLE_BATCH_DELETE_EMPTY", "待删除角色不能为空");
         }
-        roleRepository.delete(command.roleId());
+
+        List<Role> roles = uniqueRoleIds.stream()
+            .map(roleId -> roleRepository.findById(roleId)
+                .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "存在待删除角色不存在")))
+            .toList();
+
+        for (Role role : roles) {
+            validateRoleDeletion(role, command.operator());
+        }
+
+        for (Role role : roles) {
+            deleteRoleInternal(role, command.operator());
+        }
         policyRefreshService.refresh();
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
-            .operationType("ROLE_DELETE")
+            .operationType("ROLE_BATCH_DELETE")
             .bizType("ROLE")
-            .bizId(String.valueOf(command.roleId()))
-            .afterJson(role.getRoleCode())
+            .bizId(uniqueRoleIds.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")))
+            .afterJson("""
+                {"totalCount":%s,"deletedCount":%s}
+                """.formatted(uniqueRoleIds.size(), roles.size()))
             .result("SUCCESS")
             .build());
+        return new BatchDeleteRolesResult(uniqueRoleIds.size(), roles.size());
     }
 
-    /**
-     * 保留当前原型的接口权限点授权能力。
-     */
     @Transactional
     public void grantPermissions(GrantRolePermissionsCommand command) {
         roleRepository.findById(command.roleId())
@@ -221,9 +206,6 @@ public class RbacApplicationService {
             .build());
     }
 
-    /**
-     * 绑定角色与菜单关系，供前端菜单树渲染使用。
-     */
     @Transactional
     public void bindMenus(BindRoleMenusCommand command) {
         Role role = roleRepository.findById(command.roleId())
@@ -245,9 +227,6 @@ public class RbacApplicationService {
             .build());
     }
 
-    /**
-     * 给用户分配角色。
-     */
     @Transactional
     public void assignUserRoles(AssignUserRolesCommand command) {
         User user = userRepository.findById(command.userId())
@@ -269,9 +248,6 @@ public class RbacApplicationService {
             .build());
     }
 
-    /**
-     * 创建菜单并自动绑定到管理员角色。
-     */
     @Transactional
     public Menu createMenu(CreateMenuCommand command, String operator) {
         permissionLevelRuleService.checkCanManageMenu(operator);
@@ -307,9 +283,6 @@ public class RbacApplicationService {
         return menu;
     }
 
-    /**
-     * 更新菜单基础信息并保持现有绑定约束合法。
-     */
     @Transactional
     public Menu updateMenu(UpdateMenuCommand command, String operator) {
         permissionLevelRuleService.checkCanManageMenu(operator);
@@ -349,9 +322,6 @@ public class RbacApplicationService {
         return updated;
     }
 
-    /**
-     * 删除菜单，同时清理角色与菜单关系。
-     */
     @Transactional
     public void deleteMenu(DeleteMenuCommand command) {
         permissionLevelRuleService.checkCanManageMenu(command.operator());
@@ -372,9 +342,6 @@ public class RbacApplicationService {
             .build());
     }
 
-    /**
-     * 自动补齐祖先菜单，避免前端菜单树渲染时出现孤立叶子节点。
-     */
     private List<Long> expandMenuIdsWithAncestors(List<Menu> menus) {
         LinkedHashSet<Long> menuIds = new LinkedHashSet<>();
         for (Menu menu : menus) {
@@ -478,9 +445,25 @@ public class RbacApplicationService {
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
     }
 
-    /**
-     * 新角色默认授予查看当前用户权限；当权限等级为 1 或 2 时，自动授予全部菜单与接口权限。
-     */
+    private void validateRoleDeletion(Role role, String operator) {
+        permissionLevelRuleService.checkCanDeleteRole(operator, role);
+        if (roleRepository.existsUserBinding(role.getId())) {
+            throw new BizException("ROLE_IN_USE", "当前角色已绑定用户，不能直接删除");
+        }
+    }
+
+    private void deleteRoleInternal(Role role, String operator) {
+        roleRepository.delete(role.getId());
+        auditLogRepository.save(AuditLog.builder()
+            .operator(operator)
+            .operationType("ROLE_DELETE")
+            .bizType("ROLE")
+            .bizId(String.valueOf(role.getId()))
+            .afterJson(role.getRoleCode())
+            .result("SUCCESS")
+            .build());
+    }
+
     private void applyDefaultAccessGrants(Role role, boolean createOperation) {
         List<Permission> allPermissions = permissionRepository.findAll();
         if (role.getPermissionLevel() != null && role.getPermissionLevel() <= FULL_ACCESS_PERMISSION_LEVEL) {

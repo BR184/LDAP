@@ -34,3 +34,12 @@ export interface BindRoleMenusPayload {
 export interface GrantRolePermissionsPayload {
   permissionIds: number[]
 }
+
+export interface BatchDeleteRolesPayload {
+  roleIds: number[]
+}
+
+export interface BatchDeleteRolesResult {
+  totalCount: number
+  deletedCount: number
+}

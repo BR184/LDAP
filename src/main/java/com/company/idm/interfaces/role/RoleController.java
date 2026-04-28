@@ -1,6 +1,8 @@
 package com.company.idm.interfaces.role;
 
 import com.company.idm.application.rbac.BindRoleMenusCommand;
+import com.company.idm.application.rbac.BatchDeleteRolesCommand;
+import com.company.idm.application.rbac.BatchDeleteRolesResult;
 import com.company.idm.application.rbac.CreateRoleCommand;
 import com.company.idm.application.rbac.DeleteRoleCommand;
 import com.company.idm.application.rbac.GrantRolePermissionsCommand;
@@ -105,6 +107,19 @@ public class RoleController {
     ) {
         rbacApplicationService.deleteRole(new DeleteRoleCommand(id, username));
         return ApiResponse.success();
+    }
+
+    @PostMapping("/batch-delete")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/batch-delete', 'POST')")
+    public ApiResponse<BatchDeleteRolesResponse> batchDelete(
+        @Valid @RequestBody BatchDeleteRolesRequest request,
+        @AuthenticationPrincipal(expression = "username") String username
+    ) {
+        BatchDeleteRolesResult result = rbacApplicationService.batchDeleteRoles(new BatchDeleteRolesCommand(
+            request.roleIds(),
+            username
+        ));
+        return ApiResponse.success(new BatchDeleteRolesResponse(result.totalCount(), result.deletedCount()));
     }
 
     @PutMapping("/{id}/permissions")

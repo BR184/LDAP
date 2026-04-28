@@ -1,6 +1,8 @@
 package com.company.idm.test;
 
 import com.company.idm.application.rbac.BindRoleMenusCommand;
+import com.company.idm.application.rbac.BatchDeleteRolesCommand;
+import com.company.idm.application.rbac.BatchDeleteRolesResult;
 import com.company.idm.application.rbac.CreateMenuCommand;
 import com.company.idm.application.rbac.CreateRoleCommand;
 import com.company.idm.application.rbac.DeleteMenuCommand;
@@ -205,6 +207,37 @@ class RbacApplicationServiceTest {
 
         verify(roleRepository).delete(2L);
         verify(policyRefreshService).refresh();
+    }
+
+    @Test
+    void shouldBatchDeleteRolesSuccessfullyAfterFullPreValidation() {
+        Role first = Role.builder().id(3L).roleCode("DEV").roleName("开发").permissionLevel(3).builtIn(0).status(1).build();
+        Role second = Role.builder().id(4L).roleCode("OPS").roleName("运维").permissionLevel(4).builtIn(0).status(1).build();
+        when(roleRepository.findById(3L)).thenReturn(Optional.of(first));
+        when(roleRepository.findById(4L)).thenReturn(Optional.of(second));
+        when(roleRepository.existsUserBinding(3L)).thenReturn(false);
+        when(roleRepository.existsUserBinding(4L)).thenReturn(false);
+
+        BatchDeleteRolesResult result = rbacApplicationService.batchDeleteRoles(new BatchDeleteRolesCommand(List.of(3L, 4L), "admin"));
+
+        assertThat(result.totalCount()).isEqualTo(2);
+        assertThat(result.deletedCount()).isEqualTo(2);
+        verify(permissionLevelRuleService).checkCanDeleteRole("admin", first);
+        verify(permissionLevelRuleService).checkCanDeleteRole("admin", second);
+        verify(roleRepository).delete(3L);
+        verify(roleRepository).delete(4L);
+        verify(policyRefreshService).refresh();
+    }
+
+    @Test
+    void shouldRejectBatchDeleteWhenRoleStillBoundToUser() {
+        Role role = Role.builder().id(3L).roleCode("DEV").roleName("开发").permissionLevel(3).builtIn(0).status(1).build();
+        when(roleRepository.findById(3L)).thenReturn(Optional.of(role));
+        when(roleRepository.existsUserBinding(3L)).thenReturn(true);
+
+        assertThatThrownBy(() -> rbacApplicationService.batchDeleteRoles(new BatchDeleteRolesCommand(List.of(3L), "admin")))
+            .isInstanceOf(BizException.class)
+            .hasMessage("当前角色已绑定用户，不能直接删除");
     }
 
     @Test

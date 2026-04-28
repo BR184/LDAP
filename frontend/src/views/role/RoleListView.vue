@@ -2,10 +2,11 @@
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Delete, Plus, Search } from '@element-plus/icons-vue'
 import { fetchMenuTree } from '@/api/modules/menu'
 import { fetchPermissionTree } from '@/api/modules/permission'
 import {
+  batchDeleteRoles,
   bindRoleMenus,
   createRole,
   deleteRole,
@@ -24,6 +25,7 @@ import type { PermissionTreeNode } from '@/types/permission'
 import type { CreateRolePayload, RoleItem, UpdateRolePayload } from '@/types/role'
 
 const queryClient = useQueryClient()
+const tableRef = ref<{ clearSelection?: () => void } | null>(null)
 
 const searchForm = reactive<{
   roleCode: string
@@ -56,6 +58,8 @@ const permissionDrawerVisible = ref(false)
 const permissionDrawerLoading = ref(false)
 const permissionDrawerRole = ref<RoleItem | null>(null)
 const checkedPermissionIds = ref<number[]>([])
+
+const selectedRoles = ref<RoleItem[]>([])
 
 const rolesQuery = useQuery({
   queryKey: ['roles'],
@@ -106,6 +110,16 @@ const deleteRoleMutation = useMutation({
   },
 })
 
+const batchDeleteRolesMutation = useMutation({
+  mutationFn: batchDeleteRoles,
+  onSuccess: async (result) => {
+    ElMessage.success(`已批量删除 ${result.deletedCount} 个角色`)
+    selectedRoles.value = []
+    tableRef.value?.clearSelection?.()
+    await refreshRoles()
+  },
+})
+
 const bindMenusMutation = useMutation({
   mutationFn: ({ roleId, menuIds }: { roleId: number; menuIds: number[] }) => bindRoleMenus(roleId, { menuIds }),
   onSuccess: async () => {
@@ -128,6 +142,7 @@ const grantPermissionsMutation = useMutation({
 const roles = computed(() => rolesQuery.data.value || [])
 const menuTree = computed<MenuTreeNode[]>(() => menuTreeQuery.data.value || [])
 const permissionTree = computed<PermissionTreeNode[]>(() => permissionTreeQuery.data.value || [])
+const hasSelectedRoles = computed(() => selectedRoles.value.length > 0)
 
 const filteredRoles = computed(() =>
   roles.value.filter((role) => {
@@ -164,6 +179,14 @@ function resetSearch() {
 
 async function refreshRoles() {
   await queryClient.invalidateQueries({ queryKey: ['roles'] })
+}
+
+function handleSelectionChange(rows: RoleItem[]) {
+  selectedRoles.value = rows
+}
+
+function selectableRole(row: RoleItem) {
+  return row.builtIn !== 1
 }
 
 function openCreate() {
@@ -240,7 +263,7 @@ async function handleToggleStatus(role: RoleItem) {
       status: nextStatus,
     })
   } catch {
-    // 用户取消操作时不做额外处理。
+    // 用户取消时不额外处理
   }
 }
 
@@ -258,8 +281,37 @@ async function handleDelete(role: RoleItem) {
 
     await deleteRoleMutation.mutateAsync(role.id)
   } catch {
-    // 用户取消操作时不做额外处理。
+    // 用户取消时不额外处理
   }
+}
+
+async function handleBatchDelete() {
+  if (!selectedRoles.value.length) {
+    return
+  }
+
+  const previewRoles = selectedRoles.value.slice(0, 5).map((role) => `${role.roleName}（${role.roleCode}）`)
+  const previewText = previewRoles.join('、')
+  const moreCount = selectedRoles.value.length - previewRoles.length
+  const summaryText = moreCount > 0 ? `${previewText} 等 ${selectedRoles.value.length} 个角色` : previewText
+
+  try {
+    await ElMessageBox.confirm(
+      `删除后将同步清理角色菜单绑定、权限授权和用户角色关系约束。确认批量删除以下角色吗？\n${summaryText}`,
+      '确认批量删除',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch {
+    return
+  }
+
+  await batchDeleteRolesMutation.mutateAsync({
+    roleIds: selectedRoles.value.map((role) => role.id),
+  })
 }
 
 async function handleBindMenus(menuIds: number[]) {
@@ -326,11 +378,30 @@ function statusTagType(status: number) {
             <strong>角色列表</strong>
             <span class="idm-muted">当前共 {{ total }} 条数据</span>
           </div>
-          <el-button type="primary" :icon="Plus" @click="openCreate">新增角色</el-button>
+          <div class="view-toolbar__actions">
+            <el-button type="primary" :icon="Plus" @click="openCreate">新增角色</el-button>
+            <el-button
+              type="danger"
+              plain
+              :icon="Delete"
+              :disabled="!hasSelectedRoles"
+              :loading="batchDeleteRolesMutation.isPending.value"
+              @click="handleBatchDelete"
+            >
+              批量删除
+            </el-button>
+          </div>
         </div>
       </template>
 
-      <el-table v-loading="rolesQuery.isLoading.value || rolesQuery.isFetching.value" :data="pagedRoles" border>
+      <el-table
+        ref="tableRef"
+        v-loading="rolesQuery.isLoading.value || rolesQuery.isFetching.value"
+        :data="pagedRoles"
+        border
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="52" :selectable="selectableRole" />
         <el-table-column prop="roleCode" label="角色编码" min-width="160" />
         <el-table-column prop="roleName" label="角色名称" min-width="160" />
         <el-table-column prop="permissionLevel" label="权限等级" width="120" align="center" />
@@ -414,6 +485,11 @@ function statusTagType(status: number) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.view-toolbar__actions {
+  display: flex;
+  gap: 12px;
 }
 
 .table-footer {

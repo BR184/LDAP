@@ -1,6 +1,8 @@
 package com.company.idm.test;
 
 import com.company.idm.application.rbac.BindRoleMenusCommand;
+import com.company.idm.application.rbac.BatchDeleteRolesCommand;
+import com.company.idm.application.rbac.BatchDeleteRolesResult;
 import com.company.idm.application.rbac.CreateRoleCommand;
 import com.company.idm.application.rbac.DeleteRoleCommand;
 import com.company.idm.application.rbac.GrantRolePermissionsCommand;
@@ -175,6 +177,26 @@ class RoleControllerTest extends AbstractControllerMvcTest {
         mockMvc.perform(delete("/api/v1/roles/{id}", 1L))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldBatchDeleteRolesSuccessfully() throws Exception {
+        allow("/api/v1/roles/batch-delete", "POST");
+        when(rbacApplicationService.batchDeleteRoles(argThat((BatchDeleteRolesCommand command) ->
+            command.operator().equals("admin") && command.roleIds().equals(List.of(3L, 4L))
+        ))).thenReturn(new BatchDeleteRolesResult(2, 2));
+
+        mockMvc.perform(post("/api/v1/roles/batch-delete")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "roleIds": [3, 4]
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalCount").value(2))
+            .andExpect(jsonPath("$.data.deletedCount").value(2));
     }
 
     @Test
