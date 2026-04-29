@@ -235,6 +235,7 @@ public class RbacApplicationService {
         if (roles.size() != command.roleIds().size()) {
             throw new BizException("ROLE_NOT_FOUND", "部分角色不存在");
         }
+        ensureRolesEnabled(roles);
         permissionLevelRuleService.checkCanAssignRoles(command.operator(), user, roles);
         userRepository.assignRoles(command.userId(), command.roleIds());
         policyRefreshService.refresh();
@@ -449,6 +450,14 @@ public class RbacApplicationService {
         permissionLevelRuleService.checkCanDeleteRole(operator, role);
         if (roleRepository.existsUserBinding(role.getId())) {
             throw new BizException("ROLE_IN_USE", "当前角色已绑定用户，不能直接删除");
+        }
+    }
+
+    private void ensureRolesEnabled(List<Role> roles) {
+        boolean containsDisabledRole = roles.stream()
+            .anyMatch(role -> role.getStatus() == null || role.getStatus() != 1);
+        if (containsDisabledRole) {
+            throw new BizException("ROLE_ASSIGN_DISABLED", "已禁用角色不允许分配");
         }
     }
 

@@ -77,4 +77,26 @@ class JwtAuthenticationFilterTest {
         assertThat(authentication.getPrincipal()).isInstanceOf(AuthenticatedUser.class);
         assertThat(((AuthenticatedUser) authentication.getPrincipal()).username()).isEqualTo("admin");
     }
+
+    @Test
+    void shouldSkipAuthenticationWhenTokenUserIdDoesNotMatchCurrentUser() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer token");
+        User user = User.builder()
+            .id(2L)
+            .username("admin")
+            .realName("管理员")
+            .status(UserStatus.ENABLED)
+            .sourceType(SourceType.MANUAL)
+            .tokenVersion(2)
+            .roleCodes(Set.of("ADMIN"))
+            .build();
+
+        when(tokenService.parse("token")).thenReturn(new ParsedToken(1L, "admin", 2, Set.of("ADMIN"), java.time.Instant.now()));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
+
+        jwtAuthenticationFilter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
 }

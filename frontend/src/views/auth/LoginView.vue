@@ -14,8 +14,8 @@ const loading = ref(false)
 const forgotPasswordLoading = ref(false)
 const loginFormRef = ref()
 const form = reactive({
-  username: 'admin',
-  password: 'admin123456',
+  username: '',
+  password: '',
 })
 
 const rules = {
@@ -91,7 +91,6 @@ async function handleForgotPassword() {
       <template #header>
         <div class="login-view__card-header">
           <strong>登录系统</strong>
-          <span>默认使用本地管理员账号演示</span>
         </div>
       </template>
 
@@ -187,11 +186,6 @@ async function handleForgotPassword() {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.login-view__card-header span {
-  color: var(--idm-text-secondary);
-  font-size: 13px;
 }
 
 .login-view__submit {

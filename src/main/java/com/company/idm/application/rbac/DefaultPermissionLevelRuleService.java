@@ -13,9 +13,6 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-/**
- * 提供基于 permission_level 的对象操作权限判断实现。
- */
 @Service
 @RequiredArgsConstructor
 public class DefaultPermissionLevelRuleService implements PermissionLevelRuleService {
@@ -92,8 +89,8 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
 
     @Override
     public void checkCanDeleteRole(String operatorUsername, Role targetRole) {
-        if (targetRole.getBuiltIn() != null && targetRole.getBuiltIn() == 1) {
-            throw new BizException("ROLE_DELETE_FORBIDDEN", "内置角色不允许删除");
+        if (SUPER_ADMIN_ROLE_CODE.equals(targetRole.getRoleCode())) {
+            throw new BizException("ROLE_DELETE_FORBIDDEN", "超级管理员角色不允许删除");
         }
         if (isSuperAdmin(operatorUsername)) {
             return;

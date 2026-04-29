@@ -25,6 +25,8 @@ import UserRoleDrawer from '@/views/user/components/UserRoleDrawer.vue'
 import type { DepartmentTreeNode, DepartmentTreeOption } from '@/types/department'
 import type { CreateUserPayload, UpdateUserPayload, UserItem, UserListQuery } from '@/types/user'
 
+const SUPER_ADMIN_ROLE_CODE = 'SUPER_ADMIN'
+
 const queryClient = useQueryClient()
 const authStore = useAuthStore()
 const tableRef = ref<{ clearSelection?: () => void } | null>(null)
@@ -85,12 +87,12 @@ const departmentsQuery = useQuery({
 
 const users = computed(() => usersQuery.data.value || [])
 const roles = computed(() => rolesQuery.data.value || [])
+const activeRoles = computed(() => roles.value.filter((role) => role.status === 1))
 const total = computed(() => users.value.length)
 const pagedUsers = computed(() => {
   const start = (pagination.page - 1) * pagination.pageSize
   return users.value.slice(start, start + pagination.pageSize)
 })
-const hasSelectedUsers = computed(() => selectedUsers.value.length > 0)
 
 const departmentOptions = computed<DepartmentTreeOption[]>(() => buildDepartmentOptions(departmentsQuery.data.value || []))
 const roleIdMapByCode = computed<Record<string, number>>(() =>
@@ -99,6 +101,15 @@ const roleIdMapByCode = computed<Record<string, number>>(() =>
     return accumulator
   }, {}),
 )
+const currentOperatorPermissionLevel = computed(() => {
+  const currentUser = authStore.currentUser
+  if (!currentUser) {
+    return Number.MAX_SAFE_INTEGER
+  }
+  return resolvePermissionLevel(currentUser.roleCodes)
+})
+const isCurrentUserSuperAdmin = computed(() => authStore.currentUser?.roleCodes.includes(SUPER_ADMIN_ROLE_CODE) ?? false)
+const canBatchDelete = computed(() => selectedUsers.value.length > 0)
 
 const createUserMutation = useMutation({
   mutationFn: (payload: CreateUserPayload) => createUser(payload),
@@ -183,6 +194,26 @@ function normalizeText(value: string) {
   return normalized ? normalized : undefined
 }
 
+function resolvePermissionLevel(roleCodes: string[]) {
+  if (!roleCodes.length) {
+    return Number.MAX_SAFE_INTEGER
+  }
+  const levels = roleCodes
+    .map((roleCode) => roles.value.find((role) => role.roleCode === roleCode)?.permissionLevel)
+    .filter((level): level is number => typeof level === 'number')
+  return levels.length ? Math.min(...levels) : Number.MAX_SAFE_INTEGER
+}
+
+function canDeleteUser(user: UserItem) {
+  if (user.id === authStore.currentUser?.userId) {
+    return false
+  }
+  if (isCurrentUserSuperAdmin.value) {
+    return true
+  }
+  return user.permissionLevel > currentOperatorPermissionLevel.value
+}
+
 function applySearch() {
   appliedQuery.username = normalizeText(searchForm.username)
   appliedQuery.deptName = normalizeText(searchForm.deptName)
@@ -206,7 +237,7 @@ function handleSelectionChange(rows: UserItem[]) {
 }
 
 function selectableUser(row: UserItem) {
-  return row.id !== authStore.currentUser?.userId
+  return canDeleteUser(row)
 }
 
 async function openDetail(userId: number) {
@@ -289,6 +320,11 @@ async function handleToggleStatus(user: UserItem) {
 }
 
 async function handleDelete(user: UserItem) {
+  if (!canDeleteUser(user)) {
+    ElMessage.warning('当前用户无权删除该账号')
+    return
+  }
+
   try {
     await ElMessageBox.confirm(
       `删除后会同时清理 LDAP 账号映射与登录能力，确认删除用户 ${user.realName}（${user.username}）吗？`,
@@ -375,7 +411,7 @@ function statusTagType(status: number) {
 <template>
   <PageContainer
     title="用户管理"
-    description="统一维护平台用户、LDAP 状态与角色绑定，优先支持查询、创建、编辑、角色分配和运维动作。"
+    description="统一维护平台用户、LDAP 状态与角色绑定，支持查询、创建、编辑、角色分配和同步操作。"
   >
     <el-card class="idm-card" shadow="never">
       <el-form :inline="true" :model="searchForm">
@@ -412,7 +448,7 @@ function statusTagType(status: number) {
               type="danger"
               plain
               :icon="Delete"
-              :disabled="!hasSelectedUsers"
+              :disabled="!canBatchDelete"
               :loading="batchDeleteUsersMutation.isPending.value"
               @click="handleBatchDelete"
             >
@@ -451,10 +487,11 @@ function statusTagType(status: number) {
         </el-table-column>
         <el-table-column label="角色" min-width="180">
           <template #default="{ row }">
-            <el-space wrap>
+            <el-space v-if="row.roleCodes.length" wrap>
               <el-tag v-for="role in row.roleCodes.slice(0, 2)" :key="role" type="info">{{ role }}</el-tag>
               <el-tag v-if="row.roleCodes.length > 2" type="warning">+{{ row.roleCodes.length - 2 }}</el-tag>
             </el-space>
+            <span v-else>--</span>
           </template>
         </el-table-column>
         <el-table-column prop="ldapDn" label="LDAP DN" min-width="280" show-overflow-tooltip />
@@ -478,7 +515,9 @@ function statusTagType(status: number) {
                     </el-dropdown-item>
                     <el-dropdown-item @click="handleResetPassword(row)">重置密码</el-dropdown-item>
                     <el-dropdown-item @click="handleSyncLdap(row)">同步 LDAP</el-dropdown-item>
-                    <el-dropdown-item divided @click="handleDelete(row)">删除用户</el-dropdown-item>
+                    <el-dropdown-item divided :disabled="!canDeleteUser(row)" @click="handleDelete(row)">
+                      删除用户
+                    </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -506,7 +545,7 @@ function statusTagType(status: number) {
       :mode="formMode"
       :loading="createUserMutation.isPending.value || updateUserMutation.isPending.value"
       :user="formUser"
-      :role-options="roles"
+      :role-options="activeRoles"
       :department-options="departmentOptions"
       @submit="handleFormSubmit"
     />
@@ -515,7 +554,7 @@ function statusTagType(status: number) {
       v-model="roleVisible"
       :loading="assignRolesMutation.isPending.value"
       :user="roleUser"
-      :role-options="roles"
+      :role-options="activeRoles"
       :role-ids="selectedRoleIds"
       @submit="handleRoleSubmit"
     />

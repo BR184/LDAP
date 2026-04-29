@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { CreateDepartmentPayload, DepartmentDetail, DepartmentTreeOption, UpdateDepartmentPayload } from '@/types/department'
 
@@ -7,7 +7,6 @@ interface DepartmentFormValue {
   deptCode: string
   deptName: string
   parentDeptCode: string
-  externalId: string
   status: number
 }
 
@@ -48,7 +47,6 @@ watch(
       form.deptCode = props.department.deptCode
       form.deptName = props.department.deptName
       form.parentDeptCode = props.department.parentDeptCode || ''
-      form.externalId = props.department.externalId || ''
       form.status = props.department.status
     }
 
@@ -62,7 +60,6 @@ function buildDefaultForm(): DepartmentFormValue {
     deptCode: '',
     deptName: '',
     parentDeptCode: '',
-    externalId: '',
     status: 1,
   }
 }
@@ -78,7 +75,6 @@ async function handleSubmit() {
       deptCode: form.deptCode.trim(),
       deptName: form.deptName.trim(),
       parentDeptCode: form.parentDeptCode || null,
-      externalId: form.externalId.trim() || null,
     })
     return
   }
@@ -123,11 +119,7 @@ function closeDrawer() {
         />
       </el-form-item>
 
-      <el-form-item v-if="isCreate" label="外部部门 ID">
-        <el-input v-model="form.externalId" placeholder="请输入外部部门 ID（可选）" />
-      </el-form-item>
-
-      <el-form-item v-else label="状态">
+      <el-form-item v-if="!isCreate" label="状态">
         <el-radio-group v-model="form.status">
           <el-radio :value="1">启用</el-radio>
           <el-radio :value="0">禁用</el-radio>

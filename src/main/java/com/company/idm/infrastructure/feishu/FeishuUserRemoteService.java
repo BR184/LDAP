@@ -48,6 +48,15 @@ public class FeishuUserRemoteService {
                 String mainDepartmentExternalId = departmentIds.isArray() && departmentIds.size() > 0
                     ? departmentIds.get(0).asText(null)
                     : null;
+                List<String> partTimeDepartmentExternalIds = new ArrayList<>();
+                if (departmentIds.isArray() && departmentIds.size() > 1) {
+                    for (int index = 1; index < departmentIds.size(); index++) {
+                        String departmentExternalId = blankToNull(departmentIds.get(index).asText(null));
+                        if (!isBlank(departmentExternalId)) {
+                            partTimeDepartmentExternalIds.add(departmentExternalId);
+                        }
+                    }
+                }
                 if (isBlank(externalId) || isBlank(username) || isBlank(realName) || isBlank(mainDepartmentExternalId)) {
                     throw new BizException("FEISHU_USER_FETCH_FAILED", "飞书用户数据缺少关键字段");
                 }
@@ -63,6 +72,7 @@ public class FeishuUserRemoteService {
                     blankToNull(item.path("mobile").asText(null)),
                     blankToNull(item.path("employee_no").asText(null)),
                     mainDepartmentExternalId,
+                    List.copyOf(partTimeDepartmentExternalIds),
                     active ? 1 : 0,
                     item.path("orders").isArray() && item.path("orders").size() > 0 ? item.path("orders").get(0).asInt() : null
                 ));

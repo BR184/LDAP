@@ -229,7 +229,6 @@ async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentP
                 </el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="祖先路径" :span="2">{{ currentDepartment.ancestorPath }}</el-descriptions-item>
-              <el-descriptions-item label="外部部门 ID" :span="2">{{ currentDepartment.externalId || '--' }}</el-descriptions-item>
               <el-descriptions-item label="LDAP DN" :span="2">{{ currentDepartment.ldapDn || '--' }}</el-descriptions-item>
             </el-descriptions>
           </template>

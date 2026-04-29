@@ -7,6 +7,9 @@ export interface UserItem {
   employeeNo: string | null
   deptName: string | null
   deptCode: string | null
+  partTimeDeptCodes: string[]
+  partTimeDeptNames: string[]
+  permissionLevel: number
   status: number
   ldapDn: string | null
   roleCodes: string[]
@@ -19,12 +22,12 @@ export interface UserListQuery {
 }
 
 export interface CreateUserPayload {
-  username: string
   realName: string
   email: string
   mobile: string
   employeeNo: string
   deptCode: string
+  partTimeDeptCodes: string[]
   initialPassword: string
   roleIds: number[]
 }
@@ -35,6 +38,7 @@ export interface UpdateUserPayload {
   mobile: string
   employeeNo: string
   deptCode: string
+  partTimeDeptCodes: string[]
 }
 
 export interface AssignUserRolesPayload {

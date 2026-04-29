@@ -1,5 +1,6 @@
 package com.company.idm.interfaces.user;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -14,6 +15,9 @@ public record UserResponse(
     String employeeNo,
     String deptName,
     String deptCode,
+    List<String> partTimeDeptCodes,
+    List<String> partTimeDeptNames,
+    Integer permissionLevel,
     Integer status,
     String ldapDn,
     Set<String> roleCodes

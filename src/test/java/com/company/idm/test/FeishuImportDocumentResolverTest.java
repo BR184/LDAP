@@ -3,6 +3,7 @@ package com.company.idm.test;
 import com.company.idm.application.sync.feishu.FeishuDepartmentPayload;
 import com.company.idm.application.sync.feishu.FeishuFullImportDocument;
 import com.company.idm.application.sync.feishu.FeishuImportDocumentResolver;
+import com.company.idm.application.user.UsernameGenerationService;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
@@ -92,7 +93,7 @@ class FeishuImportDocumentResolverTest {
         FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("\"" + document.toString() + "\"");
 
         assertThat(fullImportDocument.users()).hasSize(1);
-        assertThat(fullImportDocument.users().get(0).username()).isEqualTo("yushanpeng");
+        assertThat(fullImportDocument.users().get(0).username()).isEqualTo("yushanpeng3");
     }
 
     @Test
@@ -172,9 +173,9 @@ class FeishuImportDocumentResolverTest {
         });
         assertThat(fullImportDocument.users()).hasSize(2);
         assertThat(fullImportDocument.users().get(0).externalId()).isEqualTo("276b33cd");
-        assertThat(fullImportDocument.users().get(0).username()).isEqualTo("yushanpeng");
+        assertThat(fullImportDocument.users().get(0).username()).isEqualTo("yushanpeng3");
         assertThat(fullImportDocument.users().get(0).mobile()).isEqualTo("13964112234");
-        assertThat(fullImportDocument.users().get(1).username()).isEqualTo("daijiawei");
+        assertThat(fullImportDocument.users().get(1).username()).isEqualTo("daijiawei2");
         assertThat(fullImportDocument.users().get(1).email()).isEqualTo("daijiawei@corp.local");
         assertThat(fullImportDocument.users().get(1).mainDepartmentExternalId())
             .isEqualTo(fullImportDocument.departments().get(3).externalId());
@@ -207,7 +208,7 @@ class FeishuImportDocumentResolverTest {
     }
 
     @Test
-    void shouldKeepExistingUsernameAndAppendEmployeeNoForNewDuplicateName() throws Exception {
+    void shouldKeepExistingUsernameAndUseEmployeeNoForNewSameNameUser() throws Exception {
         Path rootDir = tempDir.resolve("imports");
         Path document = rootDir.resolve("bundle/duplicate-name.xlsx");
         Files.createDirectories(document.getParent());
@@ -242,15 +243,15 @@ class FeishuImportDocumentResolverTest {
 
         FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/duplicate-name.xlsx");
 
-        assertThat(fullImportDocument.users()).extracting(user -> user.username())
-            .containsExactly("yushanpeng", "yushanpeng_10023");
+        assertThat(fullImportDocument.users()).extracting(FeishuUserPayload -> FeishuUserPayload.username())
+            .containsExactly("yushanpeng", "yushanpeng10023");
     }
 
     private void writeRosterWorkbook(Path document, List<Object[]> rows) throws Exception {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             XSSFSheet rosterSheet = workbook.createSheet("在职人员");
             rosterSheet.createRow(0).createCell(0).setCellValue("姓名");
-            rosterSheet.getRow(0).createCell(1).setCellValue("手机号码");
+            rosterSheet.getRow(0).createCell(1).setCellValue("手机号");
             rosterSheet.getRow(0).createCell(2).setCellValue("工号");
             rosterSheet.getRow(0).createCell(3).setCellValue("人员状态");
             rosterSheet.getRow(0).createCell(4).setCellValue("部门");
@@ -285,6 +286,11 @@ class FeishuImportDocumentResolverTest {
         properties.setEnabled(true);
         properties.setRootDir(rootDir.toString());
         properties.setMaxFileSizeBytes(1024 * 1024);
-        return new FeishuImportDocumentResolver(properties, new ObjectMapper(), userRepository);
+        return new FeishuImportDocumentResolver(
+            properties,
+            new ObjectMapper(),
+            userRepository,
+            new UsernameGenerationService()
+        );
     }
 }

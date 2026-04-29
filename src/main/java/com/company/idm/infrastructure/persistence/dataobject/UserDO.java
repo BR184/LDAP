@@ -19,6 +19,7 @@ public class UserDO {
     private String mobile;
     private String employeeNo;
     private String deptCode;
+    private String partTimeDeptCodes;
     private Integer status;
     private String sourceType;
     private String externalId;
@@ -84,6 +85,14 @@ public class UserDO {
 
     public void setDeptCode(String deptCode) {
         this.deptCode = deptCode;
+    }
+
+    public String getPartTimeDeptCodes() {
+        return partTimeDeptCodes;
+    }
+
+    public void setPartTimeDeptCodes(String partTimeDeptCodes) {
+        this.partTimeDeptCodes = partTimeDeptCodes;
     }
 
     public Integer getStatus() {

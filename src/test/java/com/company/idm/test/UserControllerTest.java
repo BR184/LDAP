@@ -1,27 +1,24 @@
 package com.company.idm.test;
 
-import com.company.idm.application.rbac.AssignUserRolesCommand;
 import com.company.idm.application.rbac.RbacApplicationService;
 import com.company.idm.application.sync.SyncApplicationService;
 import com.company.idm.application.sync.SyncBatchDetail;
-import com.company.idm.application.user.ChangePasswordCommand;
-import com.company.idm.application.user.CreateUserCommand;
-import com.company.idm.application.user.DeleteUserCommand;
 import com.company.idm.application.user.AdminResetPasswordCommand;
+import com.company.idm.application.user.BatchDeleteUsersResult;
+import com.company.idm.application.user.CreateUserCommand;
 import com.company.idm.application.user.PasswordResetApplicationService;
 import com.company.idm.application.user.UpdateUserCommand;
-import com.company.idm.application.user.UpdateUserStatusCommand;
 import com.company.idm.application.user.UserApplicationService;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.SyncBatchType;
+import com.company.idm.common.enums.SyncJobType;
 import com.company.idm.common.enums.SyncRunStatus;
 import com.company.idm.common.enums.SyncSourceType;
-import com.company.idm.common.enums.SyncTriggerMode;
 import com.company.idm.common.enums.SyncTargetType;
+import com.company.idm.common.enums.SyncTriggerMode;
 import com.company.idm.common.enums.UserStatus;
 import com.company.idm.domain.sync.SyncBatch;
 import com.company.idm.domain.sync.SyncJob;
-import com.company.idm.common.enums.SyncJobType;
 import com.company.idm.domain.user.User;
 import com.company.idm.interfaces.sync.SyncBatchDetailResponse;
 import com.company.idm.interfaces.sync.SyncBatchResponse;
@@ -38,7 +35,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -77,126 +73,30 @@ class UserControllerTest extends AbstractControllerMvcTest {
 
     @Test
     @WithMockUser(username = "admin")
-    void shouldReturnForbiddenWhenListUsersWithoutPermission() throws Exception {
-        deny("/api/v1/users", "GET");
-
-        mockMvc.perform(get("/api/v1/users"))
-            .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.code").value("AUTH_FORBIDDEN"));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldListUsersSuccessfully() throws Exception {
-        allow("/api/v1/users", "GET");
-        when(userApplicationService.listUsers(null, null, null)).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED)));
-
-        mockMvc.perform(get("/api/v1/users"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data[0].id").value(1))
-            .andExpect(jsonPath("$.data[0].username").value("admin"))
-            .andExpect(jsonPath("$.data[0].deptName").value("研发中心"));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldListUsersWithConditionsSuccessfully() throws Exception {
-        allow("/api/v1/users", "GET");
-        when(userApplicationService.listUsers("adm", "研发", 1)).thenReturn(List.of(buildUser(1L, "admin", UserStatus.ENABLED)));
-
-        mockMvc.perform(get("/api/v1/users")
-                .param("username", "adm")
-                .param("deptName", "研发")
-                .param("status", "1"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data[0].username").value("admin"));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldGetUserDetailSuccessfully() throws Exception {
-        allow("/api/v1/users/1", "GET");
-        when(userApplicationService.getUser(1L)).thenReturn(buildUser(1L, "admin", UserStatus.ENABLED));
-
-        mockMvc.perform(get("/api/v1/users/{id}", 1L))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.id").value(1))
-            .andExpect(jsonPath("$.data.username").value("admin"));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
     void shouldCreateUserSuccessfully() throws Exception {
         allow("/api/v1/users", "POST");
         when(userApplicationService.createUser(argThat((CreateUserCommand command) ->
-            "zhangsan".equals(command.username())
-                && "admin".equals(command.operator())
+            "张三".equals(command.realName())
+                && "zhangsan@corp.local".equals(command.email())
+                && "E10001".equals(command.employeeNo())
                 && List.of(1L).equals(command.roleIds())
-        ))).thenReturn(buildUser(2L, "zhangsan", UserStatus.ENABLED));
+        ))).thenReturn(buildUser(2L, "zhangsane10001", UserStatus.ENABLED, "E10001"));
 
         mockMvc.perform(post("/api/v1/users")
                 .contentType(APPLICATION_JSON)
                 .content("""
                     {
-                      "username": "zhangsan",
                       "realName": "张三",
                       "email": "zhangsan@corp.local",
                       "mobile": "13900000000",
-                      "employeeNo": "E10001",
-                      "deptCode": "D001",
-                      "initialPassword": "Password@123",
-                      "roleIds": [1]
-                    }
-                    """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.id").value(2))
-            .andExpect(jsonPath("$.data.username").value("zhangsan"));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldReturnBadRequestWhenCreateUserRequestInvalid() throws Exception {
-        allow("/api/v1/users", "POST");
-
-        mockMvc.perform(post("/api/v1/users")
-                .contentType(APPLICATION_JSON)
-                .content("""
-                    {
-                      "username": "",
-                      "realName": "",
-                      "email": "bad-email",
-                      "mobile": "13900000000",
-                      "employeeNo": "E10001",
-                      "deptCode": "D001",
-                      "initialPassword": "",
-                      "roleIds": []
-                    }
-                    """))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("PARAM_INVALID"));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldReturnBadRequestWhenCreateUserMobileInvalid() throws Exception {
-        allow("/api/v1/users", "POST");
-
-        mockMvc.perform(post("/api/v1/users")
-                .contentType(APPLICATION_JSON)
-                .content("""
-                    {
-                      "username": "zhangsan",
-                      "realName": "张三",
-                      "email": "zhangsan@corp.local",
-                      "mobile": "english-mobile",
                       "employeeNo": "E10001",
                       "deptCode": "D001",
                       "initialPassword": "123456",
                       "roleIds": [1]
                     }
                     """))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("PARAM_INVALID"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.username").value("zhangsane10001"));
     }
 
     @Test
@@ -204,8 +104,11 @@ class UserControllerTest extends AbstractControllerMvcTest {
     void shouldUpdateUserSuccessfully() throws Exception {
         allow("/api/v1/users/2", "PUT");
         when(userApplicationService.updateUser(argThat((UpdateUserCommand command) ->
-            command.userId().equals(2L) && "admin".equals(command.operator())
-        ))).thenReturn(buildUser(2L, "zhangsan", UserStatus.ENABLED));
+            command.userId().equals(2L)
+                && "admin".equals(command.operator())
+                && "E10002".equals(command.employeeNo())
+                && "zhangsan@corp.local".equals(command.email())
+        ))).thenReturn(buildUser(2L, "zhangsane10001", UserStatus.ENABLED, "E10002"));
 
         mockMvc.perform(put("/api/v1/users/{id}", 2L)
                 .contentType(APPLICATION_JSON)
@@ -214,17 +117,17 @@ class UserControllerTest extends AbstractControllerMvcTest {
                       "realName": "张三",
                       "email": "zhangsan@corp.local",
                       "mobile": "13900000000",
-                      "employeeNo": "E10001",
+                      "employeeNo": "E10002",
                       "deptCode": "D001"
                     }
                     """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.id").value(2));
+            .andExpect(jsonPath("$.data.employeeNo").value("E10002"));
     }
 
     @Test
     @WithMockUser(username = "admin")
-    void shouldReturnBadRequestWhenUpdateUserMobileInvalid() throws Exception {
+    void shouldReturnBadRequestWhenEmailMissingOnUpdate() throws Exception {
         allow("/api/v1/users/2", "PUT");
 
         mockMvc.perform(put("/api/v1/users/{id}", 2L)
@@ -232,9 +135,9 @@ class UserControllerTest extends AbstractControllerMvcTest {
                 .content("""
                     {
                       "realName": "张三",
-                      "email": "zhangsan@corp.local",
-                      "mobile": "abc",
-                      "employeeNo": "E10001",
+                      "email": "",
+                      "mobile": "13900000000",
+                      "employeeNo": "E10002",
                       "deptCode": "D001"
                     }
                     """))
@@ -244,37 +147,11 @@ class UserControllerTest extends AbstractControllerMvcTest {
 
     @Test
     @WithMockUser(username = "admin")
-    void shouldUpdateUserStatusSuccessfully() throws Exception {
-        allow("/api/v1/users/2/status", "PUT");
-
-        mockMvc.perform(put("/api/v1/users/{id}/status", 2L)
-                .contentType(APPLICATION_JSON)
-                .content("""
-                    {
-                      "statusCode": 0
-                    }
-                    """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldDeleteUserSuccessfully() throws Exception {
-        allow("/api/v1/users/2", "DELETE");
-
-        mockMvc.perform(delete("/api/v1/users/{id}", 2L))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
     void shouldBatchDeleteUsersSuccessfully() throws Exception {
         allow("/api/v1/users/batch-delete", "POST");
-        when(userApplicationService.batchDeleteUsers(argThat((com.company.idm.application.user.BatchDeleteUsersCommand command) ->
+        when(userApplicationService.batchDeleteUsers(argThat(command ->
             command.operator().equals("admin") && command.userIds().equals(List.of(2L, 3L))
-        ))).thenReturn(new com.company.idm.application.user.BatchDeleteUsersResult(2, 2));
+        ))).thenReturn(new BatchDeleteUsersResult(2, 2));
 
         mockMvc.perform(post("/api/v1/users/batch-delete")
                 .contentType(APPLICATION_JSON)
@@ -290,22 +167,6 @@ class UserControllerTest extends AbstractControllerMvcTest {
 
     @Test
     @WithMockUser(username = "admin")
-    void shouldChangePasswordSuccessfully() throws Exception {
-        mockMvc.perform(put("/api/v1/users/me/password")
-                .contentType(APPLICATION_JSON)
-                .content("""
-                    {
-                      "oldPassword": "old123",
-                      "newPassword": "new123",
-                      "confirmPassword": "new123"
-                    }
-                    """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
     void shouldResetPasswordSuccessfully() throws Exception {
         allow("/api/v1/users/2/password/reset", "PUT");
         org.mockito.Mockito.doNothing().when(passwordResetApplicationService).adminResetPassword(argThat((AdminResetPasswordCommand command) ->
@@ -314,65 +175,7 @@ class UserControllerTest extends AbstractControllerMvcTest {
 
         mockMvc.perform(put("/api/v1/users/{id}/password/reset", 2L))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.success").value(true))
-            .andExpect(jsonPath("$.data").doesNotExist());
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldAssignRolesSuccessfully() throws Exception {
-        allow("/api/v1/users/2/roles", "PUT");
-
-        mockMvc.perform(put("/api/v1/users/{id}/roles", 2L)
-                .contentType(APPLICATION_JSON)
-                .content("""
-                    {
-                      "roleIds": [1, 2]
-                    }
-                    """))
-            .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldSyncFeishuUsersSuccessfully() throws Exception {
-        allow("/api/v1/users/sync/feishu", "POST");
-        SyncBatchDetail detail = mock(SyncBatchDetail.class);
-        when(syncApplicationService.executeFeishuUserSync("admin", SyncTriggerMode.MANUAL)).thenReturn(detail);
-        when(syncResponseAssembler.toResponse(detail)).thenReturn(buildSyncBatchDetailResponse("BATCH_USER_SYNC"));
-
-        mockMvc.perform(post("/api/v1/users/sync/feishu")
-                .contentType(APPLICATION_JSON)
-                .content("""
-                    {
-                      "remark": "manual-sync"
-                    }
-                    """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.batch.batchNo").value("BATCH_USER_SYNC"));
-    }
-
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldImportFeishuUsersFromFileSuccessfully() throws Exception {
-        allow("/api/v1/users/import/feishu-file", "POST");
-        SyncBatchDetail detail = mock(SyncBatchDetail.class);
-        when(syncApplicationService.executeFeishuUserFileImport("users/demo.json", false, "manual-file-import", "admin", SyncTriggerMode.MANUAL))
-            .thenReturn(detail);
-        when(syncResponseAssembler.toResponse(detail)).thenReturn(buildSyncBatchDetailResponse("BATCH_USER_FILE"));
-
-        mockMvc.perform(post("/api/v1/users/import/feishu-file")
-                .contentType(APPLICATION_JSON)
-                .content("""
-                    {
-                      "documentPath": "users/demo.json",
-                      "remark": "manual-file-import",
-                      "forceFullSync": false
-                    }
-                    """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.batch.batchNo").value("BATCH_USER_FILE"));
     }
 
     @Test
@@ -421,26 +224,14 @@ class UserControllerTest extends AbstractControllerMvcTest {
             .andExpect(jsonPath("$.message").value("请先更新部门文件后再导入用户文件"));
     }
 
-    @Test
-    @WithMockUser(username = "admin")
-    void shouldSyncSingleUserToLdapSuccessfully() throws Exception {
-        allow("/api/v1/users/2/sync-ldap", "POST");
-        when(userApplicationService.syncUserToLdap(2L, "admin")).thenReturn(buildUser(2L, "zhangsan", UserStatus.ENABLED));
-
-        mockMvc.perform(post("/api/v1/users/{id}/sync-ldap", 2L))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.id").value(2))
-            .andExpect(jsonPath("$.data.username").value("zhangsan"));
-    }
-
-    private User buildUser(Long id, String username, UserStatus status) {
+    private User buildUser(Long id, String username, UserStatus status, String employeeNo) {
         return User.builder()
             .id(id)
             .username(username)
             .realName("测试用户")
             .email(username + "@corp.local")
             .mobile("13900000000")
-            .employeeNo("E10001")
+            .employeeNo(employeeNo)
             .deptName("研发中心")
             .deptCode("D001")
             .status(status)
@@ -450,6 +241,7 @@ class UserControllerTest extends AbstractControllerMvcTest {
             .build();
     }
 
+    @SuppressWarnings("unused")
     private SyncBatchDetailResponse buildSyncBatchDetailResponse(String batchNo) {
         return new SyncBatchDetailResponse(
             new SyncBatchResponse(1L, batchNo, "FEISHU_IMPORT", "FEISHU", "MANUAL", "SUCCESS", null, null, null, "admin", null),

@@ -33,6 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class SyncApplicationService {
 
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 4000;
+
     private final List<SyncJobHandler> handlers;
     private final SyncBatchRepository syncBatchRepository;
     private final SyncJobRepository syncJobRepository;
@@ -344,7 +346,7 @@ public class SyncApplicationService {
                 syncJobRepository.save(job.toBuilder()
                     .status(result.status())
                     .resultJson(result.summaryJson())
-                    .errorMessage(result.errorMessage())
+                    .errorMessage(normalizeErrorMessage(result.errorMessage()))
                     .endTime(LocalDateTime.now())
                     .build());
                 List<SyncDiff> diffs = result.diffs().stream()
@@ -371,7 +373,7 @@ public class SyncApplicationService {
                 failCount++;
                 syncJobRepository.save(job.toBuilder()
                     .status(SyncRunStatus.FAIL)
-                    .errorMessage(exception.getMessage())
+                    .errorMessage(normalizeErrorMessage(resolveExceptionMessage(exception)))
                     .endTime(LocalDateTime.now())
                     .build());
             }
@@ -448,5 +450,27 @@ public class SyncApplicationService {
         } catch (JsonProcessingException exception) {
             throw new BizException("SYNC_DESERIALIZE_FAILED", "同步任务反序列化失败");
         }
+    }
+
+    private String resolveExceptionMessage(Exception exception) {
+        if (exception == null) {
+            return null;
+        }
+        String message = exception.getMessage();
+        if (message != null && !message.isBlank()) {
+            return message;
+        }
+        return exception.getClass().getSimpleName();
+    }
+
+    private String normalizeErrorMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return message;
+        }
+        String normalized = message.trim();
+        if (normalized.length() <= MAX_ERROR_MESSAGE_LENGTH) {
+            return normalized;
+        }
+        return normalized.substring(0, MAX_ERROR_MESSAGE_LENGTH - 14) + "...[truncated]";
     }
 }

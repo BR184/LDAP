@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { RoleOption } from '@/types/role'
 import type { UserItem } from '@/types/user'
 
@@ -18,13 +18,16 @@ const emit = defineEmits<{
 
 const selectedRoleIds = ref<number[]>([])
 
+const activeRoleOptions = computed(() => props.roleOptions.filter((role) => role.status === 1))
+const activeRoleIdSet = computed(() => new Set(activeRoleOptions.value.map((role) => role.id)))
+
 watch(
   () => [props.modelValue, props.roleIds] as const,
   ([visible, roleIds]) => {
     if (!visible) {
       return
     }
-    selectedRoleIds.value = [...roleIds]
+    selectedRoleIds.value = roleIds.filter((roleId) => activeRoleIdSet.value.has(roleId))
   },
   { immediate: true },
 )
@@ -58,7 +61,7 @@ function handleSubmit() {
             style="width: 100%"
           >
             <el-option
-              v-for="role in roleOptions"
+              v-for="role in activeRoleOptions"
               :key="role.id"
               :label="`${role.roleName} (${role.roleCode})`"
               :value="role.id"

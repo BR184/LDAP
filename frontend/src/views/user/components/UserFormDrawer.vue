@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { DepartmentTreeOption } from '@/types/department'
 import type { RoleOption } from '@/types/role'
@@ -12,6 +12,7 @@ interface UserFormValue {
   mobile: string
   employeeNo: string
   deptCode: string
+  partTimeDeptCodes: string[]
   initialPassword: string
   roleIds: number[]
 }
@@ -37,11 +38,11 @@ const isCreate = computed(() => props.mode === 'create')
 const title = computed(() => (isCreate.value ? '新增用户' : '编辑用户'))
 
 const rules = computed<FormRules<UserFormValue>>(() => ({
-  username: isCreate.value
-    ? [{ required: true, message: '请输入用户名', trigger: 'blur' }]
-    : [],
   realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
-  email: [{ type: 'email', message: '请输入合法邮箱', trigger: 'blur' }],
+  email: [
+    { required: true, message: '邮箱不能为空', trigger: 'blur' },
+    { type: 'email', message: '请输入合法邮箱', trigger: 'blur' },
+  ],
   mobile: [
     {
       pattern: /^$|^1\d{10}$/,
@@ -49,6 +50,7 @@ const rules = computed<FormRules<UserFormValue>>(() => ({
       trigger: 'blur',
     },
   ],
+  employeeNo: [{ required: true, message: '工号不能为空', trigger: 'blur' }],
   initialPassword: isCreate.value
     ? [{ required: true, message: '初始密码不能为空', trigger: 'blur' }]
     : [],
@@ -73,6 +75,7 @@ watch(
       form.mobile = props.user.mobile || ''
       form.employeeNo = props.user.employeeNo || ''
       form.deptCode = props.user.deptCode || ''
+      form.partTimeDeptCodes = [...(props.user.partTimeDeptCodes || [])]
     }
 
     nextTick(() => formRef.value?.clearValidate())
@@ -88,9 +91,27 @@ function buildDefaultForm(): UserFormValue {
     mobile: '',
     employeeNo: '',
     deptCode: '',
+    partTimeDeptCodes: [],
     initialPassword: '123456',
     roleIds: [],
   }
+}
+
+function normalizePartTimeDeptCodes() {
+  const seen = new Set<string>()
+  return form.partTimeDeptCodes
+    .map((code) => code.trim())
+    .filter((code) => code.length > 0)
+    .filter((code) => {
+      if (code === form.deptCode) {
+        return false
+      }
+      if (seen.has(code)) {
+        return false
+      }
+      seen.add(code)
+      return true
+    })
 }
 
 async function handleSubmit() {
@@ -99,14 +120,16 @@ async function handleSubmit() {
     return
   }
 
+  const partTimeDeptCodes = normalizePartTimeDeptCodes()
+
   if (isCreate.value) {
     emit('submit', {
-      username: form.username.trim(),
       realName: form.realName.trim(),
       email: form.email.trim(),
       mobile: form.mobile.trim(),
       employeeNo: form.employeeNo.trim(),
       deptCode: form.deptCode,
+      partTimeDeptCodes,
       initialPassword: '123456',
       roleIds: [...form.roleIds],
     })
@@ -119,6 +142,7 @@ async function handleSubmit() {
     mobile: form.mobile.trim(),
     employeeNo: form.employeeNo.trim(),
     deptCode: form.deptCode,
+    partTimeDeptCodes,
   })
 }
 
@@ -130,16 +154,20 @@ function closeDrawer() {
 <template>
   <el-drawer :model-value="modelValue" :title="title" size="520px" @close="closeDrawer">
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-      <el-form-item v-if="isCreate" label="用户名" prop="username">
-        <el-input v-model="form.username" placeholder="请输入用户名" />
-      </el-form-item>
+      <el-alert v-if="isCreate" :closable="false" class="form-alert" type="info">
+        登录用户名将按“姓名拼音 + 工号”自动生成，例如 `zhangsan1001`。
+      </el-alert>
 
-      <el-form-item v-else label="用户名">
+      <el-form-item v-if="!isCreate" label="用户名">
         <el-input :model-value="form.username" disabled />
       </el-form-item>
 
       <el-form-item label="姓名" prop="realName">
         <el-input v-model="form.realName" placeholder="请输入姓名" />
+      </el-form-item>
+
+      <el-form-item label="工号" prop="employeeNo">
+        <el-input v-model="form.employeeNo" placeholder="请输入工号" />
       </el-form-item>
 
       <el-form-item label="邮箱" prop="email">
@@ -150,11 +178,7 @@ function closeDrawer() {
         <el-input v-model="form.mobile" maxlength="11" placeholder="请输入 11 位手机号" />
       </el-form-item>
 
-      <el-form-item label="工号">
-        <el-input v-model="form.employeeNo" placeholder="请输入工号" />
-      </el-form-item>
-
-      <el-form-item label="部门">
+      <el-form-item label="主部门">
         <el-tree-select
           v-model="form.deptCode"
           :data="departmentOptions"
@@ -162,7 +186,21 @@ function closeDrawer() {
           clearable
           default-expand-all
           node-key="value"
-          placeholder="请选择部门"
+          placeholder="请选择主部门"
+          style="width: 100%"
+        />
+      </el-form-item>
+
+      <el-form-item label="兼职部门">
+        <el-tree-select
+          v-model="form.partTimeDeptCodes"
+          :data="departmentOptions"
+          check-strictly
+          clearable
+          default-expand-all
+          multiple
+          node-key="value"
+          placeholder="请选择兼职部门"
           style="width: 100%"
         />
       </el-form-item>
@@ -197,6 +235,10 @@ function closeDrawer() {
 </template>
 
 <style scoped lang="scss">
+.form-alert {
+  margin-bottom: 16px;
+}
+
 .drawer-footer {
   display: flex;
   justify-content: flex-end;

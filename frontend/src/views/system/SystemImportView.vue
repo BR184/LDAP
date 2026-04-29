@@ -109,7 +109,7 @@ async function handleSubmit(importMode: ImportMode) {
         <template #header>
           <div class="section-header">
             <strong>导入参数</strong>
-            <span class="idm-muted">文件路径必须位于后端配置的受控目录内，例如 `docs/feishu-import`。</span>
+            <span class="idm-muted">文件路径必须位于后端配置的受控目录内，支持相对路径或受控目录内绝对路径。</span>
           </div>
         </template>
 
@@ -117,7 +117,7 @@ async function handleSubmit(importMode: ImportMode) {
           <el-form-item label="导入文件路径" prop="documentPath">
             <el-input
               v-model="form.documentPath"
-              placeholder="例如 花名册 2026-04-22_112145.xlsx 或 bundle/full-demo.json"
+              placeholder="例如 花名册 2026-04-22_112145.xlsx、bundle/full-demo.json 或受控目录内绝对路径"
             />
           </el-form-item>
 

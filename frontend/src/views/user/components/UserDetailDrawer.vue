@@ -30,7 +30,20 @@ const emit = defineEmits<{
         <el-descriptions-item label="邮箱">{{ user.email || '--' }}</el-descriptions-item>
         <el-descriptions-item label="手机号">{{ user.mobile || '--' }}</el-descriptions-item>
         <el-descriptions-item label="工号">{{ user.employeeNo || '--' }}</el-descriptions-item>
-        <el-descriptions-item label="部门编码">{{ user.deptCode || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="主部门编码">{{ user.deptCode || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="主部门名称">{{ user.deptName || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="兼职部门">
+          <el-space v-if="user.partTimeDeptNames.length" wrap>
+            <el-tag
+              v-for="(deptName, index) in user.partTimeDeptNames"
+              :key="`${deptName}-${user.partTimeDeptCodes[index] || index}`"
+              type="info"
+            >
+              {{ deptName }}
+            </el-tag>
+          </el-space>
+          <span v-else>--</span>
+        </el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="user.status === 1 ? 'success' : 'danger'">
             {{ user.status === 1 ? '启用' : '禁用' }}

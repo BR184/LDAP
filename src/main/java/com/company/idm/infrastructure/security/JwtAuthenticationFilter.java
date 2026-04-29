@@ -42,6 +42,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             ParsedToken parsedToken = tokenService.parse(authorization.substring(7));
             User user = userRepository.findByUsername(parsedToken.username()).orElse(null);
             if (user != null
+                && user.getId() != null
+                && user.getId().equals(parsedToken.userId())
                 && user.getStatus() == UserStatus.ENABLED
                 && user.getTokenVersion().equals(parsedToken.tokenVersion())) {
                 AuthenticatedUser principal = new AuthenticatedUser(

@@ -24,6 +24,8 @@ import type { MenuTreeNode } from '@/types/menu'
 import type { PermissionTreeNode } from '@/types/permission'
 import type { CreateRolePayload, RoleItem, UpdateRolePayload } from '@/types/role'
 
+const SUPER_ADMIN_ROLE_CODE = 'SUPER_ADMIN'
+
 const queryClient = useQueryClient()
 const tableRef = ref<{ clearSelection?: () => void } | null>(null)
 
@@ -186,7 +188,7 @@ function handleSelectionChange(rows: RoleItem[]) {
 }
 
 function selectableRole(row: RoleItem) {
-  return row.builtIn !== 1
+  return row.roleCode !== SUPER_ADMIN_ROLE_CODE
 }
 
 function openCreate() {
@@ -270,7 +272,7 @@ async function handleToggleStatus(role: RoleItem) {
 async function handleDelete(role: RoleItem) {
   try {
     await ElMessageBox.confirm(
-      `确认删除角色 ${role.roleName}（${role.roleCode}）吗？删除后将同时清理该角色的菜单与权限绑定。`,
+      `确认删除角色 ${role.roleName}（${role.roleCode}）吗？删除后将同步清理该角色的菜单与权限绑定。`,
       '删除角色',
       {
         type: 'warning',
@@ -425,7 +427,9 @@ function statusTagType(status: number) {
               <el-button link type="info" @click="handleToggleStatus(row)">
                 {{ row.status === 1 ? '禁用' : '启用' }}
               </el-button>
-              <el-button v-if="row.builtIn !== 1" link type="danger" @click="handleDelete(row)">删除</el-button>
+              <el-button v-if="row.roleCode !== SUPER_ADMIN_ROLE_CODE" link type="danger" @click="handleDelete(row)">
+                删除
+              </el-button>
             </el-space>
           </template>
         </el-table-column>

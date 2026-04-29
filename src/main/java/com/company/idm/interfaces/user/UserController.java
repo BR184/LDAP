@@ -80,12 +80,12 @@ public class UserController {
         @AuthenticationPrincipal(expression = "username") String username
     ) {
         User user = userApplicationService.createUser(new CreateUserCommand(
-            request.username(),
             request.realName(),
             request.email(),
             request.mobile(),
             request.employeeNo(),
             request.deptCode(),
+            request.partTimeDeptCodes(),
             request.initialPassword(),
             request.roleIds(),
             username
@@ -107,6 +107,7 @@ public class UserController {
             request.mobile(),
             request.employeeNo(),
             request.deptCode(),
+            request.partTimeDeptCodes(),
             username
         ));
         return ApiResponse.success(toResponse(user));
@@ -240,6 +241,9 @@ public class UserController {
             user.getEmployeeNo(),
             user.getDeptName(),
             user.getDeptCode(),
+            user.getPartTimeDeptCodes(),
+            user.getPartTimeDeptNames(),
+            user.getPermissionLevel(),
             user.getStatus().getCode(),
             user.getLdapDn(),
             user.getRoleCodes()

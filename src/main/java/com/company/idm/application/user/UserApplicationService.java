@@ -11,11 +11,14 @@ import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.domain.ldap.LdapDirectoryService;
 import com.company.idm.domain.ldap.LdapGroupService;
 import com.company.idm.domain.rbac.PermissionLevelRuleService;
+import com.company.idm.domain.rbac.Role;
+import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.AppLdapProperties;
 import com.company.idm.infrastructure.ldap.LdapDnHelper;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -44,6 +47,8 @@ public class UserApplicationService {
     private final PolicyRefreshService policyRefreshService;
     private final PasswordPolicyValidator passwordPolicyValidator;
     private final PermissionLevelRuleService permissionLevelRuleService;
+    private final RoleRepository roleRepository;
+    private final UsernameGenerationService usernameGenerationService;
     private final AppLdapProperties ldapProperties;
 
     public List<User> listUsers(String username, String departmentKeyword, Integer statusCode) {
@@ -66,32 +71,43 @@ public class UserApplicationService {
     @Transactional
     public User createUser(CreateUserCommand command) {
         passwordPolicyValidator.validate(DEFAULT_INITIAL_PASSWORD);
-        Department department = null;
-        userRepository.findByUsername(command.username())
+        DepartmentAssignment departmentAssignment = resolveDepartmentAssignment(command.deptCode(), command.partTimeDeptCodes());
+        List<Role> roles = loadEnabledRoles(command.roleIds());
+        String generatedUsername = usernameGenerationService.generate(command.realName(), command.employeeNo());
+
+        userRepository.findByEmployeeNo(command.employeeNo())
+            .ifPresent(user -> {
+                throw new BizException("USER_EMPLOYEE_NO_DUPLICATE", "工号已存在");
+            });
+        userRepository.findByUsername(generatedUsername)
             .ifPresent(user -> {
                 throw new BizException("USER_DUPLICATE", "用户名已存在");
             });
-        if (command.deptCode() != null && !command.deptCode().isBlank()) {
-            department = loadEnabledDepartment(command.deptCode());
-        }
-        if (ldapDirectoryService.existsByUid(command.username())) {
+
+        if (ldapDirectoryService.existsByUid(generatedUsername)) {
             throw new BizException("LDAP_UID_DUPLICATE", "LDAP 用户已存在");
         }
+
         User saved = userRepository.save(User.builder()
-            .username(command.username())
+            .username(generatedUsername)
             .realName(command.realName())
             .email(command.email())
             .mobile(command.mobile())
             .employeeNo(command.employeeNo())
-            .deptCode(command.deptCode())
+            .deptCode(departmentAssignment.mainDepartmentCode())
+            .partTimeDeptCodes(departmentAssignment.partTimeDeptCodes())
             .status(UserStatus.ENABLED)
             .sourceType(SourceType.MANUAL)
             .tokenVersion(0)
             .build());
         String ldapDn = ldapDirectoryService.createUser(saved, DEFAULT_INITIAL_PASSWORD);
         saved = userRepository.save(saved.toBuilder().ldapDn(ldapDn).build());
-        syncUserDepartmentGroup(saved, department);
+        syncUserDepartmentGroups(saved);
         userRepository.assignRoles(saved.getId(), command.roleIds());
+        saved = saved.toBuilder()
+            .roleCodes(roles.stream().map(Role::getRoleCode).collect(java.util.stream.Collectors.toSet()))
+            .permissionLevel(resolvePermissionLevel(roles))
+            .build();
         policyRefreshService.refresh();
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
@@ -101,7 +117,7 @@ public class UserApplicationService {
             .afterJson(saved.getUsername())
             .result("SUCCESS")
             .build());
-        return saved;
+        return enrichDepartment(saved, loadDepartmentMap());
     }
 
     @Transactional
@@ -109,20 +125,20 @@ public class UserApplicationService {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         permissionLevelRuleService.checkCanModifyBasicUser(command.operator(), user);
-        Department department = null;
-        if (command.deptCode() != null && !command.deptCode().isBlank()) {
-            department = loadEnabledDepartment(command.deptCode());
-        }
+        validateEditableEmployeeNo(command.employeeNo(), user);
+        DepartmentAssignment departmentAssignment = resolveDepartmentAssignment(command.deptCode(), command.partTimeDeptCodes());
+
         User updated = user.toBuilder()
             .realName(command.realName())
             .email(command.email())
             .mobile(command.mobile())
             .employeeNo(command.employeeNo())
-            .deptCode(command.deptCode())
+            .deptCode(departmentAssignment.mainDepartmentCode())
+            .partTimeDeptCodes(departmentAssignment.partTimeDeptCodes())
             .build();
         userRepository.updateProfile(updated);
         ldapDirectoryService.updateUser(updated);
-        syncUserDepartmentMembership(user, updated, department);
+        syncUserDepartmentGroups(updated);
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
             .operationType("USER_UPDATE")
@@ -131,7 +147,7 @@ public class UserApplicationService {
             .afterJson(updated.getUsername())
             .result("SUCCESS")
             .build());
-        return updated;
+        return enrichDepartment(updated, loadDepartmentMap());
     }
 
     @Transactional
@@ -255,10 +271,7 @@ public class UserApplicationService {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         permissionLevelRuleService.checkCanModifySensitiveUser(operator, user);
-        Department department = null;
-        if (user.getDeptCode() != null && !user.getDeptCode().isBlank()) {
-            department = loadEnabledDepartment(user.getDeptCode());
-        }
+        resolveDepartmentAssignment(user.getDeptCode(), user.getPartTimeDeptCodes());
         String ldapDn;
         if (ldapDirectoryService.existsByUid(user.getUsername())) {
             ldapDirectoryService.updateUser(user);
@@ -273,13 +286,7 @@ public class UserApplicationService {
         } else {
             ldapDirectoryService.disableUser(user.getUsername());
         }
-        if (department != null) {
-            String groupDn = ldapGroupService.createGroup(department.getDeptCode(), department.getDeptName());
-            updateDepartmentLdapDn(department, groupDn);
-            ldapGroupService.syncUserGroups(user.getUsername(), List.of(department.getDeptCode()));
-        } else {
-            ldapGroupService.removeUserFromAllGroups(user.getUsername());
-        }
+        syncUserDepartmentGroups(user);
         User synced = user;
         if (!ldapDn.equals(user.getLdapDn())) {
             synced = userRepository.save(user.toBuilder().ldapDn(ldapDn).build());
@@ -292,7 +299,7 @@ public class UserApplicationService {
             .afterJson(synced.getUsername())
             .result("SUCCESS")
             .build());
-        return synced;
+        return enrichDepartment(synced, loadDepartmentMap());
     }
 
     private int nextTokenVersion(User user) {
@@ -314,8 +321,12 @@ public class UserApplicationService {
             return null;
         }
         Department department = user.getDeptCode() == null ? null : departmentByCode.get(user.getDeptCode());
+        List<String> partTimeDeptCodes = normalizePartTimeDeptCodes(user.getDeptCode(), user.getPartTimeDeptCodes());
         return user.toBuilder()
             .deptName(department == null ? null : department.getDeptName())
+            .partTimeDeptCodes(partTimeDeptCodes)
+            .partTimeDeptNames(resolveDepartmentNames(partTimeDeptCodes, departmentByCode))
+            .permissionLevel(resolvePermissionLevel(user.getRoleCodes()))
             .build();
     }
 
@@ -417,30 +428,21 @@ public class UserApplicationService {
         return Comparator.nullsLast(Comparator.<T>naturalOrder()).compare(left, right);
     }
 
-    private void syncUserDepartmentGroup(User user, Department department) {
-        if (department == null) {
+    private void syncUserDepartmentGroups(User user) {
+        DepartmentAssignment assignment = resolveDepartmentAssignment(user.getDeptCode(), user.getPartTimeDeptCodes());
+        List<Department> departments = assignment.departments();
+        if (departments.isEmpty()) {
+            ldapGroupService.removeUserFromAllGroups(user.getUsername());
             return;
         }
-        String ldapDn = ldapGroupService.createGroup(department.getDeptCode(), department.getDeptName());
-        updateDepartmentLdapDn(department, ldapDn);
-        ldapGroupService.addUserToGroup(user.getUsername(), department.getDeptCode());
-    }
-
-    private void syncUserDepartmentMembership(User originalUser, User updatedUser, Department newDepartment) {
-        String oldDeptCode = originalUser.getDeptCode();
-        String newDeptCode = updatedUser.getDeptCode();
-        if (oldDeptCode != null && !oldDeptCode.isBlank() && !oldDeptCode.equals(newDeptCode)) {
-            ldapGroupService.removeUserFromGroup(updatedUser.getUsername(), oldDeptCode);
+        for (Department department : departments) {
+            String ldapDn = ldapGroupService.createGroup(department.getDeptCode(), department.getDeptName());
+            updateDepartmentLdapDn(department, ldapDn);
         }
-        if (newDepartment != null) {
-            String ldapDn = ldapGroupService.createGroup(newDepartment.getDeptCode(), newDepartment.getDeptName());
-            updateDepartmentLdapDn(newDepartment, ldapDn);
-        }
-        if (newDeptCode != null && !newDeptCode.isBlank()) {
-            ldapGroupService.addUserToGroup(updatedUser.getUsername(), newDeptCode);
-        } else if (oldDeptCode != null && !oldDeptCode.isBlank()) {
-            ldapGroupService.removeUserFromAllGroups(updatedUser.getUsername());
-        }
+        ldapGroupService.syncUserGroups(
+            user.getUsername(),
+            departments.stream().map(Department::getDeptCode).toList()
+        );
     }
 
     private void updateDepartmentLdapDn(Department department, String ldapDn) {
@@ -460,6 +462,93 @@ public class UserApplicationService {
             throw new BizException("DEPT_DISABLED", "部门已停用");
         }
         return department;
+    }
+
+    private List<Role> loadEnabledRoles(List<Long> roleIds) {
+        List<Role> roles = roleRepository.findByIds(roleIds);
+        if (roles.size() != roleIds.size()) {
+            throw new BizException("ROLE_NOT_FOUND", "部分角色不存在");
+        }
+        boolean containsDisabledRole = roles.stream()
+            .anyMatch(role -> role.getStatus() == null || role.getStatus() != 1);
+        if (containsDisabledRole) {
+            throw new BizException("ROLE_ASSIGN_DISABLED", "已禁用角色不允许分配");
+        }
+        return roles;
+    }
+
+    private void validateEditableEmployeeNo(String employeeNo, User currentUser) {
+        if (employeeNo == null || employeeNo.isBlank()) {
+            throw new BizException("USER_EMPLOYEE_NO_REQUIRED", "工号不能为空");
+        }
+        String normalizedEmployeeNo = employeeNo.trim();
+        if (currentUser != null && normalizedEmployeeNo.equals(currentUser.getEmployeeNo())) {
+            return;
+        }
+        userRepository.findByEmployeeNo(normalizedEmployeeNo)
+            .ifPresent(user -> {
+                if (currentUser == null || !user.getId().equals(currentUser.getId())) {
+                    throw new BizException("USER_EMPLOYEE_NO_DUPLICATE", "工号已存在");
+                }
+            });
+    }
+
+    private DepartmentAssignment resolveDepartmentAssignment(String mainDeptCode, List<String> rawPartTimeDeptCodes) {
+        String normalizedMainDeptCode = normalize(mainDeptCode);
+        List<String> normalizedPartTimeDeptCodes = normalizePartTimeDeptCodes(normalizedMainDeptCode, rawPartTimeDeptCodes);
+        List<Department> departments = new ArrayList<>();
+        if (normalizedMainDeptCode != null) {
+            departments.add(loadEnabledDepartment(normalizedMainDeptCode));
+        }
+        for (String deptCode : normalizedPartTimeDeptCodes) {
+            departments.add(loadEnabledDepartment(deptCode));
+        }
+        return new DepartmentAssignment(normalizedMainDeptCode, normalizedPartTimeDeptCodes, List.copyOf(departments));
+    }
+
+    private List<String> normalizePartTimeDeptCodes(String mainDeptCode, List<String> rawPartTimeDeptCodes) {
+        if (rawPartTimeDeptCodes == null || rawPartTimeDeptCodes.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> normalizedCodes = new LinkedHashSet<>();
+        for (String deptCode : rawPartTimeDeptCodes) {
+            String normalizedDeptCode = normalize(deptCode);
+            if (normalizedDeptCode == null) {
+                continue;
+            }
+            if (normalizedDeptCode.equals(mainDeptCode)) {
+                continue;
+            }
+            normalizedCodes.add(normalizedDeptCode);
+        }
+        return List.copyOf(normalizedCodes);
+    }
+
+    private List<String> resolveDepartmentNames(List<String> deptCodes, Map<String, Department> departmentByCode) {
+        if (deptCodes == null || deptCodes.isEmpty()) {
+            return List.of();
+        }
+        List<String> departmentNames = new ArrayList<>();
+        for (String deptCode : deptCodes) {
+            Department department = departmentByCode.get(deptCode);
+            departmentNames.add(department == null ? deptCode : department.getDeptName());
+        }
+        return List.copyOf(departmentNames);
+    }
+
+    private Integer resolvePermissionLevel(Set<String> roleCodes) {
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            return Integer.MAX_VALUE;
+        }
+        return resolvePermissionLevel(roleRepository.findByCodes(roleCodes));
+    }
+
+    private Integer resolvePermissionLevel(List<Role> roles) {
+        return roles.stream()
+            .map(Role::getPermissionLevel)
+            .filter(java.util.Objects::nonNull)
+            .min(Comparator.naturalOrder())
+            .orElse(Integer.MAX_VALUE);
     }
 
     private String buildUserDn(String username) {
@@ -494,5 +583,12 @@ public class UserApplicationService {
 
     private String safe(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private record DepartmentAssignment(
+        String mainDepartmentCode,
+        List<String> partTimeDeptCodes,
+        List<Department> departments
+    ) {
     }
 }

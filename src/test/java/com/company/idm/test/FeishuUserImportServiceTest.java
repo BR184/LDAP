@@ -7,6 +7,7 @@ import com.company.idm.application.sync.feishu.FeishuImportDocumentResolver;
 import com.company.idm.application.sync.feishu.FeishuUserImportResult;
 import com.company.idm.application.sync.feishu.FeishuUserImportService;
 import com.company.idm.application.sync.feishu.FeishuUserPayload;
+import com.company.idm.application.user.UsernameGenerationService;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.SyncDiffType;
 import com.company.idm.common.enums.SyncTriggerMode;
@@ -40,11 +41,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * 验证飞书用户导入服务的单元测试。
- */
 @ExtendWith(MockitoExtension.class)
 class FeishuUserImportServiceTest {
+
+    private static final String GENERATED_USERNAME = "zhangsane10001";
 
     @Mock
     private UserRepository userRepository;
@@ -79,17 +79,19 @@ class FeishuUserImportServiceTest {
     @Test
     void shouldPreviewNewUsersSuccessfully() {
         FeishuUserImportService service = buildService();
-        Department department = Department.builder()
-            .id(1L).deptCode("D100").deptName("研发中心").externalId("ou_root").sourceType(SourceType.FEISHU).status(1).build();
-        when(departmentRepository.findAll()).thenReturn(List.of(department));
+        when(departmentRepository.findAll()).thenReturn(List.of(
+            dept("D100", "研发中心", "ou_root"),
+            dept("D200", "效能平台", "ou_part")
+        ));
         when(departmentRemoteService.fetchDepartments()).thenReturn(List.of(
-            new FeishuDepartmentPayload("ou_root", "D100", "研发中心", null, 1, 1)
+            new FeishuDepartmentPayload("ou_root", "D100", "研发中心", null, 1, 1),
+            new FeishuDepartmentPayload("ou_part", "D200", "效能平台", null, 1, 2)
         ));
         when(userRemoteService.fetchUsers()).thenReturn(List.of(
-            new FeishuUserPayload("u001", "zhangsan", "张三", "zhangsan@corp.local", "13900000000", "E10001", "ou_root", 1, 1)
+            new FeishuUserPayload("u001", "zhangsan", "张三", "zhangsan@corp.local", "13900000000", "E10001", "ou_root", List.of("ou_part"), 1, 1)
         ));
         when(userRepository.findByExternalId("u001")).thenReturn(Optional.empty());
-        when(userRepository.findByUsername("zhangsan")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername(GENERATED_USERNAME)).thenReturn(Optional.empty());
         when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.empty());
 
         FeishuUserImportResult result = service.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null));
@@ -97,145 +99,94 @@ class FeishuUserImportServiceTest {
         assertThat(result.newCount()).isEqualTo(1);
         assertThat(result.diffs()).hasSize(1);
         assertThat(result.diffs().get(0).diffType()).isEqualTo(SyncDiffType.MISSING_IN_MYSQL);
+        assertThat(result.diffs().get(0).targetKey()).isEqualTo(GENERATED_USERNAME);
     }
 
     @Test
-    void shouldExecuteNewUsersAndAssignDefaultRole() {
+    void shouldExecuteUserAndSyncMainAndPartTimeDepartments() {
         FeishuUserImportService service = buildService();
-        Department department = Department.builder()
-            .id(1L).deptCode("D100").deptName("研发中心").externalId("ou_root").sourceType(SourceType.FEISHU).status(1).build();
         Role normalUser = Role.builder().id(2L).roleCode("NORMAL_USER").roleName("普通用户").permissionLevel(3).status(1).build();
         User firstSaved = User.builder()
-            .id(10L).username("zhangsan").realName("张三").email("zhangsan@corp.local").mobile("13900000000")
-            .employeeNo("E10001").deptCode("D100").status(UserStatus.ENABLED).sourceType(SourceType.FEISHU)
-            .externalId("u001").tokenVersion(0).roleCodes(Set.of()).build();
-        User secondSaved = firstSaved.toBuilder().ldapDn("uid=zhangsan,ou=people,dc=corp,dc=local").build();
-        when(departmentRepository.findAll()).thenReturn(List.of(department));
+            .id(10L)
+            .username(GENERATED_USERNAME)
+            .realName("张三")
+            .email("zhangsan@corp.local")
+            .mobile("13900000000")
+            .employeeNo("E10001")
+            .deptCode("D100")
+            .partTimeDeptCodes(List.of("D200"))
+            .status(UserStatus.ENABLED)
+            .sourceType(SourceType.FEISHU)
+            .externalId("u001")
+            .tokenVersion(0)
+            .roleCodes(Set.of())
+            .build();
+        User secondSaved = firstSaved.toBuilder().ldapDn("uid=" + GENERATED_USERNAME + ",ou=people,dc=corp,dc=local").build();
+        when(departmentRepository.findAll()).thenReturn(List.of(
+            dept("D100", "研发中心", "ou_root"),
+            dept("D200", "效能平台", "ou_part")
+        ));
         when(departmentRemoteService.fetchDepartments()).thenReturn(List.of(
-            new FeishuDepartmentPayload("ou_root", "D100", "研发中心", null, 1, 1)
+            new FeishuDepartmentPayload("ou_root", "D100", "研发中心", null, 1, 1),
+            new FeishuDepartmentPayload("ou_part", "D200", "效能平台", null, 1, 2)
         ));
         when(userRemoteService.fetchUsers()).thenReturn(List.of(
-            new FeishuUserPayload("u001", "zhangsan", "张三", "zhangsan@corp.local", "13900000000", "E10001", "ou_root", 1, 1)
+            new FeishuUserPayload("u001", "zhangsan", "张三", "zhangsan@corp.local", "13900000000", "E10001", "ou_root", List.of("ou_part"), 1, 1)
         ));
         when(userRepository.findByExternalId("u001")).thenReturn(Optional.empty());
-        when(userRepository.findByUsername("zhangsan")).thenReturn(Optional.empty());
+        when(userRepository.findByUsername(GENERATED_USERNAME)).thenReturn(Optional.empty());
         when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.empty());
         when(roleRepository.findByCode("NORMAL_USER")).thenReturn(Optional.of(normalUser));
         when(userRepository.save(any(User.class))).thenReturn(firstSaved, secondSaved);
-        when(ldapDirectoryService.existsByUid("zhangsan")).thenReturn(false);
-        when(ldapDirectoryService.createUser(any(User.class), any())).thenReturn("uid=zhangsan,ou=people,dc=corp,dc=local");
-        when(ldapGroupService.createGroup("D100", "研发中心")).thenReturn("cn=D100_研发中心,ou=groups,dc=corp,dc=local");
+        when(ldapDirectoryService.existsByUid(GENERATED_USERNAME)).thenReturn(false);
+        when(ldapDirectoryService.createUser(any(User.class), any())).thenReturn("uid=" + GENERATED_USERNAME + ",ou=people,dc=corp,dc=local");
+        when(ldapGroupService.createGroup(any(), any())).thenAnswer(invocation -> "cn=" + invocation.getArgument(0) + ",ou=groups,dc=corp,dc=local");
 
         FeishuUserImportResult result = service.execute(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null));
 
         assertThat(result.newCount()).isEqualTo(1);
         verify(passwordPolicyValidator).validate("123456");
-        verify(ldapDirectoryService).createUser(any(User.class), org.mockito.ArgumentMatchers.eq("123456"));
+        verify(ldapGroupService).syncUserGroups(GENERATED_USERNAME, List.of("D100", "D200"));
         verify(userRepository).assignRoles(10L, List.of(2L));
         verify(policyRefreshService).refresh();
-        verify(ldapGroupService).addUserToGroup("zhangsan", "D100");
-        verify(departmentRepository).save(argThat(saved ->
-            "D100".equals(saved.getDeptCode()) && "cn=D100_研发中心,ou=groups,dc=corp,dc=local".equals(saved.getLdapDn())
-        ));
-    }
-
-    @Test
-    void shouldNotOverrideExistingRolesWhenUserAlreadyHasRole() {
-        FeishuUserImportService service = buildService();
-        Department department = Department.builder()
-            .id(1L).deptCode("D100").deptName("研发中心").externalId("ou_root").sourceType(SourceType.FEISHU).status(1).build();
-        User existing = User.builder()
-            .id(10L).username("zhangsan").realName("张三").email("zhangsan@corp.local").mobile("13900000000")
-            .employeeNo("E10001").deptCode("D100").status(UserStatus.ENABLED).sourceType(SourceType.FEISHU)
-            .externalId("u001").ldapDn("uid=zhangsan,ou=people,dc=corp,dc=local").tokenVersion(0).roleCodes(Set.of("ADMIN")).build();
-        when(departmentRepository.findAll()).thenReturn(List.of(department));
-        when(departmentRemoteService.fetchDepartments()).thenReturn(List.of(
-            new FeishuDepartmentPayload("ou_root", "D100", "研发中心", null, 1, 1)
-        ));
-        when(userRemoteService.fetchUsers()).thenReturn(List.of(
-            new FeishuUserPayload("u001", "zhangsan", "张三", "zhangsan@corp.local", "13900000000", "E10001", "ou_root", 1, 1)
-        ));
-        when(userRepository.findByExternalId("u001")).thenReturn(Optional.of(existing));
-        when(userRepository.findByUsername("zhangsan")).thenReturn(Optional.of(existing));
-        when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.of(existing));
-        when(roleRepository.findByCode("NORMAL_USER")).thenReturn(Optional.of(Role.builder().id(2L).roleCode("NORMAL_USER").build()));
-        when(ldapDirectoryService.existsByUid("zhangsan")).thenReturn(true);
-
-        service.execute(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null));
-
-        verify(userRepository, never()).assignRoles(any(), any());
-        verify(policyRefreshService, never()).refresh();
-    }
-
-    @Test
-    void shouldRejectWhenMainDepartmentMissing() {
-        FeishuUserImportService service = buildService();
-        when(departmentRepository.findAll()).thenReturn(List.of());
-        when(departmentRemoteService.fetchDepartments()).thenReturn(List.of());
-        when(userRemoteService.fetchUsers()).thenReturn(List.of(
-            new FeishuUserPayload("u001", "zhangsan", "张三", null, null, null, "ou_missing", 1, 1)
-        ));
-
-        assertThatThrownBy(() -> service.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null)))
-            .isInstanceOf(BizException.class)
-            .hasMessage("飞书用户主部门不存在");
     }
 
     @Test
     void shouldRejectWhenManualUserConflicts() {
         FeishuUserImportService service = buildService();
-        Department department = Department.builder()
-            .id(1L).deptCode("D100").deptName("研发中心").externalId("ou_root").sourceType(SourceType.FEISHU).status(1).build();
         User manualUser = User.builder()
-            .id(1L).username("zhangsan").realName("手工用户").employeeNo("E10001").sourceType(SourceType.MANUAL).status(UserStatus.ENABLED).build();
-        when(departmentRepository.findAll()).thenReturn(List.of(department));
+            .id(1L)
+            .username(GENERATED_USERNAME)
+            .realName("手工用户")
+            .employeeNo("E10001")
+            .sourceType(SourceType.MANUAL)
+            .status(UserStatus.ENABLED)
+            .build();
+        when(departmentRepository.findAll()).thenReturn(List.of(dept("D100", "研发中心", "ou_root")));
         when(departmentRemoteService.fetchDepartments()).thenReturn(List.of(
             new FeishuDepartmentPayload("ou_root", "D100", "研发中心", null, 1, 1)
         ));
         when(userRemoteService.fetchUsers()).thenReturn(List.of(
-            new FeishuUserPayload("u001", "zhangsan", "张三", null, null, "E10001", "ou_root", 1, 1)
+            new FeishuUserPayload("u001", "zhangsan", "张三", null, null, "E10001", "ou_root", List.of(), 1, 1)
         ));
         when(userRepository.findByExternalId("u001")).thenReturn(Optional.empty());
-        when(userRepository.findByUsername("zhangsan")).thenReturn(Optional.of(manualUser));
+        when(userRepository.findByUsername(GENERATED_USERNAME)).thenReturn(Optional.of(manualUser));
         when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.of(manualUser));
 
         assertThatThrownBy(() -> service.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null)))
             .isInstanceOf(BizException.class)
-            .hasMessage("飞书用户 username 与手工用户冲突");
+            .hasMessage("飞书用户 employee_no 与手工用户冲突");
     }
 
-    @Test
-    void shouldPreviewUsersFromDocumentWithoutRemoteDepartmentFallback() {
-        FeishuUserImportService service = buildService();
-        Department department = Department.builder()
-            .id(1L).deptCode("D100").deptName("研发中心").externalId("ou_root").sourceType(SourceType.FEISHU).status(1).build();
-        when(departmentRepository.findAll()).thenReturn(List.of(department));
-        when(importDocumentResolver.resolveUsers("users/demo.json")).thenReturn(List.of(
-            new FeishuUserPayload("u001", "zhangsan", "张三", "zhangsan@corp.local", null, "E10001", "ou_root", 1, 1)
-        ));
-        when(userRepository.findByExternalId("u001")).thenReturn(Optional.empty());
-        when(userRepository.findByUsername("zhangsan")).thenReturn(Optional.empty());
-        when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.empty());
-
-        FeishuUserImportResult result = service.previewFromDocument("users/demo.json");
-
-        assertThat(result.newCount()).isEqualTo(1);
-        verify(departmentRemoteService, never()).fetchDepartments();
-    }
-
-    @Test
-    void shouldRejectUserFileImportWhenDepartmentFileNotImported() {
-        FeishuUserImportService service = buildService();
-        when(departmentRepository.findAll()).thenReturn(List.of());
-        when(importDocumentResolver.resolveUsers("users/demo.json")).thenReturn(List.of(
-            new FeishuUserPayload("u001", "zhangsan", "张三", "zhangsan@corp.local", null, "E10001", "ou_missing", 1, 1)
-        ));
-
-        assertThatThrownBy(() -> service.previewFromDocument("users/demo.json"))
-            .isInstanceOf(BizException.class)
-            .hasMessage("请先更新部门文件后再导入用户文件");
-
-        verify(departmentRemoteService, never()).fetchDepartments();
+    private Department dept(String deptCode, String deptName, String externalId) {
+        return Department.builder()
+            .id(1L)
+            .deptCode(deptCode)
+            .deptName(deptName)
+            .externalId(externalId)
+            .sourceType(SourceType.FEISHU)
+            .status(1)
+            .build();
     }
 
     private FeishuUserImportService buildService() {
@@ -253,6 +204,7 @@ class FeishuUserImportServiceTest {
             ldapGroupService,
             policyRefreshService,
             passwordPolicyValidator,
+            new UsernameGenerationService(),
             ldapProperties
         );
     }

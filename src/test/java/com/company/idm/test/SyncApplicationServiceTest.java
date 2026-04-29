@@ -228,6 +228,55 @@ class SyncApplicationServiceTest {
         );
     }
 
+    @Test
+    void shouldTruncateLongErrorMessageWhenJobFails() {
+        List<SyncJobHandler> handlers = List.of(new FailingHandler(SyncJobType.FEISHU_USER_IMPORT));
+        SyncApplicationService service = new SyncApplicationService(
+            handlers,
+            syncBatchRepository,
+            syncJobRepository,
+            syncDiffRepository,
+            auditLogRepository,
+            new ObjectMapper()
+        );
+
+        List<SyncJob> storedJobs = new ArrayList<>();
+        AtomicLong batchId = new AtomicLong(1L);
+        AtomicLong jobId = new AtomicLong(1L);
+
+        when(syncBatchRepository.existsRunningBatch(SyncBatchType.FEISHU_IMPORT)).thenReturn(false);
+        when(syncBatchRepository.save(any(SyncBatch.class))).thenAnswer(invocation -> {
+            SyncBatch batch = invocation.getArgument(0);
+            return batch.getId() == null ? batch.toBuilder().id(batchId.getAndIncrement()).build() : batch;
+        });
+        when(syncJobRepository.save(any(SyncJob.class))).thenAnswer(invocation -> {
+            SyncJob job = invocation.getArgument(0);
+            SyncJob saved = job.getId() == null ? job.toBuilder().id(jobId.getAndIncrement()).build() : job;
+            storedJobs.removeIf(item -> item.getId().equals(saved.getId()));
+            storedJobs.add(saved);
+            return saved;
+        });
+        when(syncDiffRepository.findByBatchNo(any())).thenReturn(List.of());
+        when(syncJobRepository.findByBatchNo(any())).thenAnswer(invocation ->
+            storedJobs.stream().filter(item -> item.getBatchNo().equals(invocation.getArgument(0))).toList()
+        );
+
+        SyncBatchDetail detail = service.executeFeishuUserFileImport(
+            "users/demo.json",
+            false,
+            "manual file import",
+            "admin",
+            SyncTriggerMode.MANUAL
+        );
+
+        assertThat(detail.batch().getStatus()).isEqualTo(SyncRunStatus.FAIL);
+        assertThat(detail.jobs()).singleElement().satisfies(job -> {
+            assertThat(job.getStatus()).isEqualTo(SyncRunStatus.FAIL);
+            assertThat(job.getErrorMessage()).endsWith("...[truncated]");
+            assertThat(job.getErrorMessage().length()).isLessThanOrEqualTo(4000);
+        });
+    }
+
     private static class SuccessHandler implements SyncJobHandler {
 
         private final SyncJobType jobType;
@@ -261,6 +310,30 @@ class SyncApplicationServiceTest {
                 null,
                 List.<SyncDiffPayload>of()
             );
+        }
+    }
+
+    private static class FailingHandler implements SyncJobHandler {
+
+        private final SyncJobType jobType;
+
+        private FailingHandler(SyncJobType jobType) {
+            this.jobType = jobType;
+        }
+
+        @Override
+        public SyncJobType jobType() {
+            return jobType;
+        }
+
+        @Override
+        public com.company.idm.application.sync.SyncJobExecutionResult preview(com.company.idm.application.sync.SyncRequestPayload payload) {
+            throw new IllegalStateException("preview not supported");
+        }
+
+        @Override
+        public com.company.idm.application.sync.SyncJobExecutionResult execute(com.company.idm.application.sync.SyncRequestPayload payload) {
+            throw new IllegalStateException("X".repeat(5005));
         }
     }
 }

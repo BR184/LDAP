@@ -2,6 +2,7 @@ package com.company.idm.domain.user;
 
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.UserStatus;
+import java.util.List;
 import java.util.Set;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -25,11 +26,14 @@ public class User {
     private String employeeNo;
     private String deptCode;
     private String deptName;
+    private List<String> partTimeDeptCodes;
+    private List<String> partTimeDeptNames;
     private UserStatus status;
     private SourceType sourceType;
     private String externalId;
     private String ldapDn;
     private Integer tokenVersion;
+    private Integer permissionLevel;
     private Set<String> roleCodes;
 }
 

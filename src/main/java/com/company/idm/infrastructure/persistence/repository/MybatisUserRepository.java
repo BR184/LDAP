@@ -121,6 +121,7 @@ public class MybatisUserRepository implements UserRepository {
         dataObject.setMobile(user.getMobile());
         dataObject.setEmployeeNo(user.getEmployeeNo());
         dataObject.setDeptCode(user.getDeptCode());
+        dataObject.setPartTimeDeptCodes(joinDeptCodes(user.getPartTimeDeptCodes()));
         dataObject.setModifier("system");
         dataObject.setGmtModified(LocalDateTime.now());
         userMapper.updateById(dataObject);
@@ -142,6 +143,8 @@ public class MybatisUserRepository implements UserRepository {
         UserDO dataObject = new UserDO();
         dataObject.setId(id);
         dataObject.setUsername(recycledUsername);
+        dataObject.setEmployeeNo(null);
+        dataObject.setPartTimeDeptCodes(null);
         dataObject.setDeleted(1);
         dataObject.setStatus(UserStatus.DISABLED.getCode());
         dataObject.setTokenVersion(tokenVersion);
@@ -210,6 +213,7 @@ public class MybatisUserRepository implements UserRepository {
             .mobile(dataObject.getMobile())
             .employeeNo(dataObject.getEmployeeNo())
             .deptCode(dataObject.getDeptCode())
+            .partTimeDeptCodes(parseDeptCodes(dataObject.getPartTimeDeptCodes()))
             .status(UserStatus.fromCode(dataObject.getStatus()))
             .sourceType(SourceType.valueOf(dataObject.getSourceType()))
             .externalId(dataObject.getExternalId())
@@ -228,6 +232,7 @@ public class MybatisUserRepository implements UserRepository {
         dataObject.setMobile(user.getMobile());
         dataObject.setEmployeeNo(user.getEmployeeNo());
         dataObject.setDeptCode(user.getDeptCode());
+        dataObject.setPartTimeDeptCodes(joinDeptCodes(user.getPartTimeDeptCodes()));
         dataObject.setStatus(user.getStatus().getCode());
         dataObject.setSourceType(user.getSourceType().name());
         dataObject.setExternalId(user.getExternalId());
@@ -237,5 +242,27 @@ public class MybatisUserRepository implements UserRepository {
         dataObject.setCreator("system");
         dataObject.setModifier("system");
         return dataObject;
+    }
+
+    private List<String> parseDeptCodes(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(rawValue.split(","))
+            .map(String::trim)
+            .filter(item -> !item.isBlank())
+            .distinct()
+            .toList();
+    }
+
+    private String joinDeptCodes(List<String> deptCodes) {
+        if (deptCodes == null || deptCodes.isEmpty()) {
+            return null;
+        }
+        return deptCodes.stream()
+            .map(String::trim)
+            .filter(item -> !item.isBlank())
+            .distinct()
+            .collect(java.util.stream.Collectors.joining(","));
     }
 }
