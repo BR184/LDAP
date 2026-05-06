@@ -229,6 +229,31 @@ class FeishuImportDocumentResolverTest {
     }
 
     @Test
+    void shouldResolveRosterWhenHeaderStartsFromSecondRow() throws Exception {
+        Path rootDir = tempDir.resolve("imports");
+        Path document = rootDir.resolve("bundle/second-row-header.xlsx");
+        Files.createDirectories(document.getParent());
+        writeRosterWorkbookWithBlankFirstRow(
+            document,
+            List.<Object[]>of(new Object[] {
+                "于善鹏", "+86 13964112234", "3", "在职", "开发部门",
+                "用户725015的组织/开发部门", "开发部门", null, null, "276b33cd", "1940579892@qq.com", null
+            })
+        );
+        when(userRepository.findAll()).thenReturn(List.of());
+
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
+
+        FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/second-row-header.xlsx");
+
+        assertThat(fullImportDocument.users()).singleElement().satisfies(user -> {
+            assertThat(user.username()).isEqualTo("yushanpeng3");
+            assertThat(user.mobile()).isEqualTo("13964112234");
+            assertThat(user.email()).isEqualTo("1940579892@qq.com");
+        });
+    }
+
+    @Test
     void shouldPreferLevelColumnsButKeepRosterRootWhenWorkbookUpdated() throws Exception {
         Path rootDir = tempDir.resolve("imports");
         Path document = rootDir.resolve("bundle/roster-updated.xlsx");
@@ -353,6 +378,41 @@ class FeishuImportDocumentResolverTest {
                 row.createCell(26).setCellValue(String.valueOf(rowData[5]));
                 row.createCell(27).setCellValue(String.valueOf(rowData[6]));
                 row.createCell(45).setCellValue(String.valueOf(rowData[7]));
+            }
+
+            try (java.io.OutputStream outputStream = Files.newOutputStream(document)) {
+                workbook.write(outputStream);
+            }
+        }
+    }
+
+    private void writeRosterWorkbookWithBlankFirstRow(Path document, List<Object[]> rows) throws Exception {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            XSSFSheet rosterSheet = workbook.createSheet("在职人员");
+            rosterSheet.createRow(0);
+            rosterSheet.createRow(1).createCell(0).setCellValue("姓名");
+            rosterSheet.getRow(1).createCell(1).setCellValue("手机号");
+            rosterSheet.getRow(1).createCell(2).setCellValue("工号");
+            rosterSheet.getRow(1).createCell(3).setCellValue("人员状态");
+            rosterSheet.getRow(1).createCell(4).setCellValue("部门");
+            rosterSheet.getRow(1).createCell(5).setCellValue("部门 (全路径)");
+            rosterSheet.getRow(1).createCell(6).setCellValue("一级部门");
+            rosterSheet.getRow(1).createCell(7).setCellValue("二级部门");
+            rosterSheet.getRow(1).createCell(8).setCellValue("三级部门");
+            rosterSheet.getRow(1).createCell(9).setCellValue("用户 ID");
+            rosterSheet.getRow(1).createCell(10).setCellValue("工作邮箱");
+            rosterSheet.getRow(1).createCell(11).setCellValue("个人邮箱");
+
+            int rowIndex = 2;
+            for (Object[] rowData : rows) {
+                var row = rosterSheet.createRow(rowIndex++);
+                for (int cellIndex = 0; cellIndex < rowData.length; cellIndex++) {
+                    Object value = rowData[cellIndex];
+                    if (value == null) {
+                        continue;
+                    }
+                    row.createCell(cellIndex).setCellValue(String.valueOf(value));
+                }
             }
 
             try (java.io.OutputStream outputStream = Files.newOutputStream(document)) {

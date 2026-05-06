@@ -37,6 +37,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class FeishuImportDocumentResolver {
 
+    private static final int MAX_HEADER_SCAN_ROWS = 20;
+
     private static final TypeReference<List<FeishuDepartmentPayload>> DEPARTMENT_LIST_TYPE = new TypeReference<>() {
     };
     private static final TypeReference<List<FeishuUserPayload>> USER_LIST_TYPE = new TypeReference<>() {
@@ -133,9 +135,9 @@ public class FeishuImportDocumentResolver {
              Workbook workbook = WorkbookFactory.create(inputStream)) {
             for (int index = 0; index < workbook.getNumberOfSheets(); index++) {
                 Sheet sheet = workbook.getSheetAt(index);
-                Map<String, Integer> headerIndex = resolveHeaderIndex(sheet);
-                if (isRosterSheet(headerIndex)) {
-                    return resolveRosterDocument(sheet, headerIndex);
+                ResolvedHeader resolvedHeader = resolveHeader(sheet);
+                if (resolvedHeader != null) {
+                    return resolveRosterDocument(sheet, resolvedHeader);
                 }
             }
         } catch (IOException exception) {
@@ -144,15 +146,16 @@ public class FeishuImportDocumentResolver {
         throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "飞书花名册工作簿缺少可识别的在职人员工作表");
     }
 
-    private FeishuFullImportDocument resolveRosterDocument(Sheet sheet, Map<String, Integer> headerIndex) {
+    private FeishuFullImportDocument resolveRosterDocument(Sheet sheet, ResolvedHeader resolvedHeader) {
         DataFormatter formatter = new DataFormatter();
         Map<String, FeishuDepartmentPayload> departmentMap = new LinkedHashMap<>();
         List<RosterUserRow> rosterUsers = new ArrayList<>();
         List<User> existingUsers = userRepository.findAll();
         Map<String, User> existingUserByExternalId = buildExistingUserByExternalId(existingUsers);
+        Map<String, Integer> headerIndex = resolvedHeader.headerIndex();
 
         int orderNo = 1;
-        for (int rowIndex = sheet.getFirstRowNum() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+        for (int rowIndex = resolvedHeader.headerRowIndex() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
             Row row = sheet.getRow(rowIndex);
             if (row == null || isRowBlank(row, formatter)) {
                 continue;
@@ -365,21 +368,28 @@ public class FeishuImportDocumentResolver {
         }
     }
 
-    private Map<String, Integer> resolveHeaderIndex(Sheet sheet) {
-        Row headerRow = sheet.getRow(sheet.getFirstRowNum());
-        Map<String, Integer> headerIndex = new LinkedHashMap<>();
-        if (headerRow == null) {
-            return headerIndex;
-        }
+    private ResolvedHeader resolveHeader(Sheet sheet) {
         DataFormatter formatter = new DataFormatter();
-        short lastCellNum = headerRow.getLastCellNum();
-        for (int cellIndex = 0; cellIndex < lastCellNum; cellIndex++) {
-            String header = formatter.formatCellValue(headerRow.getCell(cellIndex));
-            if (header != null && !header.isBlank()) {
-                headerIndex.put(normalizeHeader(header), cellIndex);
+        int firstRowNum = sheet.getFirstRowNum();
+        int lastRowNum = Math.min(sheet.getLastRowNum(), firstRowNum + MAX_HEADER_SCAN_ROWS - 1);
+        for (int rowIndex = firstRowNum; rowIndex <= lastRowNum; rowIndex++) {
+            Row headerRow = sheet.getRow(rowIndex);
+            if (headerRow == null || isRowBlank(headerRow, formatter)) {
+                continue;
+            }
+            Map<String, Integer> headerIndex = new LinkedHashMap<>();
+            short lastCellNum = headerRow.getLastCellNum();
+            for (int cellIndex = 0; cellIndex < lastCellNum; cellIndex++) {
+                String header = formatter.formatCellValue(headerRow.getCell(cellIndex));
+                if (header != null && !header.isBlank()) {
+                    headerIndex.put(normalizeHeader(header), cellIndex);
+                }
+            }
+            if (isRosterSheet(headerIndex)) {
+                return new ResolvedHeader(rowIndex, headerIndex);
             }
         }
-        return headerIndex;
+        return null;
     }
 
     private boolean isRowBlank(Row row, DataFormatter formatter) {
@@ -570,6 +580,12 @@ public class FeishuImportDocumentResolver {
         List<String> partTimeDepartmentExternalIds,
         Integer status,
         Integer orderNo
+    ) {
+    }
+
+    private record ResolvedHeader(
+        int headerRowIndex,
+        Map<String, Integer> headerIndex
     ) {
     }
 }
