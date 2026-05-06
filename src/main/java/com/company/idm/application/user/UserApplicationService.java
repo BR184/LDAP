@@ -323,7 +323,7 @@ public class UserApplicationService {
         Department department = user.getDeptCode() == null ? null : departmentByCode.get(user.getDeptCode());
         List<String> partTimeDeptCodes = normalizePartTimeDeptCodes(user.getDeptCode(), user.getPartTimeDeptCodes());
         return user.toBuilder()
-            .deptName(department == null ? null : department.getDeptName())
+            .deptName(resolveDisplayDepartmentName(department, departmentByCode))
             .partTimeDeptCodes(partTimeDeptCodes)
             .partTimeDeptNames(resolveDepartmentNames(partTimeDeptCodes, departmentByCode))
             .permissionLevel(resolvePermissionLevel(user.getRoleCodes()))
@@ -532,6 +532,46 @@ public class UserApplicationService {
         for (String deptCode : deptCodes) {
             Department department = departmentByCode.get(deptCode);
             departmentNames.add(department == null ? deptCode : department.getDeptName());
+        }
+        return List.copyOf(departmentNames);
+    }
+
+    private String resolveDisplayDepartmentName(Department department, Map<String, Department> departmentByCode) {
+        if (department == null) {
+            return null;
+        }
+        List<String> departmentNames = resolveDepartmentPathNames(department, departmentByCode);
+        if (departmentNames.isEmpty()) {
+            return department.getDeptName();
+        }
+        if (departmentNames.size() == 1) {
+            return departmentNames.get(0);
+        }
+        return departmentNames.get(departmentNames.size() - 2) + "/" + departmentNames.get(departmentNames.size() - 1);
+    }
+
+    private List<String> resolveDepartmentPathNames(Department department, Map<String, Department> departmentByCode) {
+        if (department == null) {
+            return List.of();
+        }
+        String ancestorPath = department.getAncestorPath();
+        if (ancestorPath == null || ancestorPath.isBlank()) {
+            return List.of(department.getDeptName());
+        }
+        List<String> pathCodes = java.util.Arrays.stream(ancestorPath.split("/"))
+            .map(String::trim)
+            .filter(item -> !item.isBlank())
+            .distinct()
+            .toList();
+        List<String> departmentNames = new ArrayList<>();
+        for (String pathCode : pathCodes) {
+            Department pathDepartment = departmentByCode.get(pathCode);
+            if (pathDepartment != null && pathDepartment.getDeptName() != null && !pathDepartment.getDeptName().isBlank()) {
+                departmentNames.add(pathDepartment.getDeptName());
+            }
+        }
+        if (departmentNames.isEmpty()) {
+            departmentNames.add(department.getDeptName());
         }
         return List.copyOf(departmentNames);
     }

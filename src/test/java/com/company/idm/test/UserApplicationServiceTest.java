@@ -237,12 +237,63 @@ class UserApplicationServiceTest {
         verify(ldapDirectoryService, never()).createUser(any(), any());
     }
 
+    @Test
+    void shouldDisplayLastTwoDepartmentLevelsForUserList() {
+        Department level1 = dept("D001", "研发中心", "/D001");
+        Department level2 = dept("D002", "产品研发一部", "/D001/D002");
+        Department level3 = dept("D003", "四组", "/D001/D002/D003");
+        when(departmentRepository.findAll()).thenReturn(List.of(level1, level2, level3));
+        when(userRepository.findByConditions(null, null, null)).thenReturn(List.of(
+            buildUser(2L, "zhangsan1001", UserStatus.ENABLED, 0).toBuilder()
+                .deptCode("D003")
+                .roleCodes(Set.of("NORMAL_USER"))
+                .build()
+        ));
+
+        List<User> users = userApplicationService.listUsers(null, null, null);
+
+        assertThat(users).singleElement().satisfies(user ->
+            assertThat(user.getDeptName()).isEqualTo("产品研发一部/四组")
+        );
+    }
+
+    @Test
+    void shouldDisplaySingleDepartmentNameWhenNoParentDepartmentExists() {
+        when(departmentRepository.findAll()).thenReturn(List.of(
+            dept("D100", "基础研发中心", "/D100")
+        ));
+        when(userRepository.findByConditions(null, null, null)).thenReturn(List.of(
+            buildUser(3L, "lisi1002", UserStatus.ENABLED, 0).toBuilder()
+                .deptCode("D100")
+                .roleCodes(Set.of("NORMAL_USER"))
+                .build()
+        ));
+
+        List<User> users = userApplicationService.listUsers(null, null, null);
+
+        assertThat(users).singleElement().satisfies(user ->
+            assertThat(user.getDeptName()).isEqualTo("基础研发中心")
+        );
+    }
+
     private Department dept(String deptCode, String deptName) {
         return Department.builder()
             .id(1L)
             .deptCode(deptCode)
             .deptName(deptName)
             .ancestorPath("/" + deptCode)
+            .deptLevel(1)
+            .sourceType(SourceType.MANUAL)
+            .status(1)
+            .build();
+    }
+
+    private Department dept(String deptCode, String deptName, String ancestorPath) {
+        return Department.builder()
+            .id(1L)
+            .deptCode(deptCode)
+            .deptName(deptName)
+            .ancestorPath(ancestorPath)
             .deptLevel(1)
             .sourceType(SourceType.MANUAL)
             .status(1)
