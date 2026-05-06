@@ -1,0 +1,66 @@
+services:
+  idm-app:
+    image: ${IDM_APP_IMAGE:-corp-idm-platform:internal}
+    container_name: corp-idm-app
+    restart: unless-stopped
+    env_file:
+      - .env.internal
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+    ports:
+      - "${APP_EXPOSE_PORT:-8081}:8081"
+    volumes:
+      - ${IMPORTS_HOST_DIR:-./imports}:/app/imports
+    depends_on:
+      mysql:
+        condition: service_started
+      openldap:
+        condition: service_started
+
+  idm-web:
+    image: ${IDM_WEB_IMAGE:-corp-idm-web:internal}
+    container_name: corp-idm-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_EXPOSE_PORT:-80}:80"
+    depends_on:
+      - idm-app
+
+  mysql:
+    image: ${MYSQL_IMAGE:-mysql:8.0}
+    container_name: corp-idm-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-corp_idm}
+      MYSQL_USER: ${MYSQL_USER:-corp_idm}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-corp_idm}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MYSQL_EXPOSE_PORT:-3307}:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  openldap:
+    image: ${OPENLDAP_IMAGE:-osixia/openldap:1.5.0}
+    container_name: corp-idm-openldap
+    restart: unless-stopped
+    environment:
+      LDAP_ORGANISATION: ${LDAP_ORGANISATION:-corp}
+      LDAP_DOMAIN: ${LDAP_DOMAIN:-corp.local}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-admin}
+      LDAP_TLS: "false"
+    ports:
+      - "${LDAP_EXPOSE_PORT:-389}:389"
+    volumes:
+      - openldap-data:/var/lib/ldap
+      - openldap-config:/etc/ldap/slapd.d
+      - ./openldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
+
+volumes:
+  mysql-data:
+  openldap-data:
+  openldap-config:
