@@ -329,12 +329,14 @@ public class FeishuUserImportService {
 
     private User buildTargetUser(FeishuUserPayload payload, DepartmentAssignment assignment, User existing) {
         String username = existing == null ? resolveUsername(payload) : existing.getUsername();
+        String preservedEmail = preserveExistingOptionalValue(payload.email(), existing == null ? null : existing.getEmail());
+        String preservedMobile = preserveExistingOptionalValue(payload.mobile(), existing == null ? null : existing.getMobile());
         return User.builder()
             .id(existing == null ? null : existing.getId())
             .username(username)
             .realName(payload.realName())
-            .email(blankToNull(payload.email()))
-            .mobile(blankToNull(payload.mobile()))
+            .email(preservedEmail)
+            .mobile(preservedMobile)
             .employeeNo(blankToNull(payload.employeeNo()))
             .deptCode(assignment.mainDepartment().getDeptCode())
             .partTimeDeptCodes(assignment.partTimeDeptCodes())
@@ -494,6 +496,14 @@ public class FeishuUserImportService {
 
     private String blankToNull(String value) {
         return isBlank(value) ? null : value;
+    }
+
+    private String preserveExistingOptionalValue(String importedValue, String existingValue) {
+        String normalizedImportedValue = blankToNull(importedValue);
+        if (normalizedImportedValue != null) {
+            return normalizedImportedValue;
+        }
+        return blankToNull(existingValue);
     }
 
     private boolean isBlank(String value) {

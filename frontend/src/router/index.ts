@@ -56,6 +56,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'LDAP 控制面' },
       },
       {
+        path: 'system/mail-config',
+        name: 'system-mail-config',
+        component: () => import('@/views/system/SystemMailConfigView.vue'),
+        meta: { title: '邮件配置' },
+      },
+      {
         path: 'system/imports',
         name: 'system-imports',
         component: () => import('@/views/system/SystemImportView.vue'),

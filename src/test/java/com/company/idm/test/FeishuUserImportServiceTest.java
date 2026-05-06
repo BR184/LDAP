@@ -178,6 +178,43 @@ class FeishuUserImportServiceTest {
             .hasMessage("飞书用户 employee_no 与手工用户冲突");
     }
 
+    @Test
+    void shouldKeepExistingEmailAndMobileWhenImportedOptionalFieldsAreBlank() {
+        FeishuUserImportService service = buildService();
+        User existingUser = User.builder()
+            .id(10L)
+            .username(GENERATED_USERNAME)
+            .realName("张三")
+            .email("existing@corp.local")
+            .mobile("13900000000")
+            .employeeNo("E10001")
+            .deptCode("D100")
+            .status(UserStatus.ENABLED)
+            .sourceType(SourceType.FEISHU)
+            .externalId("u001")
+            .ldapDn("uid=" + GENERATED_USERNAME + ",ou=people,dc=corp,dc=local")
+            .tokenVersion(0)
+            .roleCodes(Set.of("NORMAL_USER"))
+            .build();
+        when(departmentRepository.findAll()).thenReturn(List.of(dept("D100", "研发中心", "ou_root")));
+        when(departmentRemoteService.fetchDepartments()).thenReturn(List.of(
+            new FeishuDepartmentPayload("ou_root", "D100", "研发中心", null, 1, 1)
+        ));
+        when(userRemoteService.fetchUsers()).thenReturn(List.of(
+            new FeishuUserPayload("u001", "zhangsan", "张三", null, null, "E10001", "ou_root", List.of(), 1, 1)
+        ));
+        when(userRepository.findByExternalId("u001")).thenReturn(Optional.of(existingUser));
+        when(userRepository.findByUsername(GENERATED_USERNAME)).thenReturn(Optional.empty());
+        when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.empty());
+        when(ldapDirectoryService.existsByUid(GENERATED_USERNAME)).thenReturn(true);
+
+        FeishuUserImportResult result = service.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null));
+
+        assertThat(result.noChangeCount()).isEqualTo(1);
+        assertThat(result.updateCount()).isZero();
+        assertThat(result.diffs()).isEmpty();
+    }
+
     private Department dept(String deptCode, String deptName, String externalId) {
         return Department.builder()
             .id(1L)

@@ -27,7 +27,7 @@ const emit = defineEmits<{
       <el-descriptions v-if="user" :column="1" border>
         <el-descriptions-item label="用户名">{{ user.username }}</el-descriptions-item>
         <el-descriptions-item label="姓名">{{ user.realName }}</el-descriptions-item>
-        <el-descriptions-item label="邮箱">{{ user.email || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="工作邮箱">{{ user.email || '--' }}</el-descriptions-item>
         <el-descriptions-item label="手机号">{{ user.mobile || '--' }}</el-descriptions-item>
         <el-descriptions-item label="工号">{{ user.employeeNo || '--' }}</el-descriptions-item>
         <el-descriptions-item label="主部门编码">{{ user.deptCode || '--' }}</el-descriptions-item>

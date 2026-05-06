@@ -38,6 +38,10 @@ springdoc:
     path: /swagger-ui.html
 
 app:
+  mail:
+    security:
+      # 管理员在后台保存邮件密码时，使用该主密钥做对称加密；未配置时禁止保存或使用数据库邮件配置。
+      secret-key: ${APP_MAIL_SECURITY_SECRET_KEY:huayun1234567890}
   jwt:
     # JWT 密钥优先从环境变量读取，默认值仅用于原型环境。
     secret: ${APP_JWT_SECRET:prototype-secret-prototype-secret-prototype-secret}
@@ -73,7 +77,7 @@ app:
     # 密码重置邮件的默认主题与提示文案，可通过环境变量覆盖。
     mail-subject: ${APP_PASSWORD_RESET_MAIL_SUBJECT:统一身份管理平台密码重置通知}
     mail-from: ${APP_PASSWORD_RESET_MAIL_FROM:}
-    forgot-password-success-notice: ${APP_PASSWORD_RESET_FORGOT_NOTICE:如账号信息有效，系统已发送重置邮件，请注意查收}
+    forgot-password-success-notice: ${APP_PASSWORD_RESET_FORGOT_NOTICE:如账号信息有效，系统已向绑定工作邮箱发送重置邮件，请注意查收}
     username-cooldown-seconds: ${APP_PASSWORD_RESET_USERNAME_COOLDOWN_SECONDS:300}
     ip-window-seconds: ${APP_PASSWORD_RESET_IP_WINDOW_SECONDS:300}
     ip-max-attempts: ${APP_PASSWORD_RESET_IP_MAX_ATTEMPTS:10}

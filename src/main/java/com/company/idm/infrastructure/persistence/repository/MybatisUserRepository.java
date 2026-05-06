@@ -114,17 +114,19 @@ public class MybatisUserRepository implements UserRepository {
 
     @Override
     public void updateProfile(User user) {
-        UserDO dataObject = new UserDO();
-        dataObject.setId(user.getId());
-        dataObject.setRealName(user.getRealName());
-        dataObject.setEmail(user.getEmail());
-        dataObject.setMobile(user.getMobile());
-        dataObject.setEmployeeNo(user.getEmployeeNo());
-        dataObject.setDeptCode(user.getDeptCode());
-        dataObject.setPartTimeDeptCodes(joinDeptCodes(user.getPartTimeDeptCodes()));
-        dataObject.setModifier("system");
-        dataObject.setGmtModified(LocalDateTime.now());
-        userMapper.updateById(dataObject);
+        userMapper.update(
+            null,
+            new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<UserDO>()
+                .eq(UserDO::getId, user.getId())
+                .set(UserDO::getRealName, user.getRealName())
+                .set(UserDO::getEmail, user.getEmail())
+                .set(UserDO::getMobile, user.getMobile())
+                .set(UserDO::getEmployeeNo, user.getEmployeeNo())
+                .set(UserDO::getDeptCode, user.getDeptCode())
+                .set(UserDO::getPartTimeDeptCodes, joinDeptCodes(user.getPartTimeDeptCodes()))
+                .set(UserDO::getModifier, "system")
+                .set(UserDO::getGmtModified, LocalDateTime.now())
+        );
     }
 
     @Override
@@ -140,17 +142,19 @@ public class MybatisUserRepository implements UserRepository {
 
     @Override
     public void logicalDelete(Long id, String recycledUsername, Integer tokenVersion) {
-        UserDO dataObject = new UserDO();
-        dataObject.setId(id);
-        dataObject.setUsername(recycledUsername);
-        dataObject.setEmployeeNo(null);
-        dataObject.setPartTimeDeptCodes(null);
-        dataObject.setDeleted(1);
-        dataObject.setStatus(UserStatus.DISABLED.getCode());
-        dataObject.setTokenVersion(tokenVersion);
-        dataObject.setModifier("system");
-        dataObject.setGmtModified(LocalDateTime.now());
-        userMapper.updateById(dataObject);
+        userMapper.update(
+            null,
+            new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<UserDO>()
+                .eq(UserDO::getId, id)
+                .set(UserDO::getUsername, recycledUsername)
+                .set(UserDO::getEmployeeNo, null)
+                .set(UserDO::getPartTimeDeptCodes, null)
+                .set(UserDO::getDeleted, 1)
+                .set(UserDO::getStatus, UserStatus.DISABLED.getCode())
+                .set(UserDO::getTokenVersion, tokenVersion)
+                .set(UserDO::getModifier, "system")
+                .set(UserDO::getGmtModified, LocalDateTime.now())
+        );
     }
 
     @Override

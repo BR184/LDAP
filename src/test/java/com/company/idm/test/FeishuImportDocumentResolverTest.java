@@ -182,6 +182,53 @@ class FeishuImportDocumentResolverTest {
     }
 
     @Test
+    void shouldIgnorePersonalEmailWhenWorkEmailMissing() throws Exception {
+        Path rootDir = tempDir.resolve("imports");
+        Path document = rootDir.resolve("bundle/roster-work-email-only.xlsx");
+        Files.createDirectories(document.getParent());
+        writeRosterWorkbook(
+            document,
+            List.<Object[]>of(new Object[] {
+                "于善鹏", "+86 13964112234", "3", "在职", "开发部门",
+                "用户725015的组织/开发部门", "开发部门", null, null, "276b33cd", null, "private@example.com"
+            })
+        );
+        when(userRepository.findAll()).thenReturn(List.of());
+
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
+
+        FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/roster-work-email-only.xlsx");
+
+        assertThat(fullImportDocument.users()).singleElement().satisfies(user ->
+            assertThat(user.email()).isNull()
+        );
+    }
+
+    @Test
+    void shouldResolveRealTemplateMobileNumberHeaderAndWorkEmailColumn() throws Exception {
+        Path rootDir = tempDir.resolve("imports");
+        Path document = rootDir.resolve("bundle/real-template-roster.xlsx");
+        Files.createDirectories(document.getParent());
+        writeRealTemplateWorkbook(
+            document,
+            List.<Object[]>of(new Object[] {
+                "于善鹏", "+86 13964112234", "3", "在职", "开发部门",
+                "用户725015的组织/开发部门", "开发部门", "276b33cd", "1940579892@qq.com"
+            })
+        );
+        when(userRepository.findAll()).thenReturn(List.of());
+
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
+
+        FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/real-template-roster.xlsx");
+
+        assertThat(fullImportDocument.users()).singleElement().satisfies(user -> {
+            assertThat(user.mobile()).isEqualTo("13964112234");
+            assertThat(user.email()).isEqualTo("1940579892@qq.com");
+        });
+    }
+
+    @Test
     void shouldPreferLevelColumnsButKeepRosterRootWhenWorkbookUpdated() throws Exception {
         Path rootDir = tempDir.resolve("imports");
         Path document = rootDir.resolve("bundle/roster-updated.xlsx");
@@ -273,6 +320,39 @@ class FeishuImportDocumentResolverTest {
                     }
                     row.createCell(cellIndex).setCellValue(String.valueOf(value));
                 }
+            }
+
+            try (java.io.OutputStream outputStream = Files.newOutputStream(document)) {
+                workbook.write(outputStream);
+            }
+        }
+    }
+
+    private void writeRealTemplateWorkbook(Path document, List<Object[]> rows) throws Exception {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            XSSFSheet rosterSheet = workbook.createSheet("在职人员");
+            rosterSheet.createRow(0).createCell(0).setCellValue("姓名");
+            rosterSheet.getRow(0).createCell(3).setCellValue("手机号码");
+            rosterSheet.getRow(0).createCell(19).setCellValue("工号");
+            rosterSheet.getRow(0).createCell(20).setCellValue("人员状态");
+            rosterSheet.getRow(0).createCell(21).setCellValue("工作邮箱");
+            rosterSheet.getRow(0).createCell(25).setCellValue("部门");
+            rosterSheet.getRow(0).createCell(26).setCellValue("部门 (全路径)");
+            rosterSheet.getRow(0).createCell(27).setCellValue("一级部门");
+            rosterSheet.getRow(0).createCell(45).setCellValue("用户 ID");
+
+            int rowIndex = 1;
+            for (Object[] rowData : rows) {
+                var row = rosterSheet.createRow(rowIndex++);
+                row.createCell(0).setCellValue(String.valueOf(rowData[0]));
+                row.createCell(3).setCellValue(String.valueOf(rowData[1]));
+                row.createCell(19).setCellValue(String.valueOf(rowData[2]));
+                row.createCell(20).setCellValue(String.valueOf(rowData[3]));
+                row.createCell(21).setCellValue(String.valueOf(rowData[8]));
+                row.createCell(25).setCellValue(String.valueOf(rowData[4]));
+                row.createCell(26).setCellValue(String.valueOf(rowData[5]));
+                row.createCell(27).setCellValue(String.valueOf(rowData[6]));
+                row.createCell(45).setCellValue(String.valueOf(rowData[7]));
             }
 
             try (java.io.OutputStream outputStream = Files.newOutputStream(document)) {

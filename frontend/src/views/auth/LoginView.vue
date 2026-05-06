@@ -52,7 +52,7 @@ async function handleSubmit() {
 async function handleForgotPassword() {
   try {
     const { value } = await ElMessageBox.prompt(
-      '请输入需要重置密码的用户名，系统会将新密码发送到绑定邮箱。',
+      '请输入需要重置密码的用户名，系统会将新密码发送到绑定工作邮箱。',
       '忘记密码',
       {
         confirmButtonText: '发送邮件',
@@ -66,7 +66,7 @@ async function handleForgotPassword() {
     const notice = await forgotPassword({
       username: value.trim(),
     })
-    ElMessage.success(notice || '如账号信息有效，系统已发送重置邮件，请注意查收')
+    ElMessage.success(notice || '如账号信息有效，系统已向绑定工作邮箱发送重置邮件，请注意查收')
   } catch {
     // 用户取消时不做额外处理
   } finally {

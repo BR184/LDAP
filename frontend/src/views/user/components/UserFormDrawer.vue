@@ -40,8 +40,8 @@ const title = computed(() => (isCreate.value ? '新增用户' : '编辑用户'))
 const rules = computed<FormRules<UserFormValue>>(() => ({
   realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   email: [
-    { required: true, message: '邮箱不能为空', trigger: 'blur' },
-    { type: 'email', message: '请输入合法邮箱', trigger: 'blur' },
+    { required: true, message: '工作邮箱不能为空', trigger: 'blur' },
+    { type: 'email', message: '请输入合法工作邮箱', trigger: 'blur' },
   ],
   mobile: [
     {
@@ -170,8 +170,8 @@ function closeDrawer() {
         <el-input v-model="form.employeeNo" placeholder="请输入工号" />
       </el-form-item>
 
-      <el-form-item label="邮箱" prop="email">
-        <el-input v-model="form.email" placeholder="请输入邮箱" />
+      <el-form-item label="工作邮箱" prop="email">
+        <el-input v-model="form.email" placeholder="请输入工作邮箱" />
       </el-form-item>
 
       <el-form-item label="手机号" prop="mobile">

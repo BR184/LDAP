@@ -478,7 +478,7 @@ function statusTagType(status: number) {
           </template>
         </el-table-column>
         <el-table-column prop="deptCode" label="部门编码" min-width="120" />
-        <el-table-column prop="email" label="邮箱" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="email" label="工作邮箱" min-width="220" show-overflow-tooltip />
         <el-table-column prop="mobile" label="手机号" min-width="140" />
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">

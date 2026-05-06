@@ -72,7 +72,7 @@ public class PasswordResetApplicationService {
             return;
         }
         if (!hasEmail(user)) {
-            auditFailure(username, "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), "用户未配置邮箱");
+            auditFailure(username, "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), "用户未配置工作邮箱");
             return;
         }
 

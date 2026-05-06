@@ -10,7 +10,7 @@ public class PasswordResetProperties {
 
     private String mailSubject = "统一身份管理平台密码重置通知";
     private String mailFrom = "";
-    private String forgotPasswordSuccessNotice = "如账号信息有效，系统已发送重置邮件，请注意查收";
+    private String forgotPasswordSuccessNotice = "如账号信息有效，系统已向绑定工作邮箱发送重置邮件，请注意查收";
     private int usernameCooldownSeconds = 300;
     private int ipWindowSeconds = 300;
     private int ipMaxAttempts = 10;

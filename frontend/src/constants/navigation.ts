@@ -4,6 +4,7 @@ import {
   FolderOpened,
   Lock,
   Menu as MenuIcon,
+  Message,
   OfficeBuilding,
   RefreshRight,
   Setting,
@@ -67,6 +68,12 @@ export const flatNavigationItems: NavigationItem[] = [
     description: '统一执行飞书组织数据一键导入，支持补充导入与对齐导入',
   },
   {
+    title: '邮件配置',
+    path: '/system/mail-config',
+    icon: Message,
+    description: '维护密码重置邮件服务器、认证账号与测试发信能力',
+  },
+  {
     title: '同步任务',
     path: '/sync/jobs',
     icon: RefreshRight,
@@ -114,6 +121,12 @@ export const sidebarNavigationGroups: NavigationGroup[] = [
         path: '/ldap',
         icon: Connection,
         description: '查看 LDAP 接入框架并执行联调预检',
+      },
+      {
+        title: '邮件配置',
+        path: '/system/mail-config',
+        icon: Message,
+        description: '维护密码重置邮件服务器、认证账号与测试发信能力',
       },
       {
         title: '文件导入',

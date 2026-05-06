@@ -44,6 +44,7 @@ public class FeishuImportDocumentResolver {
 
     private static final String HEADER_NAME = "姓名";
     private static final String HEADER_MOBILE = "手机号";
+    private static final String HEADER_MOBILE_NUMBER = "手机号码";
     private static final String HEADER_EMPLOYEE_NO = "工号";
     private static final String HEADER_STATUS = "人员状态";
     private static final String HEADER_DEPARTMENT = "部门";
@@ -57,7 +58,6 @@ public class FeishuImportDocumentResolver {
     private static final String HEADER_USER_ID = "用户ID";
     private static final String HEADER_USER_ID_LOWER = "用户id";
     private static final String HEADER_WORK_EMAIL = "工作邮箱";
-    private static final String HEADER_PERSONAL_EMAIL = "个人邮箱";
 
     private final FeishuFileImportProperties properties;
     private final ObjectMapper objectMapper;
@@ -171,10 +171,7 @@ public class FeishuImportDocumentResolver {
                 departmentExternalIds.add(upsertDepartmentHierarchy(hierarchy, departmentMap));
             }
 
-            String email = firstNonBlank(
-                readOptionalCell(row, headerIndex, formatter, HEADER_WORK_EMAIL),
-                readOptionalCell(row, headerIndex, formatter, HEADER_PERSONAL_EMAIL)
-            );
+            String email = readOptionalCell(row, headerIndex, formatter, HEADER_WORK_EMAIL);
             User existingUser = existingUserByExternalId.get(externalId);
             String username = existingUser != null
                 ? existingUser.getUsername()
@@ -185,7 +182,7 @@ public class FeishuImportDocumentResolver {
                 username,
                 realName,
                 normalizeEmail(email),
-                normalizeMobile(readOptionalCell(row, headerIndex, formatter, HEADER_MOBILE)),
+                normalizeMobile(readOptionalCell(row, headerIndex, formatter, HEADER_MOBILE, HEADER_MOBILE_NUMBER)),
                 employeeNo,
                 departmentExternalIds.get(0),
                 departmentExternalIds.size() > 1 ? departmentExternalIds.subList(1, departmentExternalIds.size()) : List.of(),

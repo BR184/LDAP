@@ -11,8 +11,8 @@ import java.util.List;
  */
 public record CreateUserRequest(
     @NotBlank(message = "姓名不能为空") String realName,
-    @NotBlank(message = "邮箱不能为空")
-    @Email(message = "邮箱格式错误") String email,
+    @NotBlank(message = "工作邮箱不能为空")
+    @Email(message = "工作邮箱格式错误") String email,
     @Pattern(regexp = "^$|^1\\d{10}$", message = "手机号格式错误") String mobile,
     @NotBlank(message = "工号不能为空") String employeeNo,
     String deptCode,
