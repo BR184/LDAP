@@ -1,9 +1,11 @@
 package com.company.idm.application.sync.feishu;
 
 import com.company.idm.application.sync.SyncDiffPayload;
+import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.SyncDiffType;
 import com.company.idm.common.enums.SyncTargetType;
+import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
@@ -46,10 +48,13 @@ public class FeishuImportAlignmentService {
             if (!shouldCleanupUser(user, retainedExternalIds)) {
                 continue;
             }
-            ldapGroupService.removeUserFromAllGroups(user.getUsername());
-            ldapDirectoryService.deleteUser(user.getUsername());
-            userRepository.removeAllRoles(user.getId());
-            userRepository.logicalDelete(user.getId(), buildRecycledUsername(user), nextTokenVersion(user));
+            cleanupLdapUser(user.getUsername());
+            userRepository.save(user.toBuilder()
+                .status(UserStatus.DISABLED)
+                .employmentStatus(EmploymentStatus.RESIGNED)
+                .ldapDn(null)
+                .tokenVersion(nextTokenVersion(user))
+                .build());
             diffs.add(new SyncDiffPayload(
                 SyncTargetType.USER,
                 user.getUsername(),
@@ -69,7 +74,7 @@ public class FeishuImportAlignmentService {
             .sorted(Comparator.comparingInt((Department department) -> department.getDeptLevel() == null ? 0 : department.getDeptLevel()).reversed())
             .toList();
         for (Department department : departmentsToDelete) {
-            if (userRepository.existsDeptBinding(department.getDeptCode())) {
+            if (userRepository.existsActiveDeptBinding(department.getDeptCode())) {
                 throw new BizException("FEISHU_ALIGN_DEPARTMENT_IN_USE", "对齐导入无法删除仍有用户绑定的部门：" + department.getDeptCode());
             }
             ldapGroupService.deleteGroup(department.getDeptCode());
@@ -104,8 +109,21 @@ public class FeishuImportAlignmentService {
         return (user.getTokenVersion() == null ? 0 : user.getTokenVersion()) + 1;
     }
 
-    private String buildRecycledUsername(User user) {
-        return user.getUsername() + "__deleted__" + user.getId();
+    private void cleanupLdapUser(String username) {
+        if (username == null || username.isBlank()) {
+            return;
+        }
+        ldapGroupService.removeUserFromAllGroups(username);
+        if (!ldapDirectoryService.existsByUid(username)) {
+            return;
+        }
+        try {
+            ldapDirectoryService.deleteUser(username);
+        } catch (BizException exception) {
+            if (!"LDAP_USER_NOT_FOUND".equals(exception.getCode())) {
+                throw exception;
+            }
+        }
     }
 
     private String snapshotUser(User user) {

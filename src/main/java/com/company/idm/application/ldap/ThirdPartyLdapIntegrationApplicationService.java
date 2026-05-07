@@ -22,8 +22,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class ThirdPartyLdapIntegrationApplicationService {
 
-    private static final String LOGIN_ATTR = "uid";
-    private static final String STANDARD_FILTER = "(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))";
+    private static final String LOGIN_ATTR = "employeeNumber";
+    private static final String STANDARD_FILTER = "(&(objectClass=inetOrgPerson)(employeeNumber={login})(employeeType=ENABLED))";
     private static final String AUTHORIZATION_MODE = "LOCAL_ONLY";
     private static final String PASSWORD_PLACEHOLDER = "${LDAP_BIND_PASSWORD}";
 
@@ -70,15 +70,17 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 settings.put("base_dn", ldapProperties.getBaseDn());
                 settings.put("user_base", buildAbsoluteDn(ldapProperties.getPeopleOu()));
                 settings.put("user_filter", systemType.buildTemplateUserFilter());
+                settings.put("uid", "employeeNumber");
                 settings.put("encryption", connectionView.encryption());
 
-                fieldMappings.put("uid", "uid");
+                fieldMappings.put("uid", "employeeNumber");
                 fieldMappings.put("name", "cn");
                 fieldMappings.put("email", "mail");
 
                 notes.add("GitLab 只使用 LDAP 做认证，项目与组权限继续由 GitLab 本地维护。");
-                notes.add("GitLab 会自动按 uid=%{username} 拼接登录条件，模板中的 user_filter 只保留 objectClass 与 employeeType 附加限制。");
-                notes.add("允许首登自动创建本地用户，但登录标识必须固定为 uid。");
+                notes.add("GitLab 登录字段改为 employeeNumber，用户输入工号即可完成 LDAP 认证。");
+                notes.add("模板中的 user_filter 只保留 objectClass 与 employeeType 附加限制。");
+                notes.add("LDAP 目录中的 uid 继续保留为系统内部账号，不作为第三方登录输入字段。");
             }
             case JENKINS -> {
                 settings.put("ldap_server", connectionView.url());
@@ -92,7 +94,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 fieldMappings.put("mail", "mail");
                 fieldMappings.put("login_attr", LOGIN_ATTR);
 
-                notes.add("Jenkins 常见配置是只按 uid 搜索，必须保留 employeeType=ENABLED 过滤条件。");
+                notes.add("Jenkins 登录字段改为 employeeNumber，用户输入工号即可完成 LDAP 认证。");
                 notes.add("Jenkins 权限体系继续由本地矩阵授权或角色策略维护。");
             }
             case NEXUS -> {
@@ -104,10 +106,11 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 settings.put("user_base_dn", buildAbsoluteDn(ldapProperties.getPeopleOu()));
                 settings.put("user_filter", systemType.buildUserFilter());
 
-                fieldMappings.put("user_id", "uid");
+                fieldMappings.put("user_id", "employeeNumber");
                 fieldMappings.put("real_name", "cn");
                 fieldMappings.put("email", "mail");
 
+                notes.add("Nexus 登录字段改为 employeeNumber，用户输入工号即可完成 LDAP 认证。");
                 notes.add("Nexus 需要单独确认 LDAP Realm 的启用顺序与缓存刷新策略。");
                 notes.add("LDAP 认证成功后，仓库与角色权限仍由 Nexus 本地角色模型决定。");
             }
@@ -119,12 +122,12 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 settings.put("user_search_base", buildAbsoluteDn(ldapProperties.getPeopleOu()));
                 settings.put("user_search_filter", systemType.buildUserFilter());
 
-                fieldMappings.put("username", "uid");
+                fieldMappings.put("username", "employeeNumber");
                 fieldMappings.put("display_name", "cn");
                 fieldMappings.put("mail", "mail");
 
                 notes.add("禅道模板当前作为占位模板使用，最终字段名仍需按目标版本官方手册确认。");
-                notes.add("不允许脱离统一目录契约单独修改登录字段或禁用过滤条件。");
+                notes.add("当前统一契约要求第三方系统按 employeeNumber 作为登录输入字段。");
             }
         }
 
@@ -151,7 +154,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
             "LOGIN_ATTR_FIXED",
             "登录字段固定",
             ThirdPartyLdapCheckStatus.PASS,
-            "第三方系统登录字段必须固定为 uid"
+            "第三方系统登录字段必须固定为 employeeNumber"
         ));
 
         if (isSpringMode()) {
@@ -202,12 +205,12 @@ public class ThirdPartyLdapIntegrationApplicationService {
         if (ldapTemplate.isEmpty()) {
             return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "启用用户唯一性", ThirdPartyLdapCheckStatus.FAIL, "LdapTemplate 未配置");
         }
-        String filter = "(uid=" + LdapEncoder.filterEncode(username) + ")";
+        String filter = "(employeeNumber=" + LdapEncoder.filterEncode(username) + ")";
         try {
             int matchCount = ldapTemplate.get().search(
                 ldapProperties.getPeopleOu(),
                 filter,
-                (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
+                (AttributesMapper<String>) attributes -> attributes.get("employeeNumber") == null ? null : attributes.get("employeeNumber").get().toString()
             ).size();
             if (matchCount == 1) {
                 return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "启用用户唯一性", ThirdPartyLdapCheckStatus.PASS, username + " 在 LDAP 中唯一命中");
@@ -228,7 +231,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
             int matchCount = ldapTemplate.get().search(
                 ldapProperties.getPeopleOu(),
                 filter,
-                (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
+                (AttributesMapper<String>) attributes -> attributes.get("employeeNumber") == null ? null : attributes.get("employeeNumber").get().toString()
             ).size();
             if (matchCount == 1) {
                 return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.PASS, "统一过滤器可命中启用用户 " + username);
@@ -250,8 +253,8 @@ public class ThirdPartyLdapIntegrationApplicationService {
         try {
             int rawCount = ldapTemplate.get().search(
                 ldapProperties.getPeopleOu(),
-                "(uid=" + LdapEncoder.filterEncode(username) + ")",
-                (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
+                "(employeeNumber=" + LdapEncoder.filterEncode(username) + ")",
+                (AttributesMapper<String>) attributes -> attributes.get("employeeNumber") == null ? null : attributes.get("employeeNumber").get().toString()
             ).size();
             if (rawCount == 0) {
                 return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "禁用用户样本不存在 " + username);
@@ -259,7 +262,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
             int enabledFilterCount = ldapTemplate.get().search(
                 ldapProperties.getPeopleOu(),
                 buildConcreteStandardFilter(username),
-                (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
+                (AttributesMapper<String>) attributes -> attributes.get("employeeNumber") == null ? null : attributes.get("employeeNumber").get().toString()
             ).size();
             if (enabledFilterCount == 0) {
                 return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.PASS, "统一过滤器已拦截禁用用户 " + username);
@@ -328,8 +331,8 @@ public class ThirdPartyLdapIntegrationApplicationService {
         return value.trim();
     }
 
-    private String buildConcreteStandardFilter(String username) {
-        return "(&(objectClass=inetOrgPerson)(uid=" + LdapEncoder.filterEncode(username) + ")(employeeType=ENABLED))";
+    private String buildConcreteStandardFilter(String employeeNo) {
+        return "(&(objectClass=inetOrgPerson)(employeeNumber=" + LdapEncoder.filterEncode(employeeNo) + ")(employeeType=ENABLED))";
     }
 
     private String buildAbsoluteDn(String relativeDn) {

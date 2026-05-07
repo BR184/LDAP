@@ -16,10 +16,16 @@ public class UserDO {
     private String username;
     private String realName;
     private String email;
+    private String intranetEmail;
     private String mobile;
     private String employeeNo;
     private String deptCode;
+    private String jobTitle;
+    private String directLeaderRaw;
+    private String leaderRef;
+    private String accountStatus;
     private String partTimeDeptCodes;
+    private String employmentStatus;
     private Integer status;
     private String sourceType;
     private String externalId;
@@ -63,6 +69,14 @@ public class UserDO {
         this.email = email;
     }
 
+    public String getIntranetEmail() {
+        return intranetEmail;
+    }
+
+    public void setIntranetEmail(String intranetEmail) {
+        this.intranetEmail = intranetEmail;
+    }
+
     public String getMobile() {
         return mobile;
     }
@@ -87,12 +101,52 @@ public class UserDO {
         this.deptCode = deptCode;
     }
 
+    public String getJobTitle() {
+        return jobTitle;
+    }
+
+    public void setJobTitle(String jobTitle) {
+        this.jobTitle = jobTitle;
+    }
+
+    public String getDirectLeaderRaw() {
+        return directLeaderRaw;
+    }
+
+    public void setDirectLeaderRaw(String directLeaderRaw) {
+        this.directLeaderRaw = directLeaderRaw;
+    }
+
+    public String getLeaderRef() {
+        return leaderRef;
+    }
+
+    public void setLeaderRef(String leaderRef) {
+        this.leaderRef = leaderRef;
+    }
+
+    public String getAccountStatus() {
+        return accountStatus;
+    }
+
+    public void setAccountStatus(String accountStatus) {
+        this.accountStatus = accountStatus;
+    }
+
     public String getPartTimeDeptCodes() {
         return partTimeDeptCodes;
     }
 
     public void setPartTimeDeptCodes(String partTimeDeptCodes) {
         this.partTimeDeptCodes = partTimeDeptCodes;
+    }
+
+    public String getEmploymentStatus() {
+        return employmentStatus;
+    }
+
+    public void setEmploymentStatus(String employmentStatus) {
+        this.employmentStatus = employmentStatus;
     }
 
     public Integer getStatus() {

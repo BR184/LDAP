@@ -85,7 +85,7 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
         attributes.put(new BasicAttribute("uid", user.getUsername()));
         attributes.put(new BasicAttribute("cn", user.getRealName()));
         attributes.put(new BasicAttribute("sn", user.getRealName()));
-        putIfPresent(attributes, "mail", user.getEmail());
+        putIfPresent(attributes, "mail", resolveMail(user));
         putIfPresent(attributes, "mobile", user.getMobile());
         putIfPresent(attributes, "employeeNumber", user.getEmployeeNo());
         putIfPresent(attributes, "departmentNumber", user.getDeptCode());
@@ -100,7 +100,7 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
         DirContextAdapter context = lookup(user.getUsername());
         context.setAttributeValue("cn", user.getRealName());
         context.setAttributeValue("sn", user.getRealName());
-        setOrRemoveAttribute(context, "mail", user.getEmail());
+        setOrRemoveAttribute(context, "mail", resolveMail(user));
         setOrRemoveAttribute(context, "mobile", user.getMobile());
         setOrRemoveAttribute(context, "employeeNumber", user.getEmployeeNo());
         setOrRemoveAttribute(context, "departmentNumber", user.getDeptCode());
@@ -158,5 +158,15 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
             return;
         }
         context.setAttributeValue(attributeName, value);
+    }
+
+    private String resolveMail(User user) {
+        if (user == null) {
+            return null;
+        }
+        if (user.getIntranetEmail() != null && !user.getIntranetEmail().isBlank()) {
+            return user.getIntranetEmail();
+        }
+        return user.getEmail();
     }
 }

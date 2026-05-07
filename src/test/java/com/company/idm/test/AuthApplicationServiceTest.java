@@ -98,6 +98,28 @@ class AuthApplicationServiceTest {
         assertThat(profile.getRoleCodes()).containsExactly("ADMIN");
     }
 
+    @Test
+    void shouldLoginByEmployeeNoForNonAdminUser() {
+        User user = buildUser(UserStatus.ENABLED, 0).toBuilder()
+            .id(2L)
+            .username("zhangsan1001")
+            .employeeNo("1001")
+            .realName("张三")
+            .build();
+        LoginResult expected = new LoginResult(2L, "zhangsan1001", Set.of("NORMAL_USER"), "token", Instant.now());
+
+        when(userRepository.findByUsername("1001")).thenReturn(Optional.empty());
+        when(userRepository.findByEmployeeNo("1001")).thenReturn(Optional.of(user));
+        when(ldapDirectoryService.authenticate("zhangsan1001", "abc123")).thenReturn(true);
+        when(userRepository.findRoleCodesByUsername("zhangsan1001")).thenReturn(Set.of("NORMAL_USER"));
+        when(tokenService.generate(org.mockito.ArgumentMatchers.any(User.class), org.mockito.ArgumentMatchers.eq(Set.of("NORMAL_USER"))))
+            .thenReturn(expected);
+
+        LoginResult actual = authApplicationService.login(new LoginCommand("1001", "abc123"));
+
+        assertThat(actual).isEqualTo(expected);
+    }
+
     private User buildUser(UserStatus status, int tokenVersion) {
         return User.builder()
             .id(1L)

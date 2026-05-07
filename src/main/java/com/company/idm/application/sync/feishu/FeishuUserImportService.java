@@ -3,10 +3,12 @@ package com.company.idm.application.sync.feishu;
 import com.company.idm.application.rbac.PolicyRefreshService;
 import com.company.idm.application.sync.SyncDiffPayload;
 import com.company.idm.application.sync.SyncRequestPayload;
+import com.company.idm.application.user.IntranetEmailGenerationService;
 import com.company.idm.application.user.UsernameGenerationService;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.SyncDiffType;
 import com.company.idm.common.enums.SyncTargetType;
+import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.department.Department;
@@ -52,6 +54,7 @@ public class FeishuUserImportService {
     private final PolicyRefreshService policyRefreshService;
     private final PasswordPolicyValidator passwordPolicyValidator;
     private final UsernameGenerationService usernameGenerationService;
+    private final IntranetEmailGenerationService intranetEmailGenerationService;
     private final AppLdapProperties ldapProperties;
 
     public FeishuUserImportService(
@@ -66,6 +69,7 @@ public class FeishuUserImportService {
         PolicyRefreshService policyRefreshService,
         PasswordPolicyValidator passwordPolicyValidator,
         UsernameGenerationService usernameGenerationService,
+        IntranetEmailGenerationService intranetEmailGenerationService,
         AppLdapProperties ldapProperties
     ) {
         this.userRemoteService = userRemoteService;
@@ -79,6 +83,7 @@ public class FeishuUserImportService {
         this.policyRefreshService = policyRefreshService;
         this.passwordPolicyValidator = passwordPolicyValidator;
         this.usernameGenerationService = usernameGenerationService;
+        this.intranetEmailGenerationService = intranetEmailGenerationService;
         this.ldapProperties = ldapProperties;
     }
 
@@ -183,6 +188,7 @@ public class FeishuUserImportService {
     private ImportPlan buildPlan(List<FeishuUserPayload> users, boolean includeRemoteDepartmentFallback) {
         validateDuplicates(users);
         Map<String, Department> departmentByExternalId = buildDepartmentIndex(includeRemoteDepartmentFallback);
+        Map<LeaderMatchKey, String> importedLeaderRefByKey = buildImportedLeaderRefIndex(users);
 
         List<PlanItem> items = new ArrayList<>();
         List<SyncDiffPayload> allDiffs = new ArrayList<>();
@@ -193,7 +199,7 @@ public class FeishuUserImportService {
         for (FeishuUserPayload payloadItem : users) {
             DepartmentAssignment departmentAssignment = resolveDepartmentAssignment(payloadItem, departmentByExternalId, includeRemoteDepartmentFallback);
             User existing = resolveExistingUser(payloadItem);
-            User target = buildTargetUser(payloadItem, departmentAssignment, existing);
+            User target = buildTargetUser(payloadItem, departmentAssignment, existing, importedLeaderRefByKey);
             ChangeType changeType = resolveChangeType(existing, target);
             boolean ldapRepairRequired = target.getLdapDn() == null
                 || !ldapDirectoryService.existsByUid(target.getUsername())
@@ -327,20 +333,33 @@ public class FeishuUserImportService {
         return byExternalId;
     }
 
-    private User buildTargetUser(FeishuUserPayload payload, DepartmentAssignment assignment, User existing) {
+    private User buildTargetUser(
+        FeishuUserPayload payload,
+        DepartmentAssignment assignment,
+        User existing,
+        Map<LeaderMatchKey, String> importedLeaderRefByKey
+    ) {
         String username = existing == null ? resolveUsername(payload) : existing.getUsername();
         String preservedEmail = preserveExistingOptionalValue(payload.email(), existing == null ? null : existing.getEmail());
         String preservedMobile = preserveExistingOptionalValue(payload.mobile(), existing == null ? null : existing.getMobile());
+        String intranetEmail = resolveIntranetEmail(payload, existing);
+        String leaderRef = resolveLeaderRef(payload, existing, importedLeaderRefByKey);
         return User.builder()
             .id(existing == null ? null : existing.getId())
             .username(username)
             .realName(payload.realName())
             .email(preservedEmail)
+            .intranetEmail(intranetEmail)
             .mobile(preservedMobile)
             .employeeNo(blankToNull(payload.employeeNo()))
             .deptCode(assignment.mainDepartment().getDeptCode())
+            .jobTitle(blankToNull(payload.jobTitle()))
+            .directLeaderRaw(blankToNull(payload.directLeaderRaw()))
+            .leaderRef(leaderRef)
+            .accountStatus(resolveAccountStatus(payload, existing))
             .partTimeDeptCodes(assignment.partTimeDeptCodes())
             .status(normalizeStatus(payload.status()))
+            .employmentStatus(resolveEmploymentStatus(payload, existing))
             .sourceType(SourceType.FEISHU)
             .externalId(payload.externalId())
             .ldapDn(existing == null ? buildUserDn(username) : existing.getLdapDn())
@@ -355,10 +374,16 @@ public class FeishuUserImportService {
         }
         boolean sameBasic = safe(existing.getRealName()).equals(safe(target.getRealName()))
             && safe(existing.getEmail()).equals(safe(target.getEmail()))
+            && safe(existing.getIntranetEmail()).equals(safe(target.getIntranetEmail()))
             && safe(existing.getMobile()).equals(safe(target.getMobile()))
             && safe(existing.getEmployeeNo()).equals(safe(target.getEmployeeNo()))
             && safe(existing.getDeptCode()).equals(safe(target.getDeptCode()))
+            && safe(existing.getJobTitle()).equals(safe(target.getJobTitle()))
+            && safe(existing.getDirectLeaderRaw()).equals(safe(target.getDirectLeaderRaw()))
+            && safe(existing.getLeaderRef()).equals(safe(target.getLeaderRef()))
+            && safe(existing.getAccountStatus()).equals(safe(target.getAccountStatus()))
             && normalizeDeptCodes(existing.getPartTimeDeptCodes()).equals(normalizeDeptCodes(target.getPartTimeDeptCodes()))
+            && existing.getEmploymentStatus() == target.getEmploymentStatus()
             && existing.getStatus() == target.getStatus();
         return sameBasic ? ChangeType.NO_CHANGE : ChangeType.UPDATE;
     }
@@ -447,8 +472,99 @@ public class FeishuUserImportService {
         return status == null ? UserStatus.ENABLED : UserStatus.fromCode(status);
     }
 
+    private EmploymentStatus resolveEmploymentStatus(FeishuUserPayload payload, User existing) {
+        if (payload == null) {
+            return existing == null || existing.getEmploymentStatus() == null ? EmploymentStatus.ACTIVE : existing.getEmploymentStatus();
+        }
+        return normalizeStatus(payload.status()) == UserStatus.ENABLED ? EmploymentStatus.ACTIVE : EmploymentStatus.RESIGNED;
+    }
+
+    private String resolveAccountStatus(FeishuUserPayload payload, User existing) {
+        String importedAccountStatus = blankToNull(payload.accountStatus());
+        if (importedAccountStatus != null) {
+            return importedAccountStatus;
+        }
+        if (existing != null && existing.getAccountStatus() != null && !existing.getAccountStatus().isBlank()) {
+            return existing.getAccountStatus();
+        }
+        return normalizeStatus(payload.status()) == UserStatus.ENABLED ? "正常" : "冻结";
+    }
+
     private String resolveUsername(FeishuUserPayload payload) {
         return usernameGenerationService.generate(payload.realName(), payload.employeeNo());
+    }
+
+    private String resolveIntranetEmail(FeishuUserPayload payload, User existing) {
+        if (existing != null && existing.getIntranetEmail() != null && !existing.getIntranetEmail().isBlank()) {
+            return existing.getIntranetEmail();
+        }
+        return intranetEmailGenerationService.generate(blankToNull(payload.externalId()), existing == null ? null : existing.getId());
+    }
+
+    private String resolveLeaderRef(FeishuUserPayload payload, User existing, Map<LeaderMatchKey, String> importedLeaderRefByKey) {
+        String directLeaderRaw = blankToNull(payload.directLeaderRaw());
+        if (directLeaderRaw == null) {
+            return existing == null ? null : existing.getLeaderRef();
+        }
+        ParsedLeader parsedLeader = parseLeader(directLeaderRaw);
+        if (parsedLeader == null) {
+            return existing == null ? null : existing.getLeaderRef();
+        }
+        String importedLeaderRef = importedLeaderRefByKey.get(new LeaderMatchKey(parsedLeader.realName(), parsedLeader.mobile()));
+        if (importedLeaderRef != null && !importedLeaderRef.isBlank()) {
+            return importedLeaderRef;
+        }
+        for (User candidate : userRepository.findAll()) {
+            if (candidate.getRealName() == null || candidate.getMobile() == null || candidate.getEmployeeNo() == null) {
+                continue;
+            }
+            if (candidate.getRealName().equals(parsedLeader.realName()) && candidate.getMobile().equals(parsedLeader.mobile())) {
+                return candidate.getEmployeeNo();
+            }
+        }
+        return null;
+    }
+
+    private Map<LeaderMatchKey, String> buildImportedLeaderRefIndex(List<FeishuUserPayload> users) {
+        Map<LeaderMatchKey, String> result = new LinkedHashMap<>();
+        for (FeishuUserPayload payload : users) {
+            String realName = blankToNull(payload.realName());
+            String mobile = blankToNull(payload.mobile());
+            String employeeNo = blankToNull(payload.employeeNo());
+            if (realName == null || mobile == null || employeeNo == null) {
+                continue;
+            }
+            String normalizedMobile = mobile.replaceAll("\\D", "");
+            if (normalizedMobile.length() == 13 && normalizedMobile.startsWith("86")) {
+                normalizedMobile = normalizedMobile.substring(2);
+            }
+            if (normalizedMobile.isBlank()) {
+                continue;
+            }
+            result.putIfAbsent(new LeaderMatchKey(realName, normalizedMobile), employeeNo);
+        }
+        return result;
+    }
+
+    private ParsedLeader parseLeader(String directLeaderRaw) {
+        if (directLeaderRaw == null || directLeaderRaw.isBlank()) {
+            return null;
+        }
+        int leftBracketIndex = directLeaderRaw.lastIndexOf('(');
+        int rightBracketIndex = directLeaderRaw.lastIndexOf(')');
+        if (leftBracketIndex <= 0 || rightBracketIndex <= leftBracketIndex) {
+            return null;
+        }
+        String realName = directLeaderRaw.substring(0, leftBracketIndex).trim();
+        String mobile = directLeaderRaw.substring(leftBracketIndex + 1, rightBracketIndex).trim();
+        if (realName.isBlank() || mobile.isBlank()) {
+            return null;
+        }
+        String normalizedMobile = mobile.replaceAll("\\D", "");
+        if (normalizedMobile.length() == 13 && normalizedMobile.startsWith("86")) {
+            normalizedMobile = normalizedMobile.substring(2);
+        }
+        return normalizedMobile.isBlank() ? null : new ParsedLeader(realName, normalizedMobile);
     }
 
     private boolean isSameUser(User left, User right) {
@@ -536,6 +652,18 @@ public class FeishuUserImportService {
         Department mainDepartment,
         List<String> partTimeDeptCodes,
         List<Department> departments
+    ) {
+    }
+
+    private record ParsedLeader(
+        String realName,
+        String mobile
+    ) {
+    }
+
+    private record LeaderMatchKey(
+        String realName,
+        String mobile
     ) {
     }
 

@@ -2,23 +2,23 @@
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { FormInstance, FormRules } from 'element-plus'
+import type { FormRules } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import { executeFeishuFullImport } from '@/api/modules/system-import'
+import { executeFeishuFullImport, executeFeishuFullImportByUpload } from '@/api/modules/system-import'
 import type { ImportMode } from '@/types/system-import'
 
 const router = useRouter()
 const queryClient = useQueryClient()
-const formRef = ref<FormInstance>()
 
 const form = reactive({
   documentPath: '',
   remark: 'manual-full-import',
 })
 
+const uploadedFile = ref<File | null>(null)
+
 const rules: FormRules<typeof form> = {
-  documentPath: [{ required: true, message: '请输入受控目录中的导入文件路径', trigger: 'blur' }],
 }
 
 const importMutation = useMutation({
@@ -38,11 +38,6 @@ const importMutation = useMutation({
 const actionLoading = computed(() => importMutation.isPending.value)
 
 async function handleSubmit(importMode: ImportMode) {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) {
-    return
-  }
-
   if (importMode === 'ALIGN') {
     try {
       await ElMessageBox.confirm(
@@ -59,11 +54,20 @@ async function handleSubmit(importMode: ImportMode) {
     }
   }
 
-  const detail = await importMutation.mutateAsync({
-    documentPath: form.documentPath.trim(),
-    remark: form.remark.trim() || undefined,
-    importMode,
-  })
+  let detail
+  if (uploadedFile.value) {
+    detail = await executeFeishuFullImportByUpload(uploadedFile.value, importMode, form.remark.trim() || undefined)
+  } else {
+    if (!form.documentPath.trim()) {
+      ElMessage.warning('请拖拽上传文件，或填写受控目录中的导入文件路径')
+      return
+    }
+    detail = await importMutation.mutateAsync({
+      documentPath: form.documentPath.trim(),
+      remark: form.remark.trim() || undefined,
+      importMode,
+    })
+  }
 
   await ElMessageBox.alert(
     [
@@ -81,6 +85,17 @@ async function handleSubmit(importMode: ImportMode) {
   )
 
   router.push('/sync/jobs')
+}
+
+function handleUploadChange(uploadFile: { raw?: File }) {
+  uploadedFile.value = uploadFile.raw || null
+  if (uploadedFile.value) {
+    form.documentPath = uploadedFile.value.name
+  }
+}
+
+function handleUploadRemove() {
+  uploadedFile.value = null
 }
 </script>
 
@@ -109,12 +124,33 @@ async function handleSubmit(importMode: ImportMode) {
         <template #header>
           <div class="section-header">
             <strong>导入参数</strong>
-            <span class="idm-muted">文件路径必须位于后端配置的受控目录内，支持相对路径或受控目录内绝对路径。</span>
+            <span class="idm-muted">优先支持拖拽上传 XLSX / JSON 文件；也兼容直接填写后端受控目录中的文件路径。</span>
           </div>
         </template>
 
-        <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-          <el-form-item label="导入文件路径" prop="documentPath">
+        <el-form :model="form" :rules="rules" label-position="top">
+          <el-form-item label="拖拽上传文件">
+            <el-upload
+              :auto-upload="false"
+              :limit="1"
+              drag
+              :on-change="handleUploadChange"
+              :on-remove="handleUploadRemove"
+              :show-file-list="true"
+            >
+              <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+              <div class="el-upload__text">
+                将文件拖拽到此处，或 <em>点击选择文件</em>
+              </div>
+              <template #tip>
+                <div class="el-upload__tip">
+                  支持 `.xlsx` 和 `.json`，若未上传文件，则仍可使用下方受控目录路径导入。
+                </div>
+              </template>
+            </el-upload>
+          </el-form-item>
+
+          <el-form-item label="导入文件路径">
             <el-input
               v-model="form.documentPath"
               placeholder="例如 花名册 2026-04-22_112145.xlsx、bundle/full-demo.json 或受控目录内绝对路径"

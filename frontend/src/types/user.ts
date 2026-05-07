@@ -3,14 +3,20 @@ export interface UserItem {
   username: string
   realName: string
   email: string | null
+  intranetEmail: string | null
   mobile: string | null
   employeeNo: string | null
   deptName: string | null
   deptCode: string | null
+  jobTitle: string | null
+  directLeaderRaw: string | null
+  leaderRef: string | null
+  accountStatus: string | null
   partTimeDeptCodes: string[]
   partTimeDeptNames: string[]
   permissionLevel: number
   status: number
+  employmentStatus: string | null
   ldapDn: string | null
   roleCodes: string[]
 }
@@ -23,7 +29,8 @@ export interface UserListQuery {
 
 export interface CreateUserPayload {
   realName: string
-  email: string
+  email?: string
+  intranetEmail: string
   mobile: string
   employeeNo: string
   deptCode: string
@@ -34,7 +41,8 @@ export interface CreateUserPayload {
 
 export interface UpdateUserPayload {
   realName: string
-  email: string
+  email?: string
+  intranetEmail: string
   mobile: string
   employeeNo: string
   deptCode: string
@@ -53,6 +61,9 @@ export interface ChangePasswordPayload {
 
 export interface BatchDeleteUsersPayload {
   userIds: number[]
+  usernameKeyword?: string
+  deptNameKeyword?: string
+  statusCode?: number
 }
 
 export interface BatchDeleteUsersResult {

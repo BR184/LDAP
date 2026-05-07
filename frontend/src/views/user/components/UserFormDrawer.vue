@@ -9,6 +9,7 @@ interface UserFormValue {
   username: string
   realName: string
   email: string
+  intranetEmail: string
   mobile: string
   employeeNo: string
   deptCode: string
@@ -40,8 +41,11 @@ const title = computed(() => (isCreate.value ? '新增用户' : '编辑用户'))
 const rules = computed<FormRules<UserFormValue>>(() => ({
   realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   email: [
-    { required: true, message: '工作邮箱不能为空', trigger: 'blur' },
     { type: 'email', message: '请输入合法工作邮箱', trigger: 'blur' },
+  ],
+  intranetEmail: [
+    { required: true, message: '请输入内网邮箱', trigger: 'blur' },
+    { type: 'email', message: '请输入合法内网邮箱', trigger: 'blur' },
   ],
   mobile: [
     {
@@ -72,6 +76,7 @@ watch(
       form.username = props.user.username
       form.realName = props.user.realName
       form.email = props.user.email || ''
+      form.intranetEmail = props.user.intranetEmail || ''
       form.mobile = props.user.mobile || ''
       form.employeeNo = props.user.employeeNo || ''
       form.deptCode = props.user.deptCode || ''
@@ -88,6 +93,7 @@ function buildDefaultForm(): UserFormValue {
     username: '',
     realName: '',
     email: '',
+    intranetEmail: '',
     mobile: '',
     employeeNo: '',
     deptCode: '',
@@ -125,7 +131,8 @@ async function handleSubmit() {
   if (isCreate.value) {
     emit('submit', {
       realName: form.realName.trim(),
-      email: form.email.trim(),
+      email: form.email.trim() || undefined,
+      intranetEmail: form.intranetEmail.trim(),
       mobile: form.mobile.trim(),
       employeeNo: form.employeeNo.trim(),
       deptCode: form.deptCode,
@@ -138,7 +145,8 @@ async function handleSubmit() {
 
   emit('submit', {
     realName: form.realName.trim(),
-    email: form.email.trim(),
+    email: form.email.trim() || undefined,
+    intranetEmail: form.intranetEmail.trim(),
     mobile: form.mobile.trim(),
     employeeNo: form.employeeNo.trim(),
     deptCode: form.deptCode,
@@ -155,7 +163,7 @@ function closeDrawer() {
   <el-drawer :model-value="modelValue" :title="title" size="520px" @close="closeDrawer">
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-alert v-if="isCreate" :closable="false" class="form-alert" type="info">
-        登录用户名将按“姓名拼音 + 工号”自动生成，例如 `zhangsan1001`。
+        登录账号将由系统自动生成，普通用户后续使用工号登录；内网邮箱需手工填写。
       </el-alert>
 
       <el-form-item v-if="!isCreate" label="用户名">
@@ -172,6 +180,10 @@ function closeDrawer() {
 
       <el-form-item label="工作邮箱" prop="email">
         <el-input v-model="form.email" placeholder="请输入工作邮箱" />
+      </el-form-item>
+
+      <el-form-item label="内网邮箱" prop="intranetEmail">
+        <el-input v-model="form.intranetEmail" placeholder="请输入内网邮箱" />
       </el-form-item>
 
       <el-form-item label="手机号" prop="mobile">

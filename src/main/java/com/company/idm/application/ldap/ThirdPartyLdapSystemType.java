@@ -37,7 +37,7 @@ public enum ThirdPartyLdapSystemType {
     }
 
     public String buildUserFilter() {
-        return "(&(objectClass=inetOrgPerson)(uid=" + filterPlaceholder + ")(employeeType=ENABLED))";
+        return "(&(objectClass=inetOrgPerson)(employeeNumber=" + filterPlaceholder + ")(employeeType=ENABLED))";
     }
 
     public String buildTemplateUserFilter() {

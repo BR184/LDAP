@@ -65,7 +65,7 @@ class AuthControllerTest extends AbstractControllerMvcTest {
 
     @Test
     void shouldAcceptForgotPasswordRequestAnonymously() throws Exception {
-        when(passwordResetApplicationService.forgotPasswordSuccessNotice()).thenReturn("如账号信息有效，系统已发送重置邮件，请注意查收");
+        when(passwordResetApplicationService.forgotPasswordSuccessNotice()).thenReturn("如账号信息有效，系统已向绑定内网邮箱发送重置邮件，请注意查收");
 
         mockMvc.perform(post("/api/v1/auth/password/forgot")
                 .contentType(APPLICATION_JSON)
@@ -76,7 +76,7 @@ class AuthControllerTest extends AbstractControllerMvcTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
-            .andExpect(jsonPath("$.data").value("如账号信息有效，系统已发送重置邮件，请注意查收"));
+            .andExpect(jsonPath("$.data").value("如账号信息有效，系统已向绑定内网邮箱发送重置邮件，请注意查收"));
     }
 
     @Test

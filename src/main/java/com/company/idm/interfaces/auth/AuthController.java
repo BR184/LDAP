@@ -62,7 +62,9 @@ public class AuthController {
             user.getUsername(),
             user.getRealName(),
             user.getEmail(),
+            user.getIntranetEmail(),
             user.getMobile(),
+            user.getEmployeeNo(),
             user.getDeptCode(),
             user.getRoleCodes()
         ));

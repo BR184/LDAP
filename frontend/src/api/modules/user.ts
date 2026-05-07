@@ -36,7 +36,9 @@ export function deleteUser(userId: number) {
 }
 
 export function batchDeleteUsers(payload: BatchDeleteUsersPayload) {
-  return request.post<never, BatchDeleteUsersResult>('/v1/users/batch-delete', payload)
+  return request.post<never, BatchDeleteUsersResult>('/v1/users/batch-delete', payload, {
+    timeout: 60000,
+  })
 }
 
 export function resetUserPassword(userId: number) {

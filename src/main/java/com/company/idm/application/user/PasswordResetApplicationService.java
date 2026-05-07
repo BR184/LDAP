@@ -34,6 +34,7 @@ public class PasswordResetApplicationService {
     private final PasswordResetNotificationService passwordResetNotificationService;
     private final PasswordResetThrottleService passwordResetThrottleService;
     private final PasswordResetProperties passwordResetProperties;
+    private final IntranetEmailGenerationService intranetEmailGenerationService;
 
     public void adminResetPassword(AdminResetPasswordCommand command) {
         User user = userRepository.findById(command.userId())
@@ -62,7 +63,7 @@ public class PasswordResetApplicationService {
             return;
         }
 
-        User user = userRepository.findByUsername(username).orElse(null);
+        User user = resolveUserForPasswordReset(username);
         if (user == null) {
             auditFailure(username, "USER_PASSWORD_FORGOT", username, "用户不存在");
             return;
@@ -71,8 +72,9 @@ public class PasswordResetApplicationService {
             auditFailure(username, "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), "用户已被禁用");
             return;
         }
-        if (!hasEmail(user)) {
-            auditFailure(username, "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), "用户未配置工作邮箱");
+        user = ensureIntranetEmail(user);
+        if (!hasIntranetEmail(user)) {
+            auditFailure(username, "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), "用户未配置内网邮箱");
             return;
         }
 
@@ -117,8 +119,19 @@ public class PasswordResetApplicationService {
             .build());
     }
 
-    private boolean hasEmail(User user) {
-        return user.getEmail() != null && !user.getEmail().isBlank();
+    private boolean hasIntranetEmail(User user) {
+        return user.getIntranetEmail() != null && !user.getIntranetEmail().isBlank();
+    }
+
+    private User ensureIntranetEmail(User user) {
+        if (user == null || hasIntranetEmail(user)) {
+            return user;
+        }
+        String uniqueIdentifier = user.getExternalId() != null && !user.getExternalId().isBlank()
+            ? user.getExternalId()
+            : String.valueOf(user.getId());
+        String intranetEmail = intranetEmailGenerationService.generate(uniqueIdentifier, user.getId());
+        return userRepository.save(user.toBuilder().intranetEmail(intranetEmail).build());
     }
 
     private void auditFailure(String operator, String operationType, String bizId, String message) {
@@ -145,5 +158,16 @@ public class PasswordResetApplicationService {
             return "UNKNOWN";
         }
         return clientIp.trim();
+    }
+
+    private User resolveUserForPasswordReset(String loginName) {
+        if (loginName == null || loginName.isBlank()) {
+            return null;
+        }
+        User byUsername = userRepository.findByUsername(loginName).orElse(null);
+        if (byUsername != null) {
+            return byUsername;
+        }
+        return userRepository.findByEmployeeNo(loginName).orElse(null);
     }
 }

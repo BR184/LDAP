@@ -109,7 +109,12 @@ const currentOperatorPermissionLevel = computed(() => {
   return resolvePermissionLevel(currentUser.roleCodes)
 })
 const isCurrentUserSuperAdmin = computed(() => authStore.currentUser?.roleCodes.includes(SUPER_ADMIN_ROLE_CODE) ?? false)
-const canBatchDelete = computed(() => selectedUsers.value.length > 0)
+const canBatchDelete = computed(() =>
+  selectedUsers.value.length > 0
+  || !!(appliedQuery.username || appliedQuery.deptName || typeof appliedQuery.status === 'number'),
+)
+const selectedDeletableUsers = computed(() => selectedUsers.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
+const deletableUsersByQuery = computed(() => users.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
 
 const createUserMutation = useMutation({
   mutationFn: (payload: CreateUserPayload) => createUser(payload),
@@ -214,6 +219,10 @@ function canDeleteUser(user: UserItem) {
   return user.permissionLevel > currentOperatorPermissionLevel.value
 }
 
+function isSuperAdminUser(user: UserItem) {
+  return user.roleCodes.includes(SUPER_ADMIN_ROLE_CODE)
+}
+
 function applySearch() {
   appliedQuery.username = normalizeText(searchForm.username)
   appliedQuery.deptName = normalizeText(searchForm.deptName)
@@ -237,7 +246,7 @@ function handleSelectionChange(rows: UserItem[]) {
 }
 
 function selectableUser(row: UserItem) {
-  return canDeleteUser(row)
+  return canDeleteUser(row) && !isSuperAdminUser(row)
 }
 
 async function openDetail(userId: number) {
@@ -343,18 +352,33 @@ async function handleDelete(user: UserItem) {
 }
 
 async function handleBatchDelete() {
-  if (!selectedUsers.value.length) {
+  const hasSelectedRows = selectedUsers.value.length > 0
+  const hasSearchQuery = !!(appliedQuery.username || appliedQuery.deptName || typeof appliedQuery.status === 'number')
+  if (!hasSelectedRows && !hasSearchQuery) {
     return
   }
 
-  const previewUsers = selectedUsers.value.slice(0, 5).map((user) => `${user.realName}（${user.username}）`)
+  const targetUsers = hasSelectedRows ? selectedDeletableUsers.value : deletableUsersByQuery.value
+  if (!targetUsers.length) {
+    ElMessage.warning('当前没有可批量删除的用户')
+    return
+  }
+
+  const previewUsers = targetUsers.slice(0, 5).map((user) => `${user.realName}（${user.employeeNo || user.username}）`)
   const previewText = previewUsers.join('、')
-  const moreCount = selectedUsers.value.length - previewUsers.length
-  const summaryText = moreCount > 0 ? `${previewText} 等 ${selectedUsers.value.length} 人` : previewText
+  const moreCount = targetUsers.length - previewUsers.length
+  const summaryText = hasSelectedRows
+    ? (moreCount > 0 ? `${previewText} 等已选中的 ${targetUsers.length} 人` : previewText)
+    : (previewUsers.length
+        ? (moreCount > 0 ? `${previewText} 等 ${targetUsers.length} 人` : previewText)
+        : `当前筛选条件下的全部可删除用户，共 ${targetUsers.length} 人`)
+  const confirmMessage = hasSelectedRows
+    ? `删除后将同步清理 LDAP 账号映射、角色绑定与登录能力。确认批量删除已选中的用户吗？\n${summaryText}`
+    : `删除后将同步清理 LDAP 账号映射、角色绑定与登录能力。确认批量删除当前筛选结果中的全部用户吗？\n${summaryText}`
 
   try {
     await ElMessageBox.confirm(
-      `删除后将同步清理 LDAP 账号映射、角色绑定与登录能力。确认批量删除以下用户吗？\n${summaryText}`,
+      confirmMessage,
       '确认批量删除',
       {
         type: 'warning',
@@ -366,9 +390,11 @@ async function handleBatchDelete() {
     return
   }
 
-  await batchDeleteUsersMutation.mutateAsync({
-    userIds: selectedUsers.value.map((user) => user.id),
-  })
+  await batchDeleteUsersMutation.mutateAsync(
+    {
+      userIds: targetUsers.map((user) => user.id),
+    },
+  )
 }
 
 async function handleResetPassword(user: UserItem) {
@@ -415,8 +441,8 @@ function statusTagType(status: number) {
   >
     <el-card class="idm-card" shadow="never">
       <el-form :inline="true" :model="searchForm">
-        <el-form-item label="用户名">
-          <el-input v-model="searchForm.username" clearable placeholder="请输入用户名" />
+        <el-form-item label="工号/姓名">
+          <el-input v-model="searchForm.username" clearable placeholder="请输入工号、姓名或用户名" />
         </el-form-item>
         <el-form-item label="部门名称">
           <el-input v-model="searchForm.deptName" clearable placeholder="请输入部门名称" />
@@ -469,17 +495,37 @@ function statusTagType(status: number) {
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="52" :selectable="selectableUser" />
-        <el-table-column prop="username" label="用户名" min-width="150" />
         <el-table-column prop="realName" label="姓名" min-width="120" />
         <el-table-column prop="employeeNo" label="工号" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="jobTitle" label="职务" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.jobTitle || '--' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="directLeaderRaw" label="直属上级" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.directLeaderRaw || '--' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="deptName" label="部门名称" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.deptName || '--' }}
           </template>
         </el-table-column>
-        <el-table-column prop="deptCode" label="部门编码" min-width="120" />
+        <el-table-column prop="intranetEmail" label="内网邮箱" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.intranetEmail || '--' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="email" label="工作邮箱" min-width="220" show-overflow-tooltip />
         <el-table-column prop="mobile" label="手机号" min-width="140" />
+        <el-table-column label="在职状态" min-width="120" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.employmentStatus === 'RESIGNED' ? 'warning' : 'success'">
+              {{ row.employmentStatus === 'RESIGNED' ? '离职' : '在职' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
@@ -494,7 +540,6 @@ function statusTagType(status: number) {
             <span v-else>--</span>
           </template>
         </el-table-column>
-        <el-table-column prop="ldapDn" label="LDAP DN" min-width="280" show-overflow-tooltip />
         <el-table-column label="操作" min-width="280" fixed="right">
           <template #default="{ row }">
             <el-space>

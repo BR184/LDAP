@@ -8,6 +8,7 @@ import java.util.List;
 public record CreateUserCommand(
     String realName,
     String email,
+    String intranetEmail,
     String mobile,
     String employeeNo,
     String deptCode,
@@ -19,6 +20,7 @@ public record CreateUserCommand(
     public CreateUserCommand(
         String realName,
         String email,
+        String intranetEmail,
         String mobile,
         String employeeNo,
         String deptCode,
@@ -26,7 +28,7 @@ public record CreateUserCommand(
         List<Long> roleIds,
         String operator
     ) {
-        this(realName, email, mobile, employeeNo, deptCode, List.of(), initialPassword, roleIds, operator);
+        this(realName, email, intranetEmail, mobile, employeeNo, deptCode, List.of(), initialPassword, roleIds, operator);
     }
 }
 

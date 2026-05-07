@@ -22,7 +22,7 @@ public class SmtpPasswordResetNotificationService implements PasswordResetNotifi
         if (passwordResetProperties.getMailFrom() != null && !passwordResetProperties.getMailFrom().isBlank()) {
             message.setFrom(passwordResetProperties.getMailFrom());
         }
-        message.setTo(user.getEmail());
+        message.setTo(user.getIntranetEmail());
         message.setSubject(passwordResetProperties.getMailSubject());
         message.setText("""
             当前密码已重置为：%s，请尽快修改密码！

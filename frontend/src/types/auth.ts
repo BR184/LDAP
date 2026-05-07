@@ -20,7 +20,9 @@ export interface CurrentUser {
   username: string
   realName: string
   email: string | null
+  intranetEmail: string | null
   mobile: string | null
+  employeeNo: string | null
   deptCode: string | null
   roleCodes: string[]
 }

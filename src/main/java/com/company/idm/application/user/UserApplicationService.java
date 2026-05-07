@@ -38,6 +38,7 @@ public class UserApplicationService {
     private static final String DEFAULT_RESET_PASSWORD = "123456";
     private static final String SUPER_ADMIN_ROLE_CODE = "SUPER_ADMIN";
     private static final String ADMIN_ROLE_CODE = "ADMIN";
+    private static final int BATCH_DELETE_AUDIT_SAMPLE_SIZE = 10;
 
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
@@ -49,6 +50,7 @@ public class UserApplicationService {
     private final PermissionLevelRuleService permissionLevelRuleService;
     private final RoleRepository roleRepository;
     private final UsernameGenerationService usernameGenerationService;
+    private final IntranetEmailGenerationService intranetEmailGenerationService;
     private final AppLdapProperties ldapProperties;
 
     public List<User> listUsers(String username, String departmentKeyword, Integer statusCode) {
@@ -74,7 +76,7 @@ public class UserApplicationService {
         DepartmentAssignment departmentAssignment = resolveDepartmentAssignment(command.deptCode(), command.partTimeDeptCodes());
         List<Role> roles = loadEnabledRoles(command.roleIds());
         String generatedUsername = usernameGenerationService.generate(command.realName(), command.employeeNo());
-
+        String normalizedIntranetEmail = normalizeRequiredIntranetEmail(command.intranetEmail(), null);
         userRepository.findByEmployeeNo(command.employeeNo())
             .ifPresent(user -> {
                 throw new BizException("USER_EMPLOYEE_NO_DUPLICATE", "工号已存在");
@@ -92,11 +94,14 @@ public class UserApplicationService {
             .username(generatedUsername)
             .realName(command.realName())
             .email(command.email())
+            .intranetEmail(normalizedIntranetEmail)
             .mobile(command.mobile())
             .employeeNo(command.employeeNo())
             .deptCode(departmentAssignment.mainDepartmentCode())
             .partTimeDeptCodes(departmentAssignment.partTimeDeptCodes())
             .status(UserStatus.ENABLED)
+            .employmentStatus(com.company.idm.common.enums.EmploymentStatus.ACTIVE)
+            .accountStatus("正常")
             .sourceType(SourceType.MANUAL)
             .tokenVersion(0)
             .build());
@@ -131,6 +136,7 @@ public class UserApplicationService {
         User updated = user.toBuilder()
             .realName(command.realName())
             .email(command.email())
+            .intranetEmail(resolveUpdatedIntranetEmail(command.intranetEmail(), user))
             .mobile(command.mobile())
             .employeeNo(command.employeeNo())
             .deptCode(departmentAssignment.mainDepartmentCode())
@@ -176,28 +182,34 @@ public class UserApplicationService {
     public void deleteUser(DeleteUserCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        ensureNotSuperAdmin(user);
         permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
         deleteUserInternal(user, command.operator());
     }
 
     @Transactional
     public BatchDeleteUsersResult batchDeleteUsers(BatchDeleteUsersCommand command) {
-        List<Long> uniqueUserIds = command.userIds().stream()
+        List<Long> uniqueUserIds = command.userIds() == null ? List.of() : command.userIds().stream()
             .filter(java.util.Objects::nonNull)
             .collect(java.util.stream.Collectors.collectingAndThen(
                 java.util.stream.Collectors.toCollection(LinkedHashSet::new),
                 List::copyOf
             ));
-        if (uniqueUserIds.isEmpty()) {
+        List<User> users;
+        if (!uniqueUserIds.isEmpty()) {
+            users = uniqueUserIds.stream()
+                .map(userId -> userRepository.findById(userId)
+                    .orElseThrow(() -> new BizException("USER_NOT_FOUND", "存在待删除用户不存在")))
+                .toList();
+        } else {
+            users = listUsers(command.usernameKeyword(), command.deptNameKeyword(), command.statusCode());
+        }
+        if (users.isEmpty()) {
             throw new BizException("USER_BATCH_DELETE_EMPTY", "待删除用户不能为空");
         }
 
-        List<User> users = uniqueUserIds.stream()
-            .map(userId -> userRepository.findById(userId)
-                .orElseThrow(() -> new BizException("USER_NOT_FOUND", "存在待删除用户不存在")))
-            .toList();
-
         for (User user : users) {
+            ensureNotSuperAdmin(user);
             if (command.operator().equals(user.getUsername())) {
                 throw new BizException("USER_BATCH_DELETE_SELF_FORBIDDEN", "不允许批量删除当前登录用户");
             }
@@ -212,13 +224,11 @@ public class UserApplicationService {
             .operator(command.operator())
             .operationType("USER_BATCH_DELETE")
             .bizType("USER")
-            .bizId(uniqueUserIds.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")))
-            .afterJson("""
-                {"totalCount":%s,"deletedCount":%s}
-                """.formatted(uniqueUserIds.size(), users.size()))
+            .bizId("USER_BATCH_DELETE")
+            .afterJson(buildBatchDeleteAuditSummary(users))
             .result("SUCCESS")
             .build());
-        return new BatchDeleteUsersResult(uniqueUserIds.size(), users.size());
+        return new BatchDeleteUsersResult(users.size(), users.size());
     }
 
     @Transactional
@@ -591,6 +601,44 @@ public class UserApplicationService {
             .orElse(Integer.MAX_VALUE);
     }
 
+    private String generateIntranetEmail(String uniqueIdentifier, Long currentUserId) {
+        return intranetEmailGenerationService.generate(uniqueIdentifier, currentUserId);
+    }
+
+    private String resolveExistingIntranetEmail(User user) {
+        if (user == null) {
+            return null;
+        }
+        if (safe(user.getIntranetEmail()) != null) {
+            return user.getIntranetEmail();
+        }
+        String uniqueIdentifier = safe(user.getExternalId()) != null ? user.getExternalId() : String.valueOf(user.getId());
+        return generateIntranetEmail(uniqueIdentifier, user.getId());
+    }
+
+    private String resolveUpdatedIntranetEmail(String intranetEmail, User user) {
+        String normalizedIntranetEmail = normalizeRequiredIntranetEmail(intranetEmail, user == null ? null : user.getId());
+        return normalizedIntranetEmail == null ? resolveExistingIntranetEmail(user) : normalizedIntranetEmail;
+    }
+
+    private String normalizeRequiredIntranetEmail(String intranetEmail, Long currentUserId) {
+        String normalizedIntranetEmail = safe(intranetEmail);
+        if (normalizedIntranetEmail == null) {
+            return null;
+        }
+        User existing = userRepository.findByIntranetEmail(normalizedIntranetEmail).orElse(null);
+        if (existing != null && (currentUserId == null || !currentUserId.equals(existing.getId()))) {
+            throw new BizException("USER_INTRANET_EMAIL_DUPLICATE", "内网邮箱已存在");
+        }
+        return normalizedIntranetEmail.toLowerCase(Locale.ROOT);
+    }
+
+    private void ensureNotSuperAdmin(User user) {
+        if (user != null && user.getRoleCodes() != null && user.getRoleCodes().contains(SUPER_ADMIN_ROLE_CODE)) {
+            throw new BizException("USER_DELETE_SUPER_ADMIN_FORBIDDEN", "不允许删除超级管理员");
+        }
+    }
+
     private String buildUserDn(String username) {
         return LdapDnHelper.buildUserDn(ldapProperties, username);
     }
@@ -600,8 +648,7 @@ public class UserApplicationService {
     }
 
     private void deleteUserInternal(User user, String operator) {
-        ldapGroupService.removeUserFromAllGroups(user.getUsername());
-        ldapDirectoryService.deleteUser(user.getUsername());
+        cleanupLdapUser(user.getUsername());
         userRepository.removeAllRoles(user.getId());
         userRepository.logicalDelete(user.getId(), buildRecycledUsername(user), nextTokenVersion(user));
         auditLogRepository.save(AuditLog.builder()
@@ -612,6 +659,39 @@ public class UserApplicationService {
             .afterJson("DELETED")
             .result("SUCCESS")
             .build());
+    }
+
+    private void cleanupLdapUser(String username) {
+        if (username == null || username.isBlank()) {
+            return;
+        }
+        ldapGroupService.removeUserFromAllGroups(username);
+        if (!ldapDirectoryService.existsByUid(username)) {
+            return;
+        }
+        try {
+            ldapDirectoryService.deleteUser(username);
+        } catch (BizException exception) {
+            if (!"LDAP_USER_NOT_FOUND".equals(exception.getCode())) {
+                throw exception;
+            }
+        }
+    }
+
+    private String buildBatchDeleteAuditSummary(List<User> users) {
+        List<Long> sampleUserIds = users.stream()
+            .map(User::getId)
+            .filter(java.util.Objects::nonNull)
+            .limit(BATCH_DELETE_AUDIT_SAMPLE_SIZE)
+            .toList();
+        return """
+            {"totalCount":%s,"deletedCount":%s,"sampleUserIds":%s,"truncated":%s}
+            """.formatted(
+            users.size(),
+            users.size(),
+            sampleUserIds,
+            users.size() > BATCH_DELETE_AUDIT_SAMPLE_SIZE
+        );
     }
 
     private String normalize(String value) {

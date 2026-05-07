@@ -28,17 +28,17 @@ public class AuthApplicationService {
      * 先在本地读取用户状态，再通过 LDAP 校验密码，最后签发 JWT 并记录登录审计。
      */
     public LoginResult login(LoginCommand command) {
-        User user = userRepository.findByUsername(command.username())
+        User user = resolveLoginUser(command.username())
             .orElseThrow(() -> failure("AUTH_INVALID", "用户名或密码错误", command.username()));
         if (user.getStatus() != UserStatus.ENABLED) {
             throw failure("AUTH_DISABLED", "用户已被禁用", command.username());
         }
-        if (!ldapDirectoryService.authenticate(command.username(), command.password())) {
+        if (!ldapDirectoryService.authenticate(user.getUsername(), command.password())) {
             throw failure("AUTH_INVALID", "用户名或密码错误", command.username());
         }
-        Set<String> roleCodes = userRepository.findRoleCodesByUsername(command.username());
+        Set<String> roleCodes = userRepository.findRoleCodesByUsername(user.getUsername());
         auditLogRepository.save(AuditLog.builder()
-            .operator(command.username())
+            .operator(user.getUsername())
             .operationType("LOGIN")
             .bizType("AUTH")
             .bizId(String.valueOf(user.getId()))
@@ -69,6 +69,18 @@ public class AuthApplicationService {
             .errorMessage(message)
             .build());
         return new BizException(code, message);
+    }
+
+    private java.util.Optional<User> resolveLoginUser(String loginName) {
+        if (loginName == null || loginName.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        String normalizedLoginName = loginName.trim();
+        java.util.Optional<User> byUsername = userRepository.findByUsername(normalizedLoginName);
+        if (byUsername.isPresent()) {
+            return byUsername;
+        }
+        return userRepository.findByEmployeeNo(normalizedLoginName);
     }
 }
 

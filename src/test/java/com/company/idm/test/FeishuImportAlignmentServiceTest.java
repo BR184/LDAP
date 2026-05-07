@@ -2,6 +2,7 @@ package com.company.idm.test;
 
 import com.company.idm.application.sync.SyncDiffPayload;
 import com.company.idm.application.sync.feishu.FeishuImportAlignmentService;
+import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.SyncDiffType;
 import com.company.idm.common.enums.UserStatus;
@@ -48,6 +49,7 @@ class FeishuImportAlignmentServiceTest {
         User ghost = buildUser(2L, "lisi", "u002", "D200", SourceType.FEISHU);
         User manual = buildUser(3L, "wangwu", null, "D300", SourceType.MANUAL);
         when(userRepository.findAll()).thenReturn(List.of(retained, ghost, manual));
+        when(ldapDirectoryService.existsByUid("lisi")).thenReturn(true);
 
         List<SyncDiffPayload> diffs = service.cleanupMissingUsers(Set.of("u001"));
 
@@ -57,9 +59,60 @@ class FeishuImportAlignmentServiceTest {
         });
         verify(ldapGroupService).removeUserFromAllGroups("lisi");
         verify(ldapDirectoryService).deleteUser("lisi");
-        verify(userRepository).removeAllRoles(2L);
-        verify(userRepository).logicalDelete(2L, "lisi__deleted__2", 1);
+        verify(userRepository).save(org.mockito.ArgumentMatchers.argThat(user ->
+            user.getId().equals(2L)
+                && user.getEmploymentStatus() == EmploymentStatus.RESIGNED
+                && user.getStatus() == UserStatus.DISABLED
+                && user.getLdapDn() == null
+        ));
         verify(userRepository, never()).logicalDelete(1L, "zhangsan__deleted__1", 1);
+    }
+
+    @Test
+    void shouldMarkMissingFeishuUsersAsResignedInsteadOfDeleting() {
+        FeishuImportAlignmentService service = buildService();
+        User ghost = buildUser(2L, "lisi", "u002", "D200", SourceType.FEISHU);
+        when(userRepository.findAll()).thenReturn(List.of(ghost));
+        when(ldapDirectoryService.existsByUid("lisi")).thenReturn(true);
+
+        List<SyncDiffPayload> diffs = service.cleanupMissingUsers(Set.of());
+
+        assertThat(diffs).singleElement().satisfies(diff -> {
+            assertThat(diff.targetKey()).isEqualTo("lisi");
+            assertThat(diff.diffType()).isEqualTo(SyncDiffType.MISSING_IN_SOURCE);
+        });
+        verify(userRepository, never()).logicalDelete(2L, "lisi__deleted__2", 1);
+        verify(userRepository, never()).removeAllRoles(2L);
+        verify(userRepository).save(org.mockito.ArgumentMatchers.argThat(user ->
+            user.getId().equals(2L)
+                && user.getEmploymentStatus() == EmploymentStatus.RESIGNED
+                && user.getStatus() == UserStatus.DISABLED
+                && user.getLdapDn() == null
+        ));
+    }
+
+    @Test
+    void shouldMarkUserAsResignedWhenLdapUserAlreadyMissing() {
+        FeishuImportAlignmentService service = buildService();
+        User ghost = buildUser(2L, "lisi", "u002", "D200", SourceType.FEISHU).toBuilder()
+            .ldapDn("uid=lisi,ou=people,dc=corp,dc=local")
+            .build();
+        when(userRepository.findAll()).thenReturn(List.of(ghost));
+        when(ldapDirectoryService.existsByUid("lisi")).thenReturn(false);
+
+        List<SyncDiffPayload> diffs = service.cleanupMissingUsers(Set.of());
+
+        assertThat(diffs).singleElement().satisfies(diff ->
+            assertThat(diff.targetKey()).isEqualTo("lisi")
+        );
+        verify(ldapGroupService).removeUserFromAllGroups("lisi");
+        verify(ldapDirectoryService, never()).deleteUser("lisi");
+        verify(userRepository).save(org.mockito.ArgumentMatchers.argThat(user ->
+            user.getId().equals(2L)
+                && user.getEmploymentStatus() == EmploymentStatus.RESIGNED
+                && user.getStatus() == UserStatus.DISABLED
+                && user.getLdapDn() == null
+        ));
     }
 
     @Test
@@ -70,8 +123,8 @@ class FeishuImportAlignmentServiceTest {
         Department childGhost = buildDepartment(3L, "D201", "ou_child", 3, SourceType.FEISHU);
         Department manual = buildDepartment(4L, "D300", null, 1, SourceType.MANUAL);
         when(departmentRepository.findAll()).thenReturn(List.of(retained, parentGhost, childGhost, manual));
-        when(userRepository.existsDeptBinding("D201")).thenReturn(false);
-        when(userRepository.existsDeptBinding("D200")).thenReturn(false);
+        when(userRepository.existsActiveDeptBinding("D201")).thenReturn(false);
+        when(userRepository.existsActiveDeptBinding("D200")).thenReturn(false);
 
         List<SyncDiffPayload> diffs = service.cleanupMissingDepartments(Set.of("ou_root"));
 
@@ -88,10 +141,26 @@ class FeishuImportAlignmentServiceTest {
         FeishuImportAlignmentService service = buildService();
         Department ghost = buildDepartment(2L, "D200", "ou_parent", 2, SourceType.FEISHU);
         when(departmentRepository.findAll()).thenReturn(List.of(ghost));
-        when(userRepository.existsDeptBinding("D200")).thenReturn(true);
+        when(userRepository.existsActiveDeptBinding("D200")).thenReturn(true);
 
         assertThatThrownBy(() -> service.cleanupMissingDepartments(Set.of()))
             .hasMessageContaining("D200");
+    }
+
+    @Test
+    void shouldAllowCleaningDepartmentWhenOnlyResignedUsersRemainHistorically() {
+        FeishuImportAlignmentService service = buildService();
+        Department ghost = buildDepartment(2L, "D200", "ou_parent", 2, SourceType.FEISHU);
+        when(departmentRepository.findAll()).thenReturn(List.of(ghost));
+        when(userRepository.existsActiveDeptBinding("D200")).thenReturn(false);
+
+        List<SyncDiffPayload> diffs = service.cleanupMissingDepartments(Set.of());
+
+        assertThat(diffs).singleElement().satisfies(diff ->
+            assertThat(diff.targetKey()).isEqualTo("D200")
+        );
+        verify(ldapGroupService).deleteGroup("D200");
+        verify(departmentRepository).deleteByDeptCode("D200");
     }
 
     private FeishuImportAlignmentService buildService() {
@@ -105,6 +174,7 @@ class FeishuImportAlignmentServiceTest {
             .realName(username)
             .deptCode(deptCode)
             .status(UserStatus.ENABLED)
+            .employmentStatus(EmploymentStatus.ACTIVE)
             .sourceType(sourceType)
             .externalId(externalId)
             .tokenVersion(0)

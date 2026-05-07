@@ -1,7 +1,10 @@
 package com.company.idm.test;
 
 import com.company.idm.application.rbac.PolicyRefreshService;
+import com.company.idm.application.user.BatchDeleteUsersResult;
 import com.company.idm.application.user.CreateUserCommand;
+import com.company.idm.application.user.DeleteUserCommand;
+import com.company.idm.application.user.IntranetEmailGenerationService;
 import com.company.idm.application.user.UpdateUserCommand;
 import com.company.idm.application.user.UpdateUserStatusCommand;
 import com.company.idm.application.user.UserApplicationService;
@@ -37,6 +40,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -78,6 +82,9 @@ class UserApplicationServiceTest {
     private UsernameGenerationService usernameGenerationService;
 
     @Mock
+    private IntranetEmailGenerationService intranetEmailGenerationService;
+
+    @Mock
     private AppLdapProperties ldapProperties;
 
     @InjectMocks
@@ -108,6 +115,7 @@ class UserApplicationServiceTest {
         CreateUserCommand command = new CreateUserCommand(
             "张三",
             "zhangsan@corp.local",
+            "zhangsan@crowncad.com",
             "13900000000",
             "E10001",
             "D001",
@@ -118,6 +126,7 @@ class UserApplicationServiceTest {
         );
         when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.empty());
         when(userRepository.findByUsername(GENERATED_USERNAME)).thenReturn(Optional.empty());
+        when(userRepository.findByIntranetEmail("zhangsan@crowncad.com")).thenReturn(Optional.empty());
         when(departmentRepository.findByDeptCode("D001")).thenReturn(Optional.of(dept("D001", "主部门")));
         when(departmentRepository.findByDeptCode("D002")).thenReturn(Optional.of(dept("D002", "兼职部门一")));
         when(departmentRepository.findByDeptCode("D003")).thenReturn(Optional.of(dept("D003", "兼职部门二")));
@@ -130,6 +139,7 @@ class UserApplicationServiceTest {
 
         assertThat(created.getDeptCode()).isEqualTo("D001");
         assertThat(created.getPartTimeDeptCodes()).containsExactly("D002", "D003");
+        assertThat(created.getIntranetEmail()).isEqualTo("zhangsan@crowncad.com");
         verify(ldapGroupService).syncUserGroups(GENERATED_USERNAME, List.of("D001", "D002", "D003"));
     }
 
@@ -138,6 +148,7 @@ class UserApplicationServiceTest {
         CreateUserCommand command = new CreateUserCommand(
             "张三",
             "zhangsan@corp.local",
+            "zhangsan@crowncad.com",
             "13900000000",
             "E10001",
             "D001",
@@ -148,6 +159,7 @@ class UserApplicationServiceTest {
         );
         when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.empty());
         when(userRepository.findByUsername(GENERATED_USERNAME)).thenReturn(Optional.empty());
+        when(userRepository.findByIntranetEmail("zhangsan@crowncad.com")).thenReturn(Optional.empty());
         when(departmentRepository.findByDeptCode("D001")).thenReturn(Optional.of(dept("D001", "主部门")));
         when(departmentRepository.findByDeptCode("D002")).thenReturn(Optional.of(dept("D002", "兼职部门一")));
         when(ldapDirectoryService.existsByUid(GENERATED_USERNAME)).thenReturn(false);
@@ -177,6 +189,7 @@ class UserApplicationServiceTest {
             2L,
             "张三-更新",
             "new@corp.local",
+            "zhangsan@crowncad.com",
             "13911111111",
             "E10002",
             "D001",
@@ -187,7 +200,9 @@ class UserApplicationServiceTest {
         assertThat(updated.getEmployeeNo()).isEqualTo("E10002");
         assertThat(updated.getPartTimeDeptCodes()).containsExactly("D003");
         verify(userRepository).updateProfile(argThat(user ->
-            "E10002".equals(user.getEmployeeNo()) && user.getPartTimeDeptCodes().equals(List.of("D003"))
+            "E10002".equals(user.getEmployeeNo())
+                && "zhangsan@crowncad.com".equals(user.getIntranetEmail())
+                && user.getPartTimeDeptCodes().equals(List.of("D003"))
         ));
         verify(ldapGroupService).syncUserGroups(GENERATED_USERNAME, List.of("D001", "D003"));
     }
@@ -203,6 +218,7 @@ class UserApplicationServiceTest {
             2L,
             "张三",
             "new@corp.local",
+            "zhangsan@crowncad.com",
             "13911111111",
             "E20001",
             "D001",
@@ -223,6 +239,7 @@ class UserApplicationServiceTest {
         assertThatThrownBy(() -> userApplicationService.createUser(new CreateUserCommand(
             "测试用户",
             "zhangsan@corp.local",
+            "zhangsan@crowncad.com",
             "13900000000",
             "E10001",
             "D001",
@@ -235,6 +252,60 @@ class UserApplicationServiceTest {
             .hasMessage("已禁用角色不允许分配");
 
         verify(ldapDirectoryService, never()).createUser(any(), any());
+    }
+
+    @Test
+    void shouldBackfillManualUserIntranetEmailWhenUpdatingLegacyUser() {
+        User existing = buildUser(2L, GENERATED_USERNAME, UserStatus.ENABLED, 0).toBuilder()
+            .intranetEmail(null)
+            .employeeNo("E10001")
+            .roleCodes(Set.of("NORMAL_USER"))
+            .build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(existing));
+        when(departmentRepository.findByDeptCode("D001")).thenReturn(Optional.of(dept("D001", "主部门")));
+        when(userRepository.findByIntranetEmail("zhangsan@crowncad.com")).thenReturn(Optional.empty());
+        when(ldapGroupService.createGroup(any(), any())).thenAnswer(invocation -> "cn=" + invocation.getArgument(0) + ",ou=groups,dc=corp,dc=local");
+
+        User updated = userApplicationService.updateUser(new UpdateUserCommand(
+            2L,
+            "张三",
+            "new@corp.local",
+            "zhangsan@crowncad.com",
+            "13911111111",
+            "E10001",
+            "D001",
+            List.of(),
+            "admin"
+        ));
+
+        assertThat(updated.getIntranetEmail()).isEqualTo("zhangsan@crowncad.com");
+        verify(userRepository).updateProfile(argThat(user ->
+            "zhangsan@crowncad.com".equals(user.getIntranetEmail())
+        ));
+    }
+
+    @Test
+    void shouldRejectWhenManualUserIntranetEmailDuplicated() {
+        User existingUser = buildUser(9L, "lisi1002", UserStatus.ENABLED, 0).toBuilder()
+            .intranetEmail("shared@crowncad.com")
+            .build();
+        when(userRepository.findByIntranetEmail("shared@crowncad.com")).thenReturn(Optional.of(existingUser));
+        when(departmentRepository.findByDeptCode("D001")).thenReturn(Optional.of(dept("D001", "主部门")));
+
+        assertThatThrownBy(() -> userApplicationService.createUser(new CreateUserCommand(
+            "张三",
+            "zhangsan@corp.local",
+            "shared@crowncad.com",
+            "13900000000",
+            "E10001",
+            "D001",
+            List.of(),
+            "123456",
+            List.of(1L),
+            "admin"
+        )))
+            .isInstanceOf(BizException.class)
+            .hasMessage("内网邮箱已存在");
     }
 
     @Test
@@ -274,6 +345,56 @@ class UserApplicationServiceTest {
         assertThat(users).singleElement().satisfies(user ->
             assertThat(user.getDeptName()).isEqualTo("基础研发中心")
         );
+    }
+
+    @Test
+    void shouldDeleteUserWhenLdapUserAlreadyMissing() {
+        User existing = buildUser(2L, GENERATED_USERNAME, UserStatus.DISABLED, 1).toBuilder()
+            .roleCodes(Set.of("NORMAL_USER"))
+            .build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(existing));
+        when(ldapDirectoryService.existsByUid(GENERATED_USERNAME)).thenReturn(false);
+
+        userApplicationService.deleteUser(new DeleteUserCommand(2L, "admin"));
+
+        verify(ldapGroupService).removeUserFromAllGroups(GENERATED_USERNAME);
+        verify(ldapDirectoryService, never()).deleteUser(GENERATED_USERNAME);
+        verify(userRepository).removeAllRoles(2L);
+        verify(userRepository).logicalDelete(2L, GENERATED_USERNAME + "__deleted__2", 2);
+    }
+
+    @Test
+    void shouldWriteCompactAuditSummaryWhenBatchDeletingManyUsers() {
+        List<User> users = java.util.stream.LongStream.rangeClosed(1, 200)
+            .mapToObj(index -> User.builder()
+                .id(index)
+                .username("user" + index)
+                .realName("user" + index)
+                .status(UserStatus.DISABLED)
+                .sourceType(SourceType.MANUAL)
+                .tokenVersion(0)
+                .roleCodes(Set.of("NORMAL_USER"))
+                .build())
+            .toList();
+        for (User user : users) {
+            when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+            when(ldapDirectoryService.existsByUid(user.getUsername())).thenReturn(false);
+        }
+
+        BatchDeleteUsersResult result = userApplicationService.batchDeleteUsers(
+            new com.company.idm.application.user.BatchDeleteUsersCommand(
+                users.stream().map(User::getId).toList(),
+                "admin"
+            )
+        );
+
+        assertThat(result.deletedCount()).isEqualTo(200);
+        verify(auditLogRepository).save(argThat(log ->
+            "USER_BATCH_DELETE".equals(log.getBizId())
+                && log.getAfterJson() != null
+                && log.getAfterJson().contains("\"totalCount\":200")
+                && log.getAfterJson().contains("\"truncated\":true")
+        ));
     }
 
     private Department dept(String deptCode, String deptName) {

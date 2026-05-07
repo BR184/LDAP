@@ -7,6 +7,7 @@ import com.company.idm.application.sync.feishu.FeishuImportDocumentResolver;
 import com.company.idm.application.sync.feishu.FeishuUserImportResult;
 import com.company.idm.application.sync.feishu.FeishuUserImportService;
 import com.company.idm.application.sync.feishu.FeishuUserPayload;
+import com.company.idm.application.user.IntranetEmailGenerationService;
 import com.company.idm.application.user.UsernameGenerationService;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.SyncDiffType;
@@ -76,6 +77,9 @@ class FeishuUserImportServiceTest {
     @Mock
     private FeishuImportDocumentResolver importDocumentResolver;
 
+    @Mock
+    private IntranetEmailGenerationService intranetEmailGenerationService;
+
     @Test
     void shouldPreviewNewUsersSuccessfully() {
         FeishuUserImportService service = buildService();
@@ -93,6 +97,7 @@ class FeishuUserImportServiceTest {
         when(userRepository.findByExternalId("u001")).thenReturn(Optional.empty());
         when(userRepository.findByUsername(GENERATED_USERNAME)).thenReturn(Optional.empty());
         when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.empty());
+        when(intranetEmailGenerationService.generate("u001", null)).thenReturn("u001@crowncad.com");
 
         FeishuUserImportResult result = service.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null));
 
@@ -111,6 +116,7 @@ class FeishuUserImportServiceTest {
             .username(GENERATED_USERNAME)
             .realName("张三")
             .email("zhangsan@corp.local")
+            .intranetEmail("u001@crowncad.com")
             .mobile("13900000000")
             .employeeNo("E10001")
             .deptCode("D100")
@@ -136,6 +142,7 @@ class FeishuUserImportServiceTest {
         when(userRepository.findByExternalId("u001")).thenReturn(Optional.empty());
         when(userRepository.findByUsername(GENERATED_USERNAME)).thenReturn(Optional.empty());
         when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.empty());
+        when(intranetEmailGenerationService.generate("u001", null)).thenReturn("u001@crowncad.com");
         when(roleRepository.findByCode("NORMAL_USER")).thenReturn(Optional.of(normalUser));
         when(userRepository.save(any(User.class))).thenReturn(firstSaved, secondSaved);
         when(ldapDirectoryService.existsByUid(GENERATED_USERNAME)).thenReturn(false);
@@ -186,6 +193,7 @@ class FeishuUserImportServiceTest {
             .username(GENERATED_USERNAME)
             .realName("张三")
             .email("existing@corp.local")
+            .intranetEmail("u001@crowncad.com")
             .mobile("13900000000")
             .employeeNo("E10001")
             .deptCode("D100")
@@ -207,12 +215,13 @@ class FeishuUserImportServiceTest {
         when(userRepository.findByUsername(GENERATED_USERNAME)).thenReturn(Optional.empty());
         when(userRepository.findByEmployeeNo("E10001")).thenReturn(Optional.empty());
         when(ldapDirectoryService.existsByUid(GENERATED_USERNAME)).thenReturn(true);
-
         FeishuUserImportResult result = service.preview(new SyncRequestPayload(false, null, false, "admin", SyncTriggerMode.MANUAL, null));
 
-        assertThat(result.noChangeCount()).isEqualTo(1);
-        assertThat(result.updateCount()).isZero();
-        assertThat(result.diffs()).isEmpty();
+        assertThat(result.noChangeCount()).isZero();
+        assertThat(result.updateCount()).isEqualTo(1);
+        assertThat(result.diffs()).singleElement().satisfies(diff ->
+            assertThat(diff.diffType()).isEqualTo(SyncDiffType.FIELD_MISMATCH)
+        );
     }
 
     private Department dept(String deptCode, String deptName, String externalId) {
@@ -242,6 +251,7 @@ class FeishuUserImportServiceTest {
             policyRefreshService,
             passwordPolicyValidator,
             new UsernameGenerationService(),
+            intranetEmailGenerationService,
             ldapProperties
         );
     }

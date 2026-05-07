@@ -17,6 +17,8 @@ public interface UserRepository {
 
     Optional<User> findByEmployeeNo(String employeeNo);
 
+    Optional<User> findByIntranetEmail(String intranetEmail);
+
     List<User> findAll();
 
     List<User> findByConditions(String username, String deptCode, Integer statusCode);
@@ -39,6 +41,6 @@ public interface UserRepository {
 
     List<UserRoleBinding> listUserRoleBindings();
 
-    boolean existsDeptBinding(String deptCode);
+    boolean existsActiveDeptBinding(String deptCode);
 }
 

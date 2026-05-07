@@ -206,7 +206,7 @@ class DepartmentApplicationServiceTest {
             .build();
         when(departmentRepository.findByDeptCode("D100")).thenReturn(Optional.of(current));
         when(departmentRepository.existsChildren("D100")).thenReturn(false);
-        when(userRepository.existsDeptBinding("D100")).thenReturn(true);
+        when(userRepository.existsActiveDeptBinding("D100")).thenReturn(true);
 
         assertThatThrownBy(() -> departmentApplicationService.deleteDepartment(
             new DeleteDepartmentCommand("D100", "admin")
@@ -228,7 +228,7 @@ class DepartmentApplicationServiceTest {
             .build();
         when(departmentRepository.findByDeptCode("D100")).thenReturn(Optional.of(current));
         when(departmentRepository.existsChildren("D100")).thenReturn(false);
-        when(userRepository.existsDeptBinding("D100")).thenReturn(false);
+        when(userRepository.existsActiveDeptBinding("D100")).thenReturn(false);
 
         departmentApplicationService.deleteDepartment(new DeleteDepartmentCommand("D100", "admin"));
 

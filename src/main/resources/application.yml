@@ -77,7 +77,7 @@ app:
     # 密码重置邮件的默认主题与提示文案，可通过环境变量覆盖。
     mail-subject: ${APP_PASSWORD_RESET_MAIL_SUBJECT:统一身份管理平台密码重置通知}
     mail-from: ${APP_PASSWORD_RESET_MAIL_FROM:}
-    forgot-password-success-notice: ${APP_PASSWORD_RESET_FORGOT_NOTICE:如账号信息有效，系统已向绑定工作邮箱发送重置邮件，请注意查收}
+    forgot-password-success-notice: ${APP_PASSWORD_RESET_FORGOT_NOTICE:如账号信息有效，系统已向绑定内网邮箱发送重置邮件，请注意查收}
     username-cooldown-seconds: ${APP_PASSWORD_RESET_USERNAME_COOLDOWN_SECONDS:300}
     ip-window-seconds: ${APP_PASSWORD_RESET_IP_WINDOW_SECONDS:300}
     ip-max-attempts: ${APP_PASSWORD_RESET_IP_MAX_ATTEMPTS:10}
@@ -105,3 +105,4 @@ app:
         enabled: false
         cron: "0 30 2 * * *"
         auto-repair: true
+

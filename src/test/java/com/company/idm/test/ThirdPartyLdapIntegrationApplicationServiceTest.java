@@ -45,8 +45,8 @@ class ThirdPartyLdapIntegrationApplicationServiceTest {
         assertThat(framework.baseDn()).isEqualTo("dc=corp,dc=local");
         assertThat(framework.userBase()).isEqualTo("ou=people,dc=corp,dc=local");
         assertThat(framework.groupBase()).isEqualTo("ou=groups,dc=corp,dc=local");
-        assertThat(framework.loginAttr()).isEqualTo("uid");
-        assertThat(framework.userFilter()).isEqualTo("(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))");
+        assertThat(framework.loginAttr()).isEqualTo("employeeNumber");
+        assertThat(framework.userFilter()).isEqualTo("(&(objectClass=inetOrgPerson)(employeeNumber={login})(employeeType=ENABLED))");
         assertThat(framework.authorizationMode()).isEqualTo("LOCAL_ONLY");
         assertThat(framework.supportedSystems()).containsExactly("gitlab", "jenkins", "nexus", "zentao");
     }
@@ -67,11 +67,12 @@ class ThirdPartyLdapIntegrationApplicationServiceTest {
             .containsEntry("port", "636")
             .containsEntry("base_dn", "dc=corp,dc=local")
             .containsEntry("user_base", "ou=people,dc=corp,dc=local")
+            .containsEntry("uid", "employeeNumber")
             .containsEntry("user_filter", "(&(objectClass=inetOrgPerson)(employeeType=ENABLED))")
             .containsEntry("bind_password", "${LDAP_BIND_PASSWORD}")
             .containsEntry("encryption", "simple_tls");
         assertThat(template.fieldMappings())
-            .containsEntry("uid", "uid")
+            .containsEntry("uid", "employeeNumber")
             .containsEntry("name", "cn")
             .containsEntry("email", "mail");
         assertThat(template.notes()).anyMatch(item -> item.contains("GitLab"));
@@ -118,6 +119,7 @@ class ThirdPartyLdapIntegrationApplicationServiceTest {
         return LdapUserSnapshot.builder()
             .username(username)
             .realName(username)
+            .employeeNo(username)
             .status(status)
             .dn("uid=" + username + ",ou=people,dc=corp,dc=local")
             .build();

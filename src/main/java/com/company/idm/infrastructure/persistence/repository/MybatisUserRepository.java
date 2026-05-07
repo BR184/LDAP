@@ -1,6 +1,7 @@
 package com.company.idm.infrastructure.persistence.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.UserStatus;
 import com.company.idm.domain.user.User;
@@ -67,6 +68,17 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
+    public Optional<User> findByIntranetEmail(String intranetEmail) {
+        if (intranetEmail == null || intranetEmail.isBlank()) {
+            return Optional.empty();
+        }
+        UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
+            .eq(UserDO::getIntranetEmail, intranetEmail)
+            .eq(UserDO::getDeleted, 0));
+        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())));
+    }
+
+    @Override
     public List<User> findAll() {
         return userMapper.selectList(new LambdaQueryWrapper<UserDO>()
                 .eq(UserDO::getDeleted, 0)
@@ -83,7 +95,12 @@ public class MybatisUserRepository implements UserRepository {
             .orderByAsc(UserDO::getId);
 
         if (username != null && !username.isBlank()) {
-            queryWrapper.like(UserDO::getUsername, username);
+            queryWrapper.and(wrapper -> wrapper
+                .like(UserDO::getUsername, username)
+                .or()
+                .like(UserDO::getRealName, username)
+                .or()
+                .like(UserDO::getEmployeeNo, username));
         }
         if (deptCode != null && !deptCode.isBlank()) {
             queryWrapper.eq(UserDO::getDeptCode, deptCode);
@@ -120,10 +137,16 @@ public class MybatisUserRepository implements UserRepository {
                 .eq(UserDO::getId, user.getId())
                 .set(UserDO::getRealName, user.getRealName())
                 .set(UserDO::getEmail, user.getEmail())
+                .set(UserDO::getIntranetEmail, user.getIntranetEmail())
                 .set(UserDO::getMobile, user.getMobile())
                 .set(UserDO::getEmployeeNo, user.getEmployeeNo())
                 .set(UserDO::getDeptCode, user.getDeptCode())
+                .set(UserDO::getJobTitle, user.getJobTitle())
+                .set(UserDO::getDirectLeaderRaw, user.getDirectLeaderRaw())
+                .set(UserDO::getLeaderRef, user.getLeaderRef())
+                .set(UserDO::getAccountStatus, user.getAccountStatus())
                 .set(UserDO::getPartTimeDeptCodes, joinDeptCodes(user.getPartTimeDeptCodes()))
+                .set(UserDO::getEmploymentStatus, user.getEmploymentStatus() == null ? null : user.getEmploymentStatus().name())
                 .set(UserDO::getModifier, "system")
                 .set(UserDO::getGmtModified, LocalDateTime.now())
         );
@@ -134,6 +157,7 @@ public class MybatisUserRepository implements UserRepository {
         UserDO dataObject = new UserDO();
         dataObject.setId(id);
         dataObject.setStatus(statusCode);
+        dataObject.setAccountStatus(statusCode != null && statusCode == UserStatus.ENABLED.getCode() ? "正常" : "冻结");
         dataObject.setTokenVersion(tokenVersion);
         dataObject.setModifier("system");
         dataObject.setGmtModified(LocalDateTime.now());
@@ -148,6 +172,7 @@ public class MybatisUserRepository implements UserRepository {
                 .eq(UserDO::getId, id)
                 .set(UserDO::getUsername, recycledUsername)
                 .set(UserDO::getEmployeeNo, null)
+                .set(UserDO::getIntranetEmail, null)
                 .set(UserDO::getPartTimeDeptCodes, null)
                 .set(UserDO::getDeleted, 1)
                 .set(UserDO::getStatus, UserStatus.DISABLED.getCode())
@@ -202,10 +227,17 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
-    public boolean existsDeptBinding(String deptCode) {
+    public boolean existsActiveDeptBinding(String deptCode) {
+        if (deptCode == null || deptCode.isBlank()) {
+            return false;
+        }
         return userMapper.selectCount(new LambdaQueryWrapper<UserDO>()
-            .eq(UserDO::getDeptCode, deptCode)
-            .eq(UserDO::getDeleted, 0)) > 0;
+            .eq(UserDO::getDeleted, 0)
+            .ne(UserDO::getEmploymentStatus, EmploymentStatus.RESIGNED.name())
+            .and(wrapper -> wrapper
+                .eq(UserDO::getDeptCode, deptCode)
+                .or()
+                .like(UserDO::getPartTimeDeptCodes, deptCode))) > 0;
     }
 
     private User toDomain(UserDO dataObject, Set<String> roleCodes) {
@@ -214,11 +246,17 @@ public class MybatisUserRepository implements UserRepository {
             .username(dataObject.getUsername())
             .realName(dataObject.getRealName())
             .email(dataObject.getEmail())
+            .intranetEmail(dataObject.getIntranetEmail())
             .mobile(dataObject.getMobile())
             .employeeNo(dataObject.getEmployeeNo())
             .deptCode(dataObject.getDeptCode())
+            .jobTitle(dataObject.getJobTitle())
+            .directLeaderRaw(dataObject.getDirectLeaderRaw())
+            .leaderRef(dataObject.getLeaderRef())
+            .accountStatus(dataObject.getAccountStatus())
             .partTimeDeptCodes(parseDeptCodes(dataObject.getPartTimeDeptCodes()))
             .status(UserStatus.fromCode(dataObject.getStatus()))
+            .employmentStatus(EmploymentStatus.fromCode(dataObject.getEmploymentStatus()))
             .sourceType(SourceType.valueOf(dataObject.getSourceType()))
             .externalId(dataObject.getExternalId())
             .ldapDn(dataObject.getLdapDn())
@@ -233,10 +271,16 @@ public class MybatisUserRepository implements UserRepository {
         dataObject.setUsername(user.getUsername());
         dataObject.setRealName(user.getRealName());
         dataObject.setEmail(user.getEmail());
+        dataObject.setIntranetEmail(user.getIntranetEmail());
         dataObject.setMobile(user.getMobile());
         dataObject.setEmployeeNo(user.getEmployeeNo());
         dataObject.setDeptCode(user.getDeptCode());
+        dataObject.setJobTitle(user.getJobTitle());
+        dataObject.setDirectLeaderRaw(user.getDirectLeaderRaw());
+        dataObject.setLeaderRef(user.getLeaderRef());
+        dataObject.setAccountStatus(user.getAccountStatus());
         dataObject.setPartTimeDeptCodes(joinDeptCodes(user.getPartTimeDeptCodes()));
+        dataObject.setEmploymentStatus(user.getEmploymentStatus() == null ? null : user.getEmploymentStatus().name());
         dataObject.setStatus(user.getStatus().getCode());
         dataObject.setSourceType(user.getSourceType().name());
         dataObject.setExternalId(user.getExternalId());

@@ -94,7 +94,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
             boolean dnMismatch = !safe(user.getLdapDn()).equals(safe(expectedDn));
             boolean statusMismatch = !expectedStatus(user.getStatus()).equals(safe(snapshot.getStatus()));
             boolean fieldMismatch = !safe(user.getRealName()).equals(safe(snapshot.getRealName()))
-                || !safe(user.getEmail()).equals(safe(snapshot.getEmail()))
+                || !safe(resolveLdapMail(user)).equals(safe(snapshot.getEmail()))
                 || !safe(user.getMobile()).equals(safe(snapshot.getMobile()))
                 || !safe(user.getEmployeeNo()).equals(safe(snapshot.getEmployeeNo()))
                 || !safe(user.getDeptCode()).equals(safe(snapshot.getDeptCode()));
@@ -155,7 +155,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
             """.formatted(
             safe(user.getUsername()),
             safe(user.getRealName()),
-            safe(user.getEmail()),
+            safe(resolveLdapMail(user)),
             safe(user.getMobile()),
             safe(user.getEmployeeNo()),
             safe(user.getDeptCode()),
@@ -184,5 +184,15 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
 
     private String safe(String value) {
         return value == null ? "" : value.replace("\"", "\\\"");
+    }
+
+    private String resolveLdapMail(User user) {
+        if (user == null) {
+            return null;
+        }
+        if (user.getIntranetEmail() != null && !user.getIntranetEmail().isBlank()) {
+            return user.getIntranetEmail();
+        }
+        return user.getEmail();
     }
 }

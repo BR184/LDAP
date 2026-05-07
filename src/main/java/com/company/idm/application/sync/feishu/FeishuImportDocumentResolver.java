@@ -46,6 +46,7 @@ public class FeishuImportDocumentResolver {
 
     private static final String HEADER_NAME = "姓名";
     private static final String HEADER_MOBILE = "手机号";
+    private static final String HEADER_CONTACT_MOBILE = "联系手机";
     private static final String HEADER_MOBILE_NUMBER = "手机号码";
     private static final String HEADER_EMPLOYEE_NO = "工号";
     private static final String HEADER_STATUS = "人员状态";
@@ -60,6 +61,9 @@ public class FeishuImportDocumentResolver {
     private static final String HEADER_USER_ID = "用户ID";
     private static final String HEADER_USER_ID_LOWER = "用户id";
     private static final String HEADER_WORK_EMAIL = "工作邮箱";
+    private static final String HEADER_JOB_TITLE = "职务";
+    private static final String HEADER_DIRECT_LEADER = "直属上级";
+    private static final String HEADER_ACCOUNT_STATUS = "账号状态";
 
     private final FeishuFileImportProperties properties;
     private final ObjectMapper objectMapper;
@@ -185,11 +189,17 @@ public class FeishuImportDocumentResolver {
                 username,
                 realName,
                 normalizeEmail(email),
-                normalizeMobile(readOptionalCell(row, headerIndex, formatter, HEADER_MOBILE, HEADER_MOBILE_NUMBER)),
+                normalizeMobile(readOptionalCell(row, headerIndex, formatter, HEADER_MOBILE, HEADER_CONTACT_MOBILE, HEADER_MOBILE_NUMBER)),
                 employeeNo,
+                readOptionalCell(row, headerIndex, formatter, HEADER_JOB_TITLE),
+                readOptionalCell(row, headerIndex, formatter, HEADER_DIRECT_LEADER),
+                readOptionalCell(row, headerIndex, formatter, HEADER_ACCOUNT_STATUS),
                 departmentExternalIds.get(0),
                 departmentExternalIds.size() > 1 ? departmentExternalIds.subList(1, departmentExternalIds.size()) : List.of(),
-                resolveUserStatus(readOptionalCell(row, headerIndex, formatter, HEADER_STATUS)),
+                resolveUserStatus(firstNonBlank(
+                    readOptionalCell(row, headerIndex, formatter, HEADER_STATUS),
+                    readOptionalCell(row, headerIndex, formatter, HEADER_ACCOUNT_STATUS)
+                )),
                 orderNo++
             ));
         }
@@ -202,6 +212,9 @@ public class FeishuImportDocumentResolver {
                 item.email(),
                 item.mobile(),
                 item.employeeNo(),
+                item.jobTitle(),
+                item.directLeaderRaw(),
+                item.accountStatus(),
                 item.mainDepartmentExternalId(),
                 item.partTimeDepartmentExternalIds(),
                 item.status(),
@@ -343,7 +356,20 @@ public class FeishuImportDocumentResolver {
         if (statusText == null || statusText.isBlank()) {
             return 1;
         }
-        return statusText.trim().contains("在职") ? 1 : 0;
+        String normalizedStatus = statusText.trim();
+        if (normalizedStatus.contains("在职")
+            || normalizedStatus.contains("正常")
+            || normalizedStatus.contains("启用")
+            || normalizedStatus.contains("激活")) {
+            return 1;
+        }
+        if (normalizedStatus.contains("离职")
+            || normalizedStatus.contains("冻结")
+            || normalizedStatus.contains("禁用")
+            || normalizedStatus.contains("停用")) {
+            return 0;
+        }
+        return 1;
     }
 
     private String buildDepartmentExternalId(String pathKey) {
@@ -576,6 +602,9 @@ public class FeishuImportDocumentResolver {
         String email,
         String mobile,
         String employeeNo,
+        String jobTitle,
+        String directLeaderRaw,
+        String accountStatus,
         String mainDepartmentExternalId,
         List<String> partTimeDepartmentExternalIds,
         Integer status,

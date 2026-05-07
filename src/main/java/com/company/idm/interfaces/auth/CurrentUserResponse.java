@@ -10,7 +10,9 @@ public record CurrentUserResponse(
     String username,
     String realName,
     String email,
+    String intranetEmail,
     String mobile,
+    String employeeNo,
     String deptCode,
     Set<String> roleCodes
 ) {

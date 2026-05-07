@@ -46,7 +46,7 @@ public class DynamicPasswordResetNotificationService implements PasswordResetNot
         mailSender.sendPlainTextMail(
             config,
             decryptedPassword,
-            user.getEmail(),
+            user.getIntranetEmail(),
             passwordResetProperties.getMailSubject(),
             """
                 当前密码已重置为：%s，请尽快修改密码！

@@ -9,6 +9,7 @@ public record UpdateUserCommand(
     Long userId,
     String realName,
     String email,
+    String intranetEmail,
     String mobile,
     String employeeNo,
     String deptCode,
@@ -19,11 +20,12 @@ public record UpdateUserCommand(
         Long userId,
         String realName,
         String email,
+        String intranetEmail,
         String mobile,
         String employeeNo,
         String deptCode,
         String operator
     ) {
-        this(userId, realName, email, mobile, employeeNo, deptCode, List.of(), operator);
+        this(userId, realName, email, intranetEmail, mobile, employeeNo, deptCode, List.of(), operator);
     }
 }

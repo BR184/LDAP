@@ -82,6 +82,7 @@ public class UserController {
         User user = userApplicationService.createUser(new CreateUserCommand(
             request.realName(),
             request.email(),
+            request.intranetEmail(),
             request.mobile(),
             request.employeeNo(),
             request.deptCode(),
@@ -104,6 +105,7 @@ public class UserController {
             id,
             request.realName(),
             request.email(),
+            request.intranetEmail(),
             request.mobile(),
             request.employeeNo(),
             request.deptCode(),
@@ -142,6 +144,9 @@ public class UserController {
     ) {
         BatchDeleteUsersResult result = userApplicationService.batchDeleteUsers(new BatchDeleteUsersCommand(
             request.userIds(),
+            request.usernameKeyword(),
+            request.deptNameKeyword(),
+            request.statusCode(),
             username
         ));
         return ApiResponse.success(new BatchDeleteUsersResponse(result.totalCount(), result.deletedCount()));
@@ -237,14 +242,20 @@ public class UserController {
             user.getUsername(),
             user.getRealName(),
             user.getEmail(),
+            user.getIntranetEmail(),
             user.getMobile(),
             user.getEmployeeNo(),
             user.getDeptName(),
             user.getDeptCode(),
+            user.getJobTitle(),
+            user.getDirectLeaderRaw(),
+            user.getLeaderRef(),
+            user.getAccountStatus(),
             user.getPartTimeDeptCodes(),
             user.getPartTimeDeptNames(),
             user.getPermissionLevel(),
             user.getStatus().getCode(),
+            user.getEmploymentStatus() == null ? null : user.getEmploymentStatus().name(),
             user.getLdapDn(),
             user.getRoleCodes()
         );

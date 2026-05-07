@@ -49,8 +49,8 @@ class ThirdPartyLdapControllerTest extends AbstractControllerMvcTest {
             "dc=corp,dc=local",
             "ou=people,dc=corp,dc=local",
             "ou=groups,dc=corp,dc=local",
-            "uid",
-            "(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))",
+            "employeeNumber",
+            "(&(objectClass=inetOrgPerson)(employeeNumber={login})(employeeType=ENABLED))",
             "LOCAL_ONLY",
             List.of("gitlab", "jenkins")
         ));
@@ -58,7 +58,7 @@ class ThirdPartyLdapControllerTest extends AbstractControllerMvcTest {
         mockMvc.perform(get("/api/v1/ldap/framework"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.mode").value("spring"))
-            .andExpect(jsonPath("$.data.loginAttr").value("uid"))
+            .andExpect(jsonPath("$.data.loginAttr").value("employeeNumber"))
             .andExpect(jsonPath("$.data.supportedSystems[0]").value("gitlab"));
     }
 
@@ -83,9 +83,10 @@ class ThirdPartyLdapControllerTest extends AbstractControllerMvcTest {
             Map.of(
                 "host", "ldap.corp.local",
                 "port", "389",
+                "uid", "employeeNumber",
                 "user_filter", "(&(objectClass=inetOrgPerson)(employeeType=ENABLED))"
             ),
-            Map.of("uid", "uid", "name", "cn", "email", "mail"),
+            Map.of("uid", "employeeNumber", "name", "cn", "email", "mail"),
             List.of("note-1", "note-2")
         ));
 
@@ -124,7 +125,7 @@ class ThirdPartyLdapControllerTest extends AbstractControllerMvcTest {
         ))).thenReturn(new ThirdPartyLdapPrecheckReport(
             "gitlab",
             "spring",
-            "(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))",
+            "(&(objectClass=inetOrgPerson)(employeeNumber={login})(employeeType=ENABLED))",
             ThirdPartyLdapCheckStatus.PASS,
             List.of(
                 new ThirdPartyLdapPrecheckItem("LOGIN_ATTR_FIXED", "登录字段固定", ThirdPartyLdapCheckStatus.PASS, "ok"),

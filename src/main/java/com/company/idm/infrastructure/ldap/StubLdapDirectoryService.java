@@ -74,7 +74,7 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
             true,
             dn,
             user.getRealName(),
-            user.getEmail(),
+            resolveMail(user),
             user.getMobile(),
             user.getEmployeeNo(),
             user.getDeptCode()
@@ -86,7 +86,7 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
     public void updateUser(User user) {
         entries.computeIfPresent(user.getUsername(), (key, value) -> value.withProfile(
             user.getRealName(),
-            user.getEmail(),
+            resolveMail(user),
             user.getMobile(),
             user.getEmployeeNo(),
             user.getDeptCode()
@@ -115,6 +115,16 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
 
     private String buildDn(String username) {
         return LdapDnHelper.buildUserDn(ldapProperties, username);
+    }
+
+    private String resolveMail(User user) {
+        if (user == null) {
+            return null;
+        }
+        if (user.getIntranetEmail() != null && !user.getIntranetEmail().isBlank()) {
+            return user.getIntranetEmail();
+        }
+        return user.getEmail();
     }
 
     private record StubEntry(

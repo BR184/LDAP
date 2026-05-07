@@ -25,11 +25,14 @@ const emit = defineEmits<{
       </template>
 
       <el-descriptions v-if="user" :column="1" border>
-        <el-descriptions-item label="用户名">{{ user.username }}</el-descriptions-item>
         <el-descriptions-item label="姓名">{{ user.realName }}</el-descriptions-item>
         <el-descriptions-item label="工作邮箱">{{ user.email || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="内网邮箱">{{ user.intranetEmail || '--' }}</el-descriptions-item>
         <el-descriptions-item label="手机号">{{ user.mobile || '--' }}</el-descriptions-item>
         <el-descriptions-item label="工号">{{ user.employeeNo || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="职务">{{ user.jobTitle || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="直属上级">{{ user.directLeaderRaw || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="上级ID">{{ user.leaderRef || '--' }}</el-descriptions-item>
         <el-descriptions-item label="主部门编码">{{ user.deptCode || '--' }}</el-descriptions-item>
         <el-descriptions-item label="主部门名称">{{ user.deptName || '--' }}</el-descriptions-item>
         <el-descriptions-item label="兼职部门">
@@ -49,6 +52,7 @@ const emit = defineEmits<{
             {{ user.status === 1 ? '启用' : '禁用' }}
           </el-tag>
         </el-descriptions-item>
+        <el-descriptions-item label="在职状态">{{ user.employmentStatus === 'RESIGNED' ? '离职' : '在职' }}</el-descriptions-item>
         <el-descriptions-item label="角色">
           <el-space wrap>
             <el-tag v-for="role in user.roleCodes" :key="role" type="info">{{ role }}</el-tag>

@@ -2,6 +2,7 @@ package com.company.idm.test;
 
 import com.company.idm.application.user.AdminResetPasswordCommand;
 import com.company.idm.application.user.ForgotPasswordCommand;
+import com.company.idm.application.user.IntranetEmailGenerationService;
 import com.company.idm.application.user.PasswordResetApplicationService;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.UserStatus;
@@ -57,6 +58,9 @@ class PasswordResetApplicationServiceTest {
     @Mock
     private PasswordResetThrottleService passwordResetThrottleService;
 
+    @Mock
+    private IntranetEmailGenerationService intranetEmailGenerationService;
+
     @InjectMocks
     private PasswordResetApplicationService passwordResetApplicationService;
 
@@ -95,6 +99,22 @@ class PasswordResetApplicationServiceTest {
     }
 
     @Test
+    void shouldResolveForgotPasswordByEmployeeNo() {
+        User user = buildUser("zhangsan1001", "zhangsan@corp.local", UserStatus.ENABLED, 2).toBuilder()
+            .employeeNo("1001")
+            .build();
+        when(passwordResetThrottleService.tryAcquire("1001", "127.0.0.1")).thenReturn(true);
+        when(userRepository.findByUsername("1001")).thenReturn(Optional.empty());
+        when(userRepository.findByEmployeeNo("1001")).thenReturn(Optional.of(user));
+        when(passwordGenerator.generateSixDigitNumericPassword()).thenReturn("654321");
+
+        passwordResetApplicationService.forgotPassword(new ForgotPasswordCommand("1001", "127.0.0.1"));
+
+        verify(ldapDirectoryService).resetPassword("zhangsan1001", "654321");
+        verify(passwordResetNotificationService).sendPasswordResetMail(user, "654321");
+    }
+
+    @Test
     void shouldIgnoreForgotPasswordWhenUserNotFound() {
         when(passwordResetThrottleService.tryAcquire("ghost", "127.0.0.1")).thenReturn(true);
         when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
@@ -107,16 +127,21 @@ class PasswordResetApplicationServiceTest {
     }
 
     @Test
-    void shouldIgnoreForgotPasswordWhenUserHasNoEmail() {
+    void shouldGenerateIntranetEmailWhenForgotPasswordUserHasNoWorkEmail() {
         User user = buildUser("zhangsan", null, UserStatus.ENABLED, 0);
         when(passwordResetThrottleService.tryAcquire("zhangsan", "127.0.0.1")).thenReturn(true);
         when(userRepository.findByUsername("zhangsan")).thenReturn(Optional.of(user));
+        when(intranetEmailGenerationService.generate("2", 2L)).thenReturn("2@crowncad.com");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0, User.class));
+        when(passwordGenerator.generateSixDigitNumericPassword()).thenReturn("654321");
 
         assertThatCode(() -> passwordResetApplicationService.forgotPassword(new ForgotPasswordCommand("zhangsan", "127.0.0.1")))
             .doesNotThrowAnyException();
 
-        verify(ldapDirectoryService, never()).resetPassword(any(), any());
-        verify(passwordResetNotificationService, never()).sendPasswordResetMail(any(), any());
+        verify(ldapDirectoryService).resetPassword("zhangsan", "654321");
+        verify(passwordResetNotificationService).sendPasswordResetMail(argThat(savedUser ->
+            "2@crowncad.com".equals(savedUser.getIntranetEmail())
+        ), org.mockito.ArgumentMatchers.eq("654321"));
     }
 
     @Test
@@ -162,6 +187,7 @@ class PasswordResetApplicationServiceTest {
             .username(username)
             .realName("张三")
             .email(email)
+            .intranetEmail(email == null ? null : "e10001@crowncad.com")
             .mobile("13900000000")
             .employeeNo("E10001")
             .deptCode("D001")

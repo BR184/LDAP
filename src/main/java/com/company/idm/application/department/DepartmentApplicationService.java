@@ -165,7 +165,7 @@ public class DepartmentApplicationService {
         if (departmentRepository.existsChildren(command.deptCode())) {
             throw new BizException("DEPT_DELETE_FORBIDDEN", "当前部门存在子部门，不能直接删除");
         }
-        if (userRepository.existsDeptBinding(command.deptCode())) {
+        if (userRepository.existsActiveDeptBinding(command.deptCode())) {
             throw new BizException("DEPT_IN_USE", "当前部门已绑定用户，不能直接删除");
         }
         ldapGroupService.deleteGroup(command.deptCode());

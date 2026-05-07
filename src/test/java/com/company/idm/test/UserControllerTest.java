@@ -78,6 +78,7 @@ class UserControllerTest extends AbstractControllerMvcTest {
         when(userApplicationService.createUser(argThat((CreateUserCommand command) ->
             "张三".equals(command.realName())
                 && "zhangsan@corp.local".equals(command.email())
+                && "zhangsan@crowncad.com".equals(command.intranetEmail())
                 && "E10001".equals(command.employeeNo())
                 && List.of(1L).equals(command.roleIds())
         ))).thenReturn(buildUser(2L, "zhangsane10001", UserStatus.ENABLED, "E10001"));
@@ -88,6 +89,7 @@ class UserControllerTest extends AbstractControllerMvcTest {
                     {
                       "realName": "张三",
                       "email": "zhangsan@corp.local",
+                      "intranetEmail": "zhangsan@crowncad.com",
                       "mobile": "13900000000",
                       "employeeNo": "E10001",
                       "deptCode": "D001",
@@ -108,6 +110,7 @@ class UserControllerTest extends AbstractControllerMvcTest {
                 && "admin".equals(command.operator())
                 && "E10002".equals(command.employeeNo())
                 && "zhangsan@corp.local".equals(command.email())
+                && "zhangsan@crowncad.com".equals(command.intranetEmail())
         ))).thenReturn(buildUser(2L, "zhangsane10001", UserStatus.ENABLED, "E10002"));
 
         mockMvc.perform(put("/api/v1/users/{id}", 2L)
@@ -116,6 +119,7 @@ class UserControllerTest extends AbstractControllerMvcTest {
                     {
                       "realName": "张三",
                       "email": "zhangsan@corp.local",
+                      "intranetEmail": "zhangsan@crowncad.com",
                       "mobile": "13900000000",
                       "employeeNo": "E10002",
                       "deptCode": "D001"
@@ -127,8 +131,15 @@ class UserControllerTest extends AbstractControllerMvcTest {
 
     @Test
     @WithMockUser(username = "admin")
-    void shouldReturnBadRequestWhenEmailMissingOnUpdate() throws Exception {
+    void shouldAllowEmptyWorkEmailOnUpdate() throws Exception {
         allow("/api/v1/users/2", "PUT");
+        when(userApplicationService.updateUser(argThat((UpdateUserCommand command) ->
+            command.userId().equals(2L)
+                && "admin".equals(command.operator())
+                && "E10002".equals(command.employeeNo())
+                && (command.email() == null || command.email().isBlank())
+                && "zhangsan@crowncad.com".equals(command.intranetEmail())
+        ))).thenReturn(buildUser(2L, "zhangsane10001", UserStatus.ENABLED, "E10002"));
 
         mockMvc.perform(put("/api/v1/users/{id}", 2L)
                 .contentType(APPLICATION_JSON)
@@ -136,13 +147,14 @@ class UserControllerTest extends AbstractControllerMvcTest {
                     {
                       "realName": "张三",
                       "email": "",
+                      "intranetEmail": "zhangsan@crowncad.com",
                       "mobile": "13900000000",
                       "employeeNo": "E10002",
                       "deptCode": "D001"
                     }
                     """))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("PARAM_INVALID"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.employeeNo").value("E10002"));
     }
 
     @Test
@@ -163,6 +175,33 @@ class UserControllerTest extends AbstractControllerMvcTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.totalCount").value(2))
             .andExpect(jsonPath("$.data.deletedCount").value(2));
+    }
+
+    @Test
+    @WithMockUser(username = "admin")
+    void shouldBatchDeleteUsersByQuerySuccessfully() throws Exception {
+        allow("/api/v1/users/batch-delete", "POST");
+        when(userApplicationService.batchDeleteUsers(argThat(command ->
+            command.operator().equals("admin")
+                && command.userIds().isEmpty()
+                && "1001".equals(command.usernameKeyword())
+                && "产品研发一部/四组".equals(command.deptNameKeyword())
+                && Integer.valueOf(1).equals(command.statusCode())
+        ))).thenReturn(new BatchDeleteUsersResult(12, 12));
+
+        mockMvc.perform(post("/api/v1/users/batch-delete")
+                .contentType(APPLICATION_JSON)
+                .content("""
+                    {
+                      "userIds": [],
+                      "usernameKeyword": "1001",
+                      "deptNameKeyword": "产品研发一部/四组",
+                      "statusCode": 1
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalCount").value(12))
+            .andExpect(jsonPath("$.data.deletedCount").value(12));
     }
 
     @Test

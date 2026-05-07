@@ -229,6 +229,30 @@ class FeishuImportDocumentResolverTest {
     }
 
     @Test
+    void shouldResolveContactMobileHeader() throws Exception {
+        Path rootDir = tempDir.resolve("imports");
+        Path document = rootDir.resolve("bundle/contact-mobile-roster.xlsx");
+        Files.createDirectories(document.getParent());
+        writeContactMobileWorkbook(
+            document,
+            List.<Object[]>of(new Object[] {
+                "于善鹏", "+86 13964112234", "3", "正常", "开发部门",
+                "用户725015的组织/开发部门", "开发部门", "276b33cd", "1940579892@qq.com"
+            })
+        );
+        when(userRepository.findAll()).thenReturn(List.of());
+
+        FeishuImportDocumentResolver resolver = buildResolver(rootDir);
+
+        FeishuFullImportDocument fullImportDocument = resolver.resolveFullImportDocument("bundle/contact-mobile-roster.xlsx");
+
+        assertThat(fullImportDocument.users()).singleElement().satisfies(user -> {
+            assertThat(user.mobile()).isEqualTo("13964112234");
+            assertThat(user.status()).isEqualTo(1);
+        });
+    }
+
+    @Test
     void shouldResolveRosterWhenHeaderStartsFromSecondRow() throws Exception {
         Path rootDir = tempDir.resolve("imports");
         Path document = rootDir.resolve("bundle/second-row-header.xlsx");
@@ -404,6 +428,37 @@ class FeishuImportDocumentResolverTest {
             rosterSheet.getRow(1).createCell(11).setCellValue("个人邮箱");
 
             int rowIndex = 2;
+            for (Object[] rowData : rows) {
+                var row = rosterSheet.createRow(rowIndex++);
+                for (int cellIndex = 0; cellIndex < rowData.length; cellIndex++) {
+                    Object value = rowData[cellIndex];
+                    if (value == null) {
+                        continue;
+                    }
+                    row.createCell(cellIndex).setCellValue(String.valueOf(value));
+                }
+            }
+
+            try (java.io.OutputStream outputStream = Files.newOutputStream(document)) {
+                workbook.write(outputStream);
+            }
+        }
+    }
+
+    private void writeContactMobileWorkbook(Path document, List<Object[]> rows) throws Exception {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            XSSFSheet rosterSheet = workbook.createSheet("在职人员");
+            rosterSheet.createRow(0).createCell(0).setCellValue("姓名");
+            rosterSheet.getRow(0).createCell(1).setCellValue("联系手机");
+            rosterSheet.getRow(0).createCell(2).setCellValue("工号");
+            rosterSheet.getRow(0).createCell(3).setCellValue("账号状态");
+            rosterSheet.getRow(0).createCell(4).setCellValue("部门");
+            rosterSheet.getRow(0).createCell(5).setCellValue("部门 (全路径)");
+            rosterSheet.getRow(0).createCell(6).setCellValue("一级部门");
+            rosterSheet.getRow(0).createCell(7).setCellValue("用户 ID");
+            rosterSheet.getRow(0).createCell(8).setCellValue("工作邮箱");
+
+            int rowIndex = 1;
             for (Object[] rowData : rows) {
                 var row = rosterSheet.createRow(rowIndex++);
                 for (int cellIndex = 0; cellIndex < rowData.length; cellIndex++) {

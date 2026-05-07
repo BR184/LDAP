@@ -1,5 +1,6 @@
 package com.company.idm.domain.user;
 
+import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.UserStatus;
 import java.util.List;
@@ -22,13 +23,19 @@ public class User {
     private String username;
     private String realName;
     private String email;
+    private String intranetEmail;
     private String mobile;
     private String employeeNo;
     private String deptCode;
     private String deptName;
+    private String jobTitle;
+    private String directLeaderRaw;
+    private String leaderRef;
+    private String accountStatus;
     private List<String> partTimeDeptCodes;
     private List<String> partTimeDeptNames;
     private UserStatus status;
+    private EmploymentStatus employmentStatus;
     private SourceType sourceType;
     private String externalId;
     private String ldapDn;
