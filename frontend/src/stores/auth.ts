@@ -12,7 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
   const profileLoading = ref(false)
   const menuStore = useMenuStore()
 
-  const displayName = computed(() => currentUser.value?.realName || currentUser.value?.username || '未登录')
+  const displayName = computed(() => currentUser.value?.realName || currentUser.value?.userId || '未登录')
 
   async function signIn(payload: LoginCommand) {
     const result = await login(payload)

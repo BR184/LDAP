@@ -24,8 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 提供菜单树查询接口。
- */
+ * 鎻愪緵鑿滃崟鏍戞煡璇㈡帴鍙ｃ€? */
 @RestController
 @RequestMapping("/api/v1/menus")
 @RequiredArgsConstructor
@@ -43,7 +42,7 @@ public class MenuController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/menus', 'POST')")
     public ApiResponse<MenuResponse> create(
         @Valid @RequestBody CreateMenuRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         Menu menu = rbacApplicationService.createMenu(new CreateMenuCommand(
             request.menuCode(),
@@ -65,7 +64,7 @@ public class MenuController {
     public ApiResponse<MenuResponse> update(
         @PathVariable Long id,
         @Valid @RequestBody UpdateMenuRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         Menu menu = rbacApplicationService.updateMenu(new UpdateMenuCommand(
             id,
@@ -86,7 +85,7 @@ public class MenuController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/menus/' + #id, 'DELETE')")
     public ApiResponse<Void> delete(
         @PathVariable Long id,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         rbacApplicationService.deleteMenu(new DeleteMenuCommand(id, username));
         return ApiResponse.success();
@@ -101,7 +100,7 @@ public class MenuController {
     @GetMapping("/self/tree")
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<MenuTreeNodeResponse>> selfTree(
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(buildTree(rbacApplicationService.listCurrentUserMenus(username)));
     }
@@ -153,3 +152,4 @@ public class MenuController {
         );
     }
 }
+

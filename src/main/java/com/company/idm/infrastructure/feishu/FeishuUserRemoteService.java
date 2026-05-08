@@ -41,8 +41,7 @@ public class FeishuUserRemoteService {
                 throw new BizException("FEISHU_USER_FETCH_FAILED", "飞书用户列表响应格式错误");
             }
             for (JsonNode item : items) {
-                String externalId = item.path("open_id").asText(null);
-                String username = deriveUsername(item);
+                String userId = item.path("open_id").asText(null);
                 String realName = item.path("name").asText(null);
                 JsonNode departmentIds = item.path("department_ids");
                 String mainDepartmentExternalId = departmentIds.isArray() && departmentIds.size() > 0
@@ -57,7 +56,7 @@ public class FeishuUserRemoteService {
                         }
                     }
                 }
-                if (isBlank(externalId) || isBlank(username) || isBlank(realName) || isBlank(mainDepartmentExternalId)) {
+                if (isBlank(userId) || isBlank(realName) || isBlank(mainDepartmentExternalId)) {
                     throw new BizException("FEISHU_USER_FETCH_FAILED", "飞书用户数据缺少关键字段");
                 }
                 JsonNode statusNode = item.path("status");
@@ -65,8 +64,7 @@ public class FeishuUserRemoteService {
                     && !statusNode.path("is_resigned").asBoolean(false)
                     && (!statusNode.path("is_activated").isBoolean() || statusNode.path("is_activated").asBoolean(true));
                 users.add(new FeishuUserPayload(
-                    externalId,
-                    username,
+                    userId,
                     realName,
                     blankToNull(item.path("email").asText(null)),
                     blankToNull(item.path("mobile").asText(null)),
@@ -82,27 +80,11 @@ public class FeishuUserRemoteService {
             }
             pageToken = blankToNull(root.path("data").path("page_token").asText(null));
         } while (pageToken != null && !pageToken.isBlank());
-        Map<String, FeishuUserPayload> byExternalId = new LinkedHashMap<>();
+        Map<String, FeishuUserPayload> byUserId = new LinkedHashMap<>();
         for (FeishuUserPayload payload : users) {
-            byExternalId.put(payload.externalId(), payload);
+            byUserId.put(payload.userId(), payload);
         }
-        return new ArrayList<>(byExternalId.values());
-    }
-
-    private String deriveUsername(JsonNode item) {
-        String employeeNo = blankToNull(item.path("employee_no").asText(null));
-        if (!isBlank(employeeNo)) {
-            return employeeNo;
-        }
-        String email = blankToNull(item.path("email").asText(null));
-        if (!isBlank(email) && email.contains("@")) {
-            return email.substring(0, email.indexOf('@'));
-        }
-        String mobile = blankToNull(item.path("mobile").asText(null));
-        if (!isBlank(mobile)) {
-            return mobile;
-        }
-        return blankToNull(item.path("open_id").asText(null));
+        return new ArrayList<>(byUserId.values());
     }
 
     private String blankToNull(String value) {

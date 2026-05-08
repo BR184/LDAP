@@ -74,7 +74,8 @@ async function handleChangePassword() {
   <PageContainer title="个人中心" description="查看当前登录用户信息，并维护个人密码等基础账号设置。">
     <el-card class="idm-card" shadow="never">
       <el-descriptions :column="2" border>
-        <el-descriptions-item label="账号">{{ authStore.currentUser?.username || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="数据库ID">{{ authStore.currentUser?.id || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="用户ID">{{ authStore.currentUser?.userId || '--' }}</el-descriptions-item>
         <el-descriptions-item label="姓名">{{ authStore.currentUser?.realName || '--' }}</el-descriptions-item>
         <el-descriptions-item label="工作邮箱">{{ authStore.currentUser?.email || '--' }}</el-descriptions-item>
         <el-descriptions-item label="部门">{{ authStore.currentUser?.deptCode || '--' }}</el-descriptions-item>

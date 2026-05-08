@@ -6,8 +6,8 @@ import java.util.Set;
  * 封装当前登录用户信息的响应数据。
  */
 public record CurrentUserResponse(
-    Long userId,
-    String username,
+    Long id,
+    String userId,
     String realName,
     String email,
     String intranetEmail,

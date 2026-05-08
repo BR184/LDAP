@@ -28,17 +28,17 @@ public class AuthApplicationService {
      * 先在本地读取用户状态，再通过 LDAP 校验密码，最后签发 JWT 并记录登录审计。
      */
     public LoginResult login(LoginCommand command) {
-        User user = resolveLoginUser(command.username())
-            .orElseThrow(() -> failure("AUTH_INVALID", "用户名或密码错误", command.username()));
+        User user = resolveLoginUser(command.loginId())
+            .orElseThrow(() -> failure("AUTH_INVALID", "用户名或密码错误", command.loginId()));
         if (user.getStatus() != UserStatus.ENABLED) {
-            throw failure("AUTH_DISABLED", "用户已被禁用", command.username());
+            throw failure("AUTH_DISABLED", "用户已被禁用", command.loginId());
         }
-        if (!ldapDirectoryService.authenticate(user.getUsername(), command.password())) {
-            throw failure("AUTH_INVALID", "用户名或密码错误", command.username());
+        if (!ldapDirectoryService.authenticate(user.getUserId(), command.password())) {
+            throw failure("AUTH_INVALID", "用户名或密码错误", command.loginId());
         }
-        Set<String> roleCodes = userRepository.findRoleCodesByUsername(user.getUsername());
+        Set<String> roleCodes = userRepository.findRoleCodesByUserId(user.getUserId());
         auditLogRepository.save(AuditLog.builder()
-            .operator(user.getUsername())
+            .operator(user.getUserId())
             .operationType("LOGIN")
             .bizType("AUTH")
             .bizId(String.valueOf(user.getId()))
@@ -50,10 +50,10 @@ public class AuthApplicationService {
     /**
      * 加载当前登录用户的完整展示资料。
      */
-    public User loadProfile(String username) {
-        User user = userRepository.findByUsername(username)
+    public User loadProfile(String userId) {
+        User user = userRepository.findByUserId(userId)
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
-        return user.toBuilder().roleCodes(userRepository.findRoleCodesByUsername(username)).build();
+        return user.toBuilder().roleCodes(userRepository.findRoleCodesByUserId(userId)).build();
     }
 
     /**
@@ -71,14 +71,14 @@ public class AuthApplicationService {
         return new BizException(code, message);
     }
 
-    private java.util.Optional<User> resolveLoginUser(String loginName) {
-        if (loginName == null || loginName.isBlank()) {
+    private java.util.Optional<User> resolveLoginUser(String loginId) {
+        if (loginId == null || loginId.isBlank()) {
             return java.util.Optional.empty();
         }
-        String normalizedLoginName = loginName.trim();
-        java.util.Optional<User> byUsername = userRepository.findByUsername(normalizedLoginName);
-        if (byUsername.isPresent()) {
-            return byUsername;
+        String normalizedLoginName = loginId.trim();
+        java.util.Optional<User> byUserId = userRepository.findByUserId(normalizedLoginName);
+        if (byUserId.isPresent()) {
+            return byUserId;
         }
         return userRepository.findByEmployeeNo(normalizedLoginName);
     }

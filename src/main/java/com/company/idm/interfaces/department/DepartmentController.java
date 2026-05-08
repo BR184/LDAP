@@ -30,8 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 提供部门树、详情和 CRUD 接口。
- */
+ * 鎻愪緵閮ㄩ棬鏍戙€佽鎯呭拰 CRUD 鎺ュ彛銆? */
 @RestController
 @RequestMapping("/api/v1/departments")
 @RequiredArgsConstructor
@@ -57,7 +56,7 @@ public class DepartmentController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments', 'POST')")
     public ApiResponse<DepartmentResponse> create(
         @Valid @RequestBody CreateDepartmentRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         Department department = departmentApplicationService.createDepartment(new CreateDepartmentCommand(
             request.deptCode(),
@@ -73,7 +72,7 @@ public class DepartmentController {
     public ApiResponse<DepartmentResponse> update(
         @PathVariable String deptCode,
         @Valid @RequestBody UpdateDepartmentRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         Department department = departmentApplicationService.updateDepartment(new UpdateDepartmentCommand(
             deptCode,
@@ -88,7 +87,7 @@ public class DepartmentController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/' + #deptCode, 'DELETE')")
     public ApiResponse<Void> delete(
         @PathVariable String deptCode,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         departmentApplicationService.deleteDepartment(new DeleteDepartmentCommand(deptCode, username));
         return ApiResponse.success();
@@ -98,7 +97,7 @@ public class DepartmentController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/sync/feishu', 'POST')")
     public ApiResponse<SyncBatchDetailResponse> syncFeishu(
         @RequestBody(required = false) FeishuSyncRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(syncResponseAssembler.toResponse(
             syncApplicationService.executeFeishuDepartmentSync(username, SyncTriggerMode.MANUAL)
@@ -109,7 +108,7 @@ public class DepartmentController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/import/feishu-file', 'POST')")
     public ApiResponse<SyncBatchDetailResponse> importFeishuFile(
         @Valid @RequestBody FeishuFileImportRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(syncResponseAssembler.toResponse(
             syncApplicationService.executeFeishuDepartmentFileImport(
@@ -126,7 +125,7 @@ public class DepartmentController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/' + #deptCode + '/sync-ldap', 'POST')")
     public ApiResponse<DepartmentResponse> syncLdap(
         @PathVariable String deptCode,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(toResponse(departmentApplicationService.syncDepartmentToLdap(deptCode, username)));
     }
@@ -174,3 +173,4 @@ public class DepartmentController {
         );
     }
 }
+

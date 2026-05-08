@@ -34,26 +34,15 @@ public class MybatisUserRepository implements UserRepository {
         UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getId, id)
             .eq(UserDO::getDeleted, 0));
-        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())));
+        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())));
     }
 
     @Override
-    public Optional<User> findByUsername(String username) {
+    public Optional<User> findByUserId(String userId) {
         UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
-            .eq(UserDO::getUsername, username)
+            .eq(UserDO::getUserId, userId)
             .eq(UserDO::getDeleted, 0));
-        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())));
-    }
-
-    @Override
-    public Optional<User> findByExternalId(String externalId) {
-        if (externalId == null || externalId.isBlank()) {
-            return Optional.empty();
-        }
-        UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
-            .eq(UserDO::getExternalId, externalId)
-            .eq(UserDO::getDeleted, 0));
-        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())));
+        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())));
     }
 
     @Override
@@ -64,7 +53,7 @@ public class MybatisUserRepository implements UserRepository {
         UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getEmployeeNo, employeeNo)
             .eq(UserDO::getDeleted, 0));
-        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())));
+        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())));
     }
 
     @Override
@@ -75,7 +64,7 @@ public class MybatisUserRepository implements UserRepository {
         UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getIntranetEmail, intranetEmail)
             .eq(UserDO::getDeleted, 0));
-        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())));
+        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())));
     }
 
     @Override
@@ -84,23 +73,23 @@ public class MybatisUserRepository implements UserRepository {
                 .eq(UserDO::getDeleted, 0)
                 .orderByAsc(UserDO::getId))
             .stream()
-            .map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())))
+            .map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())))
             .toList();
     }
 
     @Override
-    public List<User> findByConditions(String username, String deptCode, Integer statusCode) {
+    public List<User> findByConditions(String keyword, String deptCode, Integer statusCode) {
         LambdaQueryWrapper<UserDO> queryWrapper = new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getDeleted, 0)
             .orderByAsc(UserDO::getId);
 
-        if (username != null && !username.isBlank()) {
+        if (keyword != null && !keyword.isBlank()) {
             queryWrapper.and(wrapper -> wrapper
-                .like(UserDO::getUsername, username)
+                .like(UserDO::getUserId, keyword)
                 .or()
-                .like(UserDO::getRealName, username)
+                .like(UserDO::getRealName, keyword)
                 .or()
-                .like(UserDO::getEmployeeNo, username));
+                .like(UserDO::getEmployeeNo, keyword));
         }
         if (deptCode != null && !deptCode.isBlank()) {
             queryWrapper.eq(UserDO::getDeptCode, deptCode);
@@ -110,7 +99,7 @@ public class MybatisUserRepository implements UserRepository {
         }
 
         return userMapper.selectList(queryWrapper).stream()
-            .map(data -> toDomain(data, findRoleCodesByUsername(data.getUsername())))
+            .map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())))
             .toList();
     }
 
@@ -126,7 +115,7 @@ public class MybatisUserRepository implements UserRepository {
             dataObject.setGmtModified(LocalDateTime.now());
             userMapper.updateById(dataObject);
         }
-        return toDomain(dataObject, findRoleCodesByUsername(dataObject.getUsername()));
+        return toDomain(dataObject, findRoleCodesByUserId(dataObject.getUserId()));
     }
 
     @Override
@@ -170,7 +159,7 @@ public class MybatisUserRepository implements UserRepository {
             null,
             new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<UserDO>()
                 .eq(UserDO::getId, id)
-                .set(UserDO::getUsername, recycledUsername)
+                .set(UserDO::getUserId, recycledUsername)
                 .set(UserDO::getEmployeeNo, null)
                 .set(UserDO::getIntranetEmail, null)
                 .set(UserDO::getPartTimeDeptCodes, null)
@@ -211,8 +200,8 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
-    public Set<String> findRoleCodesByUsername(String username) {
-        List<String> roleCodes = userRoleMapper.selectRoleCodesByUsername(username);
+    public Set<String> findRoleCodesByUserId(String userId) {
+        List<String> roleCodes = userRoleMapper.selectRoleCodesByUserId(userId);
         if (roleCodes == null || roleCodes.isEmpty()) {
             return Collections.emptySet();
         }
@@ -222,7 +211,7 @@ public class MybatisUserRepository implements UserRepository {
     @Override
     public List<UserRoleBinding> listUserRoleBindings() {
         return userRoleMapper.selectUserRoleBindings().stream()
-            .map(item -> new UserRoleBinding(item.username(), item.roleCode()))
+            .map(item -> new UserRoleBinding(item.userId(), item.roleCode()))
             .toList();
     }
 
@@ -243,7 +232,7 @@ public class MybatisUserRepository implements UserRepository {
     private User toDomain(UserDO dataObject, Set<String> roleCodes) {
         return User.builder()
             .id(dataObject.getId())
-            .username(dataObject.getUsername())
+            .userId(dataObject.getUserId())
             .realName(dataObject.getRealName())
             .email(dataObject.getEmail())
             .intranetEmail(dataObject.getIntranetEmail())
@@ -258,7 +247,6 @@ public class MybatisUserRepository implements UserRepository {
             .status(UserStatus.fromCode(dataObject.getStatus()))
             .employmentStatus(EmploymentStatus.fromCode(dataObject.getEmploymentStatus()))
             .sourceType(SourceType.valueOf(dataObject.getSourceType()))
-            .externalId(dataObject.getExternalId())
             .ldapDn(dataObject.getLdapDn())
             .tokenVersion(dataObject.getTokenVersion())
             .roleCodes(roleCodes)
@@ -268,7 +256,7 @@ public class MybatisUserRepository implements UserRepository {
     private UserDO toDataObject(User user) {
         UserDO dataObject = new UserDO();
         dataObject.setId(user.getId());
-        dataObject.setUsername(user.getUsername());
+        dataObject.setUserId(user.getUserId());
         dataObject.setRealName(user.getRealName());
         dataObject.setEmail(user.getEmail());
         dataObject.setIntranetEmail(user.getIntranetEmail());
@@ -283,7 +271,6 @@ public class MybatisUserRepository implements UserRepository {
         dataObject.setEmploymentStatus(user.getEmploymentStatus() == null ? null : user.getEmploymentStatus().name());
         dataObject.setStatus(user.getStatus().getCode());
         dataObject.setSourceType(user.getSourceType().name());
-        dataObject.setExternalId(user.getExternalId());
         dataObject.setLdapDn(user.getLdapDn());
         dataObject.setTokenVersion(user.getTokenVersion());
         dataObject.setDeleted(0);

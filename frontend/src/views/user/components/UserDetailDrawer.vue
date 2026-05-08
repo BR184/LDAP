@@ -25,6 +25,8 @@ const emit = defineEmits<{
       </template>
 
       <el-descriptions v-if="user" :column="1" border>
+        <el-descriptions-item label="数据库ID">{{ user.id }}</el-descriptions-item>
+        <el-descriptions-item label="用户ID">{{ user.userId }}</el-descriptions-item>
         <el-descriptions-item label="姓名">{{ user.realName }}</el-descriptions-item>
         <el-descriptions-item label="工作邮箱">{{ user.email || '--' }}</el-descriptions-item>
         <el-descriptions-item label="内网邮箱">{{ user.intranetEmail || '--' }}</el-descriptions-item>

@@ -20,8 +20,7 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 
 /**
- * 负责处理对齐导入时的缺失对象清理。
- */
+ * 璐熻矗澶勭悊瀵归綈瀵煎叆鏃剁殑缂哄け瀵硅薄娓呯悊銆? */
 @Service
 public class FeishuImportAlignmentService {
 
@@ -42,13 +41,13 @@ public class FeishuImportAlignmentService {
         this.ldapGroupService = ldapGroupService;
     }
 
-    public List<SyncDiffPayload> cleanupMissingUsers(Set<String> retainedExternalIds) {
+    public List<SyncDiffPayload> cleanupMissingUsers(Set<String> retainedUserIds) {
         List<SyncDiffPayload> diffs = new ArrayList<>();
         for (User user : userRepository.findAll()) {
-            if (!shouldCleanupUser(user, retainedExternalIds)) {
+            if (!shouldCleanupUser(user, retainedUserIds)) {
                 continue;
             }
-            cleanupLdapUser(user.getUsername());
+            cleanupLdapUser(user.getUserId());
             userRepository.save(user.toBuilder()
                 .status(UserStatus.DISABLED)
                 .employmentStatus(EmploymentStatus.RESIGNED)
@@ -57,7 +56,7 @@ public class FeishuImportAlignmentService {
                 .build());
             diffs.add(new SyncDiffPayload(
                 SyncTargetType.USER,
-                user.getUsername(),
+                user.getUserId(),
                 SyncDiffType.MISSING_IN_SOURCE,
                 snapshotUser(user),
                 null,
@@ -75,7 +74,7 @@ public class FeishuImportAlignmentService {
             .toList();
         for (Department department : departmentsToDelete) {
             if (userRepository.existsActiveDeptBinding(department.getDeptCode())) {
-                throw new BizException("FEISHU_ALIGN_DEPARTMENT_IN_USE", "对齐导入无法删除仍有用户绑定的部门：" + department.getDeptCode());
+                throw new BizException("FEISHU_ALIGN_DEPARTMENT_IN_USE", "瀵归綈瀵煎叆鏃犳硶鍒犻櫎浠嶆湁鐢ㄦ埛缁戝畾鐨勯儴闂細" + department.getDeptCode());
             }
             ldapGroupService.deleteGroup(department.getDeptCode());
             departmentRepository.deleteByDeptCode(department.getDeptCode());
@@ -91,11 +90,11 @@ public class FeishuImportAlignmentService {
         return diffs;
     }
 
-    private boolean shouldCleanupUser(User user, Set<String> retainedExternalIds) {
+    private boolean shouldCleanupUser(User user, Set<String> retainedUserIds) {
         return user != null
             && user.getSourceType() == SourceType.FEISHU
-            && user.getExternalId() != null
-            && !retainedExternalIds.contains(user.getExternalId());
+            && user.getUserId() != null
+            && !retainedUserIds.contains(user.getUserId());
     }
 
     private boolean shouldCleanupDepartment(Department department, Set<String> retainedExternalIds) {
@@ -128,8 +127,8 @@ public class FeishuImportAlignmentService {
 
     private String snapshotUser(User user) {
         return """
-            {"externalId":"%s","username":"%s","deptCode":"%s"}
-            """.formatted(safe(user.getExternalId()), safe(user.getUsername()), safe(user.getDeptCode()));
+            {"userId":"%s","deptCode":"%s"}
+            """.formatted(safe(user.getUserId()), safe(user.getDeptCode()));
     }
 
     private String snapshotDepartment(Department department) {
@@ -142,3 +141,4 @@ public class FeishuImportAlignmentService {
         return value == null ? "" : value.replace("\"", "\\\"");
     }
 }
+

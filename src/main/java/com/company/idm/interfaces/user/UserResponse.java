@@ -8,7 +8,7 @@ import java.util.Set;
  */
 public record UserResponse(
     Long id,
-    String username,
+    String userId,
     String realName,
     String email,
     String intranetEmail,

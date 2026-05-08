@@ -13,7 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
- * 提供用于本地原型联调的 LDAP 桩实现。
+ * 鎻愪緵鐢ㄤ簬鏈湴鍘熷瀷鑱旇皟鐨?LDAP 妗╁疄鐜般€?
  */
 @Service
 @RequiredArgsConstructor
@@ -47,7 +47,7 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
             return null;
         }
         return LdapUserSnapshot.builder()
-            .username(username)
+            .userId(username)
             .realName(entry.realName)
             .email(entry.email)
             .mobile(entry.mobile)
@@ -68,8 +68,8 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
 
     @Override
     public String createUser(User user, String rawPassword) {
-        String dn = buildDn(user.getUsername());
-        entries.put(user.getUsername(), new StubEntry(
+        String dn = buildDn(user.getUserId());
+        entries.put(user.getUserId(), new StubEntry(
             rawPassword,
             true,
             dn,
@@ -84,7 +84,7 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
 
     @Override
     public void updateUser(User user) {
-        entries.computeIfPresent(user.getUsername(), (key, value) -> value.withProfile(
+        entries.computeIfPresent(user.getUserId(), (key, value) -> value.withProfile(
             user.getRealName(),
             resolveMail(user),
             user.getMobile(),
@@ -150,3 +150,4 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
         }
     }
 }
+

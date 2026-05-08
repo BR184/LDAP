@@ -20,8 +20,7 @@ import java.util.TreeSet;
 import org.springframework.stereotype.Component;
 
 /**
- * 提供用户与部门分组关系维度的 LDAP 对账处理器。
- */
+ * 鎻愪緵鐢ㄦ埛涓庨儴闂ㄥ垎缁勫叧绯荤淮搴︾殑 LDAP 瀵硅处澶勭悊鍣ㄣ€? */
 @Component
 public class LdapReconcileMembershipHandler implements SyncJobHandler {
 
@@ -67,15 +66,15 @@ public class LdapReconcileMembershipHandler implements SyncJobHandler {
                     }
                 }
             }
-            Set<String> currentGroups = new TreeSet<>(ldapGroupService.listUserGroups(user.getUsername()));
+            Set<String> currentGroups = new TreeSet<>(ldapGroupService.listUserGroups(user.getUserId()));
             if (!currentGroups.equals(expectedGroups)) {
                 if (autoRepair) {
-                    ldapGroupService.syncUserGroups(user.getUsername(), new ArrayList<>(expectedGroups));
+                    ldapGroupService.syncUserGroups(user.getUserId(), new ArrayList<>(expectedGroups));
                     continue;
                 }
                 diffs.add(new SyncDiffPayload(
                     SyncTargetType.MEMBERSHIP,
-                    user.getUsername(),
+                    user.getUserId(),
                     SyncDiffType.RELATION_MISMATCH,
                     "{\"expectedGroups\":\"" + safe(String.join(",", expectedGroups)) + "\"}",
                     "{\"currentGroups\":\"" + safe(String.join(",", currentGroups)) + "\"}",
@@ -97,3 +96,4 @@ public class LdapReconcileMembershipHandler implements SyncJobHandler {
         return value == null ? "" : value.replace("\"", "\\\"");
     }
 }
+

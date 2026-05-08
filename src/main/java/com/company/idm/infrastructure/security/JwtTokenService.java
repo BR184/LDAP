@@ -31,14 +31,14 @@ public class JwtTokenService implements TokenService {
     public LoginResult generate(User user, Set<String> roleCodes) {
         Instant expiresAt = Instant.now().plus(jwtProperties.getExpireMinutes(), ChronoUnit.MINUTES);
         String token = Jwts.builder()
-            .subject(user.getUsername())
-            .claim("uid", user.getId())
+            .subject(user.getUserId())
+            .claim("id", user.getId())
             .claim("tokenVersion", user.getTokenVersion())
             .claim("roles", roleCodes.stream().sorted().toList())
             .expiration(Date.from(expiresAt))
             .signWith(secretKey())
             .compact();
-        return new LoginResult(user.getId(), user.getUsername(), roleCodes, token, expiresAt);
+        return new LoginResult(user.getId(), user.getUserId(), roleCodes, token, expiresAt);
     }
 
     @Override
@@ -49,7 +49,7 @@ public class JwtTokenService implements TokenService {
         @SuppressWarnings("unchecked")
         List<String> roles = claims.get("roles", List.class);
         Number tokenVersion = claims.get("tokenVersion", Number.class);
-        Number userId = claims.get("uid", Number.class);
+        Number userId = claims.get("id", Number.class);
         return new ParsedToken(
             userId.longValue(),
             claims.getSubject(),

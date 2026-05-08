@@ -32,17 +32,17 @@ const authStore = useAuthStore()
 const tableRef = ref<{ clearSelection?: () => void } | null>(null)
 
 const searchForm = reactive<{
-  username: string
+  userId: string
   deptName: string
   status: number | undefined
 }>({
-  username: '',
+  userId: '',
   deptName: '',
   status: undefined,
 })
 
 const appliedQuery = reactive<UserListQuery>({
-  username: '',
+  userId: '',
   deptName: '',
   status: undefined,
 })
@@ -66,10 +66,10 @@ const selectedRoleIds = ref<number[]>([])
 const selectedUsers = ref<UserItem[]>([])
 
 const usersQuery = useQuery({
-  queryKey: computed(() => ['users', appliedQuery.username || '', appliedQuery.deptName || '', appliedQuery.status ?? 'all']),
+  queryKey: computed(() => ['users', appliedQuery.userId || '', appliedQuery.deptName || '', appliedQuery.status ?? 'all']),
   queryFn: () =>
     fetchUsers({
-      username: appliedQuery.username || undefined,
+      userId: appliedQuery.userId || undefined,
       deptName: appliedQuery.deptName || undefined,
       status: appliedQuery.status,
     }),
@@ -111,7 +111,7 @@ const currentOperatorPermissionLevel = computed(() => {
 const isCurrentUserSuperAdmin = computed(() => authStore.currentUser?.roleCodes.includes(SUPER_ADMIN_ROLE_CODE) ?? false)
 const canBatchDelete = computed(() =>
   selectedUsers.value.length > 0
-  || !!(appliedQuery.username || appliedQuery.deptName || typeof appliedQuery.status === 'number'),
+  || !!(appliedQuery.userId || appliedQuery.deptName || typeof appliedQuery.status === 'number'),
 )
 const selectedDeletableUsers = computed(() => selectedUsers.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
 const deletableUsersByQuery = computed(() => users.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
@@ -119,7 +119,7 @@ const deletableUsersByQuery = computed(() => users.value.filter((user) => canDel
 const createUserMutation = useMutation({
   mutationFn: (payload: CreateUserPayload) => createUser(payload),
   onSuccess: async (user) => {
-    ElMessage.success(`用户 ${user.username} 创建成功`)
+    ElMessage.success(`用户 ${user.userId} 创建成功`)
     formVisible.value = false
     await refreshUsers()
   },
@@ -128,7 +128,7 @@ const createUserMutation = useMutation({
 const updateUserMutation = useMutation({
   mutationFn: ({ userId, payload }: { userId: number; payload: UpdateUserPayload }) => updateUser(userId, payload),
   onSuccess: async (user) => {
-    ElMessage.success(`用户 ${user.username} 更新成功`)
+    ElMessage.success(`用户 ${user.userId} 更新成功`)
     formVisible.value = false
     await refreshUsers()
   },
@@ -176,7 +176,7 @@ const resetPasswordMutation = useMutation({
 const syncLdapMutation = useMutation({
   mutationFn: (userId: number) => syncUserToLdap(userId),
   onSuccess: async (user) => {
-    ElMessage.success(`用户 ${user.username} 已同步到 LDAP`)
+    ElMessage.success(`用户 ${user.userId} 已同步到 LDAP`)
     await refreshUsers()
   },
 })
@@ -210,7 +210,7 @@ function resolvePermissionLevel(roleCodes: string[]) {
 }
 
 function canDeleteUser(user: UserItem) {
-  if (user.id === authStore.currentUser?.userId) {
+  if (user.id === authStore.currentUser?.id) {
     return false
   }
   if (isCurrentUserSuperAdmin.value) {
@@ -224,14 +224,14 @@ function isSuperAdminUser(user: UserItem) {
 }
 
 function applySearch() {
-  appliedQuery.username = normalizeText(searchForm.username)
+  appliedQuery.userId = normalizeText(searchForm.userId)
   appliedQuery.deptName = normalizeText(searchForm.deptName)
   appliedQuery.status = typeof searchForm.status === 'number' ? searchForm.status : undefined
   pagination.page = 1
 }
 
 function resetSearch() {
-  searchForm.username = ''
+  searchForm.userId = ''
   searchForm.deptName = ''
   searchForm.status = undefined
   applySearch()
@@ -313,7 +313,7 @@ async function handleToggleStatus(user: UserItem) {
   const actionText = nextStatus === 1 ? '启用' : '禁用'
 
   try {
-    await ElMessageBox.confirm(`确认${actionText}用户 ${user.realName}（${user.username}）吗？`, `${actionText}用户`, {
+    await ElMessageBox.confirm(`确认${actionText}用户 ${user.realName}（${user.userId}）吗？`, `${actionText}用户`, {
       type: 'warning',
       confirmButtonText: '确认',
       cancelButtonText: '取消',
@@ -336,7 +336,7 @@ async function handleDelete(user: UserItem) {
 
   try {
     await ElMessageBox.confirm(
-      `删除后会同时清理 LDAP 账号映射与登录能力，确认删除用户 ${user.realName}（${user.username}）吗？`,
+      `删除后会同时清理 LDAP 账号映射与登录能力，确认删除用户 ${user.realName}（${user.userId}）吗？`,
       '删除用户',
       {
         type: 'warning',
@@ -353,7 +353,7 @@ async function handleDelete(user: UserItem) {
 
 async function handleBatchDelete() {
   const hasSelectedRows = selectedUsers.value.length > 0
-  const hasSearchQuery = !!(appliedQuery.username || appliedQuery.deptName || typeof appliedQuery.status === 'number')
+  const hasSearchQuery = !!(appliedQuery.userId || appliedQuery.deptName || typeof appliedQuery.status === 'number')
   if (!hasSelectedRows && !hasSearchQuery) {
     return
   }
@@ -364,7 +364,7 @@ async function handleBatchDelete() {
     return
   }
 
-  const previewUsers = targetUsers.slice(0, 5).map((user) => `${user.realName}（${user.employeeNo || user.username}）`)
+  const previewUsers = targetUsers.slice(0, 5).map((user) => `${user.realName}（${user.employeeNo || user.userId}）`)
   const previewText = previewUsers.join('、')
   const moreCount = targetUsers.length - previewUsers.length
   const summaryText = hasSelectedRows
@@ -393,6 +393,9 @@ async function handleBatchDelete() {
   await batchDeleteUsersMutation.mutateAsync(
     {
       userIds: targetUsers.map((user) => user.id),
+      userIdKeyword: hasSelectedRows ? undefined : appliedQuery.userId || undefined,
+      deptNameKeyword: hasSelectedRows ? undefined : appliedQuery.deptName || undefined,
+      statusCode: hasSelectedRows ? undefined : appliedQuery.status,
     },
   )
 }
@@ -400,7 +403,7 @@ async function handleBatchDelete() {
 async function handleResetPassword(user: UserItem) {
   try {
     await ElMessageBox.confirm(
-      `确认将用户 ${user.realName}（${user.username}）的密码重置为默认密码 123456 吗？`,
+      `确认将用户 ${user.realName}（${user.userId}）的密码重置为默认密码 123456 吗？`,
       '重置密码',
       {
         type: 'warning',
@@ -410,7 +413,7 @@ async function handleResetPassword(user: UserItem) {
     )
 
     await resetPasswordMutation.mutateAsync(user.id)
-    ElMessage.success(`用户 ${user.username} 的密码已重置为 123456`)
+    ElMessage.success(`用户 ${user.userId} 的密码已重置为 123456`)
   } catch {
     // 用户取消时不额外处理
   }
@@ -441,8 +444,8 @@ function statusTagType(status: number) {
   >
     <el-card class="idm-card" shadow="never">
       <el-form :inline="true" :model="searchForm">
-        <el-form-item label="工号/姓名">
-          <el-input v-model="searchForm.username" clearable placeholder="请输入工号、姓名或用户名" />
+        <el-form-item label="用户ID/工号/姓名">
+          <el-input v-model="searchForm.userId" clearable placeholder="请输入用户ID、工号或姓名" />
         </el-form-item>
         <el-form-item label="部门名称">
           <el-input v-model="searchForm.deptName" clearable placeholder="请输入部门名称" />
@@ -495,6 +498,8 @@ function statusTagType(status: number) {
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="52" :selectable="selectableUser" />
+        <el-table-column prop="id" label="数据库ID" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="userId" label="用户ID" min-width="180" show-overflow-tooltip />
         <el-table-column prop="realName" label="姓名" min-width="120" />
         <el-table-column prop="employeeNo" label="工号" min-width="120" show-overflow-tooltip />
         <el-table-column prop="jobTitle" label="职务" min-width="160" show-overflow-tooltip>
@@ -507,9 +512,25 @@ function statusTagType(status: number) {
             {{ row.directLeaderRaw || '--' }}
           </template>
         </el-table-column>
+        <el-table-column prop="leaderRef" label="上级ID" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.leaderRef || '--' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="deptName" label="部门名称" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.deptName || '--' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="deptCode" label="部门编码" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.deptCode || '--' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="兼职部门" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.partTimeDeptNames.length">{{ row.partTimeDeptNames.join('、') }}</span>
+            <span v-else>--</span>
           </template>
         </el-table-column>
         <el-table-column prop="intranetEmail" label="内网邮箱" min-width="220" show-overflow-tooltip>
@@ -519,6 +540,11 @@ function statusTagType(status: number) {
         </el-table-column>
         <el-table-column prop="email" label="工作邮箱" min-width="220" show-overflow-tooltip />
         <el-table-column prop="mobile" label="手机号" min-width="140" />
+        <el-table-column prop="accountStatus" label="账号状态" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.accountStatus || '--' }}
+          </template>
+        </el-table-column>
         <el-table-column label="在职状态" min-width="120" align="center">
           <template #default="{ row }">
             <el-tag :type="row.employmentStatus === 'RESIGNED' ? 'warning' : 'success'">
@@ -538,6 +564,11 @@ function statusTagType(status: number) {
               <el-tag v-if="row.roleCodes.length > 2" type="warning">+{{ row.roleCodes.length - 2 }}</el-tag>
             </el-space>
             <span v-else>--</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="ldapDn" label="LDAP DN" min-width="320" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.ldapDn || '--' }}
           </template>
         </el-table-column>
         <el-table-column label="操作" min-width="280" fixed="right">

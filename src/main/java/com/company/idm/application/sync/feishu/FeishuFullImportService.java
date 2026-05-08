@@ -37,13 +37,13 @@ public class FeishuFullImportService {
 
         List<com.company.idm.application.sync.SyncDiffPayload> alignmentDiffs = new ArrayList<>();
         if (importMode == ImportMode.ALIGN) {
-            Set<String> retainedUserExternalIds = document.users().stream()
-                .map(FeishuUserPayload::externalId)
+            Set<String> retainedUserIds = document.users().stream()
+                .map(FeishuUserPayload::userId)
                 .collect(Collectors.toSet());
             Set<String> retainedDepartmentExternalIds = document.departments().stream()
                 .map(FeishuDepartmentPayload::externalId)
                 .collect(Collectors.toSet());
-            alignmentDiffs.addAll(alignmentService.cleanupMissingUsers(retainedUserExternalIds));
+            alignmentDiffs.addAll(alignmentService.cleanupMissingUsers(retainedUserIds));
             alignmentDiffs.addAll(alignmentService.cleanupMissingDepartments(retainedDepartmentExternalIds));
         }
 

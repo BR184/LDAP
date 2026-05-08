@@ -26,7 +26,7 @@ public class CasbinPolicyService implements PolicyRefreshService {
         permissionRepository.listRolePolicies()
             .forEach(policy -> enforcer.addPolicy(policy.roleCode(), policy.resourcePath(), policy.action()));
         userRepository.listUserRoleBindings()
-            .forEach(binding -> enforcer.addGroupingPolicy(binding.username(), binding.roleCode()));
+            .forEach(binding -> enforcer.addGroupingPolicy(binding.userId(), binding.roleCode()));
         enforcer.buildRoleLinks();
     }
 

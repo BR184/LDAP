@@ -1,23 +1,23 @@
 export interface LoginCommand {
-  username: string
+  loginId: string
   password: string
 }
 
 export interface ForgotPasswordPayload {
-  username: string
+  loginId: string
 }
 
 export interface LoginResult {
-  userId: number
-  username: string
+  id: number
+  userId: string
   roleCodes: string[]
   accessToken: string
   expiresAt: string
 }
 
 export interface CurrentUser {
-  userId: number
-  username: string
+  id: number
+  userId: string
   realName: string
   email: string | null
   intranetEmail: string | null

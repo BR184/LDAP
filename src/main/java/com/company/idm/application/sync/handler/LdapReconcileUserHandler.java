@@ -22,8 +22,7 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * 提供用户维度的 LDAP 对账处理器。
- */
+ * 鎻愪緵鐢ㄦ埛缁村害鐨?LDAP 瀵硅处澶勭悊鍣ㄣ€? */
 @Component
 public class LdapReconcileUserHandler implements SyncJobHandler {
 
@@ -63,22 +62,22 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
         List<User> users = userRepository.findAll();
         Set<String> mysqlUsernames = new HashSet<>();
         for (User user : users) {
-            mysqlUsernames.add(user.getUsername());
-            boolean ldapExists = ldapDirectoryService.existsByUid(user.getUsername());
+            mysqlUsernames.add(user.getUserId());
+            boolean ldapExists = ldapDirectoryService.existsByUid(user.getUserId());
             if (!ldapExists) {
                 if (autoRepair) {
                     String ldapDn = ldapDirectoryService.createUser(user, DEFAULT_RECONCILE_PASSWORD);
                     if (user.getStatus() == UserStatus.ENABLED) {
-                        ldapDirectoryService.enableUser(user.getUsername());
+                        ldapDirectoryService.enableUser(user.getUserId());
                     } else {
-                        ldapDirectoryService.disableUser(user.getUsername());
+                        ldapDirectoryService.disableUser(user.getUserId());
                     }
                     userRepository.save(user.toBuilder().ldapDn(ldapDn).build());
                     continue;
                 }
                 diffs.add(new SyncDiffPayload(
                     SyncTargetType.USER,
-                    user.getUsername(),
+                    user.getUserId(),
                     SyncDiffType.MISSING_IN_LDAP,
                     snapshotUser(user),
                     null,
@@ -86,11 +85,11 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
                 ));
                 continue;
             }
-            LdapUserSnapshot snapshot = ldapDirectoryService.findUserSnapshot(user.getUsername());
+            LdapUserSnapshot snapshot = ldapDirectoryService.findUserSnapshot(user.getUserId());
             if (snapshot == null) {
                 continue;
             }
-            String expectedDn = buildExpectedDn(user.getUsername());
+            String expectedDn = buildExpectedDn(user.getUserId());
             boolean dnMismatch = !safe(user.getLdapDn()).equals(safe(expectedDn));
             boolean statusMismatch = !expectedStatus(user.getStatus()).equals(safe(snapshot.getStatus()));
             boolean fieldMismatch = !safe(user.getRealName()).equals(safe(snapshot.getRealName()))
@@ -102,16 +101,16 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
                 if (autoRepair) {
                     ldapDirectoryService.updateUser(user);
                     if (user.getStatus() == UserStatus.ENABLED) {
-                        ldapDirectoryService.enableUser(user.getUsername());
+                        ldapDirectoryService.enableUser(user.getUserId());
                     } else {
-                        ldapDirectoryService.disableUser(user.getUsername());
+                        ldapDirectoryService.disableUser(user.getUserId());
                     }
                     userRepository.save(user.toBuilder().ldapDn(expectedDn).build());
                     continue;
                 }
                 diffs.add(new SyncDiffPayload(
                     SyncTargetType.USER,
-                    user.getUsername(),
+                    user.getUserId(),
                     dnMismatch ? SyncDiffType.DN_MISMATCH : (statusMismatch ? SyncDiffType.STATUS_MISMATCH : SyncDiffType.FIELD_MISMATCH),
                     snapshotUser(user),
                     snapshotLdapUser(snapshot),
@@ -153,7 +152,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
         return """
             {"username":"%s","realName":"%s","email":"%s","mobile":"%s","employeeNo":"%s","deptCode":"%s","status":"%s","ldapDn":"%s"}
             """.formatted(
-            safe(user.getUsername()),
+            safe(user.getUserId()),
             safe(user.getRealName()),
             safe(resolveLdapMail(user)),
             safe(user.getMobile()),
@@ -171,7 +170,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
         return """
             {"username":"%s","realName":"%s","email":"%s","mobile":"%s","employeeNo":"%s","deptCode":"%s","status":"%s","ldapDn":"%s"}
             """.formatted(
-            safe(snapshot.getUsername()),
+            safe(snapshot.getUserId()),
             safe(snapshot.getRealName()),
             safe(snapshot.getEmail()),
             safe(snapshot.getMobile()),
@@ -196,3 +195,4 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
         return user.getEmail();
     }
 }
+

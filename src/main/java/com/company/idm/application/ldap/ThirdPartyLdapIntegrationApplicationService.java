@@ -16,14 +16,11 @@ import org.springframework.ldap.core.LdapTemplate;
 import org.springframework.ldap.support.LdapEncoder;
 import org.springframework.stereotype.Service;
 
-/**
- * 提供第三方 LDAP 通用接入框架的模板与预检能力。
- */
 @Service
 public class ThirdPartyLdapIntegrationApplicationService {
 
-    private static final String LOGIN_ATTR = "employeeNumber";
-    private static final String STANDARD_FILTER = "(&(objectClass=inetOrgPerson)(employeeNumber={login})(employeeType=ENABLED))";
+    private static final String LOGIN_ATTR = "uid";
+    private static final String STANDARD_FILTER = "(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))";
     private static final String AUTHORIZATION_MODE = "LOCAL_ONLY";
     private static final String PASSWORD_PLACEHOLDER = "${LDAP_BIND_PASSWORD}";
 
@@ -70,17 +67,16 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 settings.put("base_dn", ldapProperties.getBaseDn());
                 settings.put("user_base", buildAbsoluteDn(ldapProperties.getPeopleOu()));
                 settings.put("user_filter", systemType.buildTemplateUserFilter());
-                settings.put("uid", "employeeNumber");
+                settings.put("uid", "uid");
                 settings.put("encryption", connectionView.encryption());
 
-                fieldMappings.put("uid", "employeeNumber");
+                fieldMappings.put("uid", "uid");
                 fieldMappings.put("name", "cn");
                 fieldMappings.put("email", "mail");
 
-                notes.add("GitLab 只使用 LDAP 做认证，项目与组权限继续由 GitLab 本地维护。");
-                notes.add("GitLab 登录字段改为 employeeNumber，用户输入工号即可完成 LDAP 认证。");
-                notes.add("模板中的 user_filter 只保留 objectClass 与 employeeType 附加限制。");
-                notes.add("LDAP 目录中的 uid 继续保留为系统内部账号，不作为第三方登录输入字段。");
+                notes.add("GitLab authenticates against LDAP only.");
+                notes.add("Login attribute must be uid, and uid now stores the platform userId.");
+                notes.add("Keep the enabled-user filter on employeeType.");
             }
             case JENKINS -> {
                 settings.put("ldap_server", connectionView.url());
@@ -94,8 +90,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 fieldMappings.put("mail", "mail");
                 fieldMappings.put("login_attr", LOGIN_ATTR);
 
-                notes.add("Jenkins 登录字段改为 employeeNumber，用户输入工号即可完成 LDAP 认证。");
-                notes.add("Jenkins 权限体系继续由本地矩阵授权或角色策略维护。");
+                notes.add("Jenkins should log in with uid.");
             }
             case NEXUS -> {
                 settings.put("connection_url", connectionView.url());
@@ -106,13 +101,11 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 settings.put("user_base_dn", buildAbsoluteDn(ldapProperties.getPeopleOu()));
                 settings.put("user_filter", systemType.buildUserFilter());
 
-                fieldMappings.put("user_id", "employeeNumber");
+                fieldMappings.put("user_id", "uid");
                 fieldMappings.put("real_name", "cn");
                 fieldMappings.put("email", "mail");
 
-                notes.add("Nexus 登录字段改为 employeeNumber，用户输入工号即可完成 LDAP 认证。");
-                notes.add("Nexus 需要单独确认 LDAP Realm 的启用顺序与缓存刷新策略。");
-                notes.add("LDAP 认证成功后，仓库与角色权限仍由 Nexus 本地角色模型决定。");
+                notes.add("Nexus should map the login identity to uid.");
             }
             case ZENTAO -> {
                 settings.put("ldap_server", connectionView.host() + ":" + connectionView.port());
@@ -122,12 +115,11 @@ public class ThirdPartyLdapIntegrationApplicationService {
                 settings.put("user_search_base", buildAbsoluteDn(ldapProperties.getPeopleOu()));
                 settings.put("user_search_filter", systemType.buildUserFilter());
 
-                fieldMappings.put("username", "employeeNumber");
+                fieldMappings.put("username", "uid");
                 fieldMappings.put("display_name", "cn");
                 fieldMappings.put("mail", "mail");
 
-                notes.add("禅道模板当前作为占位模板使用，最终字段名仍需按目标版本官方手册确认。");
-                notes.add("当前统一契约要求第三方系统按 employeeNumber 作为登录输入字段。");
+                notes.add("Zentao template keeps uid as the login identity.");
             }
         }
 
@@ -142,8 +134,8 @@ public class ThirdPartyLdapIntegrationApplicationService {
     }
 
     public ThirdPartyLdapPrecheckReport precheck(ThirdPartyLdapPrecheckCommand command) {
-        String enabledUsername = requireUsername(command.enabledUsername());
-        String disabledUsername = blankToNull(command.disabledUsername());
+        String enabledUserId = requireUsername(command.enabledUsername());
+        String disabledUserId = blankToNull(command.disabledUsername());
         String systemCode = blankToNull(command.systemCode());
         if (systemCode != null) {
             systemCode = ThirdPartyLdapSystemType.fromCode(systemCode).getCode();
@@ -152,33 +144,33 @@ public class ThirdPartyLdapIntegrationApplicationService {
         List<ThirdPartyLdapPrecheckItem> items = new ArrayList<>();
         items.add(new ThirdPartyLdapPrecheckItem(
             "LOGIN_ATTR_FIXED",
-            "登录字段固定",
+            "Login Attribute",
             ThirdPartyLdapCheckStatus.PASS,
-            "第三方系统登录字段必须固定为 employeeNumber"
+            "Third-party systems must use uid as the login attribute."
         ));
 
         if (isSpringMode()) {
-            items.add(checkSearchBase("PEOPLE_OU_ACCESS", "用户目录可访问", ldapProperties.getPeopleOu()));
-            items.add(checkSearchBase("GROUPS_OU_ACCESS", "分组目录可访问", ldapProperties.getGroupsOu()));
-            items.add(checkEnabledUserUniqueInSpring(enabledUsername));
-            items.add(checkEnabledUserFilterMatchInSpring(enabledUsername));
-            items.add(checkDisabledUserFilterBlockInSpring(disabledUsername));
+            items.add(checkSearchBase("PEOPLE_OU_ACCESS", "People OU", ldapProperties.getPeopleOu()));
+            items.add(checkSearchBase("GROUPS_OU_ACCESS", "Groups OU", ldapProperties.getGroupsOu()));
+            items.add(checkEnabledUserUniqueInSpring(enabledUserId));
+            items.add(checkEnabledUserFilterMatchInSpring(enabledUserId));
+            items.add(checkDisabledUserFilterBlockInSpring(disabledUserId));
         } else {
             items.add(new ThirdPartyLdapPrecheckItem(
                 "PEOPLE_OU_ACCESS",
-                "用户目录可访问",
+                "People OU",
                 ThirdPartyLdapCheckStatus.PASS,
-                "当前为 stub 模式，用户目录按内存目录模拟"
+                "Stub mode uses in-memory user entries."
             ));
             items.add(new ThirdPartyLdapPrecheckItem(
                 "GROUPS_OU_ACCESS",
-                "分组目录可访问",
+                "Groups OU",
                 ThirdPartyLdapCheckStatus.PASS,
-                "当前为 stub 模式，分组目录按内存目录模拟"
+                "Stub mode uses in-memory group entries."
             ));
-            items.add(checkEnabledUserUniqueInStub(enabledUsername));
-            items.add(checkEnabledUserFilterMatchInStub(enabledUsername));
-            items.add(checkDisabledUserFilterBlockInStub(disabledUsername));
+            items.add(checkEnabledUserUniqueInStub(enabledUserId));
+            items.add(checkEnabledUserFilterMatchInStub(enabledUserId));
+            items.add(checkDisabledUserFilterBlockInStub(disabledUserId));
         }
 
         ThirdPartyLdapCheckStatus overallStatus = items.stream().anyMatch(item -> item.status() == ThirdPartyLdapCheckStatus.FAIL)
@@ -190,118 +182,118 @@ public class ThirdPartyLdapIntegrationApplicationService {
     private ThirdPartyLdapPrecheckItem checkSearchBase(String code, String name, String base) {
         Optional<LdapTemplate> ldapTemplate = currentLdapTemplate();
         if (ldapTemplate.isEmpty()) {
-            return new ThirdPartyLdapPrecheckItem(code, name, ThirdPartyLdapCheckStatus.FAIL, "LdapTemplate 未配置，无法执行真实目录预检");
+            return new ThirdPartyLdapPrecheckItem(code, name, ThirdPartyLdapCheckStatus.FAIL, "LdapTemplate is unavailable.");
         }
         try {
             ldapTemplate.get().search(base, "(objectClass=*)", (AttributesMapper<String>) attributes -> null);
-            return new ThirdPartyLdapPrecheckItem(code, name, ThirdPartyLdapCheckStatus.PASS, "已访问 " + base);
+            return new ThirdPartyLdapPrecheckItem(code, name, ThirdPartyLdapCheckStatus.PASS, "Accessible: " + base);
         } catch (RuntimeException exception) {
-            return new ThirdPartyLdapPrecheckItem(code, name, ThirdPartyLdapCheckStatus.FAIL, "访问 " + base + " 失败: " + exception.getMessage());
+            return new ThirdPartyLdapPrecheckItem(code, name, ThirdPartyLdapCheckStatus.FAIL, "Access failed: " + exception.getMessage());
         }
     }
 
-    private ThirdPartyLdapPrecheckItem checkEnabledUserUniqueInSpring(String username) {
+    private ThirdPartyLdapPrecheckItem checkEnabledUserUniqueInSpring(String userId) {
         Optional<LdapTemplate> ldapTemplate = currentLdapTemplate();
         if (ldapTemplate.isEmpty()) {
-            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "启用用户唯一性", ThirdPartyLdapCheckStatus.FAIL, "LdapTemplate 未配置");
+            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "Enabled User Unique", ThirdPartyLdapCheckStatus.FAIL, "LdapTemplate is unavailable.");
         }
-        String filter = "(employeeNumber=" + LdapEncoder.filterEncode(username) + ")";
+        String filter = "(uid=" + LdapEncoder.filterEncode(userId) + ")";
         try {
             int matchCount = ldapTemplate.get().search(
                 ldapProperties.getPeopleOu(),
                 filter,
-                (AttributesMapper<String>) attributes -> attributes.get("employeeNumber") == null ? null : attributes.get("employeeNumber").get().toString()
+                (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
             ).size();
             if (matchCount == 1) {
-                return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "启用用户唯一性", ThirdPartyLdapCheckStatus.PASS, username + " 在 LDAP 中唯一命中");
+                return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "Enabled User Unique", ThirdPartyLdapCheckStatus.PASS, "Matched exactly one uid: " + userId);
             }
-            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "启用用户唯一性", ThirdPartyLdapCheckStatus.FAIL, username + " 命中数量为 " + matchCount);
+            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "Enabled User Unique", ThirdPartyLdapCheckStatus.FAIL, "Match count = " + matchCount);
         } catch (RuntimeException exception) {
-            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "启用用户唯一性", ThirdPartyLdapCheckStatus.FAIL, "查询失败: " + exception.getMessage());
+            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "Enabled User Unique", ThirdPartyLdapCheckStatus.FAIL, "Query failed: " + exception.getMessage());
         }
     }
 
-    private ThirdPartyLdapPrecheckItem checkEnabledUserFilterMatchInSpring(String username) {
+    private ThirdPartyLdapPrecheckItem checkEnabledUserFilterMatchInSpring(String userId) {
         Optional<LdapTemplate> ldapTemplate = currentLdapTemplate();
         if (ldapTemplate.isEmpty()) {
-            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.FAIL, "LdapTemplate 未配置");
+            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "Enabled User Filter", ThirdPartyLdapCheckStatus.FAIL, "LdapTemplate is unavailable.");
         }
-        String filter = buildConcreteStandardFilter(username);
+        String filter = buildConcreteStandardFilter(userId);
         try {
             int matchCount = ldapTemplate.get().search(
                 ldapProperties.getPeopleOu(),
                 filter,
-                (AttributesMapper<String>) attributes -> attributes.get("employeeNumber") == null ? null : attributes.get("employeeNumber").get().toString()
+                (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
             ).size();
             if (matchCount == 1) {
-                return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.PASS, "统一过滤器可命中启用用户 " + username);
+                return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "Enabled User Filter", ThirdPartyLdapCheckStatus.PASS, "Standard filter matched user " + userId);
             }
-            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.FAIL, "统一过滤器未命中启用用户 " + username);
+            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "Enabled User Filter", ThirdPartyLdapCheckStatus.FAIL, "Standard filter did not match user " + userId);
         } catch (RuntimeException exception) {
-            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.FAIL, "查询失败: " + exception.getMessage());
+            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "Enabled User Filter", ThirdPartyLdapCheckStatus.FAIL, "Query failed: " + exception.getMessage());
         }
     }
 
-    private ThirdPartyLdapPrecheckItem checkDisabledUserFilterBlockInSpring(String username) {
-        if (username == null) {
-            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.SKIPPED, "未提供禁用用户样本");
+    private ThirdPartyLdapPrecheckItem checkDisabledUserFilterBlockInSpring(String userId) {
+        if (userId == null) {
+            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.SKIPPED, "No disabled user sample provided.");
         }
         Optional<LdapTemplate> ldapTemplate = currentLdapTemplate();
         if (ldapTemplate.isEmpty()) {
-            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "LdapTemplate 未配置");
+            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.FAIL, "LdapTemplate is unavailable.");
         }
         try {
             int rawCount = ldapTemplate.get().search(
                 ldapProperties.getPeopleOu(),
-                "(employeeNumber=" + LdapEncoder.filterEncode(username) + ")",
-                (AttributesMapper<String>) attributes -> attributes.get("employeeNumber") == null ? null : attributes.get("employeeNumber").get().toString()
+                "(uid=" + LdapEncoder.filterEncode(userId) + ")",
+                (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
             ).size();
             if (rawCount == 0) {
-                return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "禁用用户样本不存在 " + username);
+                return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.FAIL, "Disabled user sample does not exist: " + userId);
             }
             int enabledFilterCount = ldapTemplate.get().search(
                 ldapProperties.getPeopleOu(),
-                buildConcreteStandardFilter(username),
-                (AttributesMapper<String>) attributes -> attributes.get("employeeNumber") == null ? null : attributes.get("employeeNumber").get().toString()
+                buildConcreteStandardFilter(userId),
+                (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
             ).size();
             if (enabledFilterCount == 0) {
-                return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.PASS, "统一过滤器已拦截禁用用户 " + username);
+                return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.PASS, "Standard filter blocks disabled user " + userId);
             }
-            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "统一过滤器仍可命中禁用用户 " + username);
+            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.FAIL, "Standard filter still matches disabled user " + userId);
         } catch (RuntimeException exception) {
-            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "查询失败: " + exception.getMessage());
+            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.FAIL, "Query failed: " + exception.getMessage());
         }
     }
 
-    private ThirdPartyLdapPrecheckItem checkEnabledUserUniqueInStub(String username) {
-        return ldapDirectoryService.existsByUid(username)
-            ? new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "启用用户唯一性", ThirdPartyLdapCheckStatus.PASS, username + " 在 stub 目录中存在")
-            : new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "启用用户唯一性", ThirdPartyLdapCheckStatus.FAIL, username + " 不存在于 stub 目录");
+    private ThirdPartyLdapPrecheckItem checkEnabledUserUniqueInStub(String userId) {
+        return ldapDirectoryService.existsByUid(userId)
+            ? new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "Enabled User Unique", ThirdPartyLdapCheckStatus.PASS, "User exists in stub: " + userId)
+            : new ThirdPartyLdapPrecheckItem("ENABLED_USER_UNIQUE", "Enabled User Unique", ThirdPartyLdapCheckStatus.FAIL, "User not found in stub: " + userId);
     }
 
-    private ThirdPartyLdapPrecheckItem checkEnabledUserFilterMatchInStub(String username) {
-        LdapUserSnapshot snapshot = ldapDirectoryService.findUserSnapshot(username);
+    private ThirdPartyLdapPrecheckItem checkEnabledUserFilterMatchInStub(String userId) {
+        LdapUserSnapshot snapshot = ldapDirectoryService.findUserSnapshot(userId);
         if (snapshot == null) {
-            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.FAIL, "启用用户样本不存在 " + username);
+            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "Enabled User Filter", ThirdPartyLdapCheckStatus.FAIL, "Enabled user sample does not exist: " + userId);
         }
         if ("ENABLED".equalsIgnoreCase(snapshot.getStatus())) {
-            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.PASS, "统一过滤器可命中启用用户 " + username);
+            return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "Enabled User Filter", ThirdPartyLdapCheckStatus.PASS, "User is enabled: " + userId);
         }
-        return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "启用用户过滤命中", ThirdPartyLdapCheckStatus.FAIL, username + " 当前不是启用状态");
+        return new ThirdPartyLdapPrecheckItem("ENABLED_USER_FILTER_MATCH", "Enabled User Filter", ThirdPartyLdapCheckStatus.FAIL, "User is not enabled: " + userId);
     }
 
-    private ThirdPartyLdapPrecheckItem checkDisabledUserFilterBlockInStub(String username) {
-        if (username == null) {
-            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.SKIPPED, "未提供禁用用户样本");
+    private ThirdPartyLdapPrecheckItem checkDisabledUserFilterBlockInStub(String userId) {
+        if (userId == null) {
+            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.SKIPPED, "No disabled user sample provided.");
         }
-        LdapUserSnapshot snapshot = ldapDirectoryService.findUserSnapshot(username);
+        LdapUserSnapshot snapshot = ldapDirectoryService.findUserSnapshot(userId);
         if (snapshot == null) {
-            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, "禁用用户样本不存在 " + username);
+            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.FAIL, "Disabled user sample does not exist: " + userId);
         }
         if ("DISABLED".equalsIgnoreCase(snapshot.getStatus())) {
-            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.PASS, "统一过滤器会拦截禁用用户 " + username);
+            return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.PASS, "User is disabled: " + userId);
         }
-        return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "禁用用户过滤拦截", ThirdPartyLdapCheckStatus.FAIL, username + " 当前不是禁用状态");
+        return new ThirdPartyLdapPrecheckItem("DISABLED_USER_FILTER_BLOCK", "Disabled User Block", ThirdPartyLdapCheckStatus.FAIL, "User is not disabled: " + userId);
     }
 
     private Optional<LdapTemplate> currentLdapTemplate() {
@@ -319,7 +311,7 @@ public class ThirdPartyLdapIntegrationApplicationService {
     private String requireUsername(String username) {
         String value = blankToNull(username);
         if (value == null) {
-            throw new BizException("LDAP_PRECHECK_USER_REQUIRED", "启用用户样本不能为空");
+            throw new BizException("LDAP_PRECHECK_USER_REQUIRED", "Enabled user sample is required.");
         }
         return value;
     }
@@ -331,8 +323,8 @@ public class ThirdPartyLdapIntegrationApplicationService {
         return value.trim();
     }
 
-    private String buildConcreteStandardFilter(String employeeNo) {
-        return "(&(objectClass=inetOrgPerson)(employeeNumber=" + LdapEncoder.filterEncode(employeeNo) + ")(employeeType=ENABLED))";
+    private String buildConcreteStandardFilter(String userId) {
+        return "(&(objectClass=inetOrgPerson)(uid=" + LdapEncoder.filterEncode(userId) + ")(employeeType=ENABLED))";
     }
 
     private String buildAbsoluteDn(String relativeDn) {

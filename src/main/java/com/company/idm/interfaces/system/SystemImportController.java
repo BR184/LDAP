@@ -18,8 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 提供系统管理下的导入入口。
- */
+ * 鎻愪緵绯荤粺绠＄悊涓嬬殑瀵煎叆鍏ュ彛銆? */
 @RestController
 @RequestMapping("/api/v1/system/imports")
 public class SystemImportController {
@@ -42,7 +41,7 @@ public class SystemImportController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/system/imports/feishu/full', 'POST')")
     public ApiResponse<SyncBatchDetailResponse> importFeishuFullFile(
         @Valid @RequestBody FeishuFullImportRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(syncResponseAssembler.toResponse(
             syncApplicationService.executeFeishuFullFileImport(
@@ -61,7 +60,7 @@ public class SystemImportController {
         @RequestParam("file") MultipartFile file,
         @RequestParam("importMode") ImportMode importMode,
         @RequestParam(value = "remark", required = false) String remark,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         String storedDocumentPath = feishuImportUploadService.store(file);
         return ApiResponse.success(syncResponseAssembler.toResponse(
@@ -75,3 +74,4 @@ public class SystemImportController {
         ));
     }
 }
+

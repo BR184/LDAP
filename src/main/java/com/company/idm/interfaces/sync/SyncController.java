@@ -16,8 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 提供同步任务的手工触发与查询接口。
- */
+ * 鎻愪緵鍚屾浠诲姟鐨勬墜宸ヨЕ鍙戜笌鏌ヨ鎺ュ彛銆? */
 @RestController
 @RequestMapping("/api/v1/sync")
 @RequiredArgsConstructor
@@ -29,7 +28,7 @@ public class SyncController {
     @PostMapping("/reconcile/preview")
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/sync/reconcile/preview', 'POST')")
     public ApiResponse<SyncBatchDetailResponse> previewReconcile(
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(syncResponseAssembler.toResponse(syncApplicationService.previewReconcile(username, SyncTriggerMode.MANUAL)));
     }
@@ -38,7 +37,7 @@ public class SyncController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/sync/reconcile/execute', 'POST')")
     public ApiResponse<SyncBatchDetailResponse> executeReconcile(
         @RequestBody(required = false) SyncReconcileRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         boolean autoRepair = request != null && Boolean.TRUE.equals(request.autoRepair());
         return ApiResponse.success(syncResponseAssembler.toResponse(syncApplicationService.executeReconcile(autoRepair, username, SyncTriggerMode.MANUAL)));
@@ -48,7 +47,7 @@ public class SyncController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/sync/jobs/' + #id + '/retry', 'POST')")
     public ApiResponse<SyncBatchDetailResponse> retryJob(
         @PathVariable Long id,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(syncResponseAssembler.toResponse(syncApplicationService.retryJob(id, username)));
     }
@@ -65,3 +64,4 @@ public class SyncController {
         return ApiResponse.success(syncResponseAssembler.toResponse(syncApplicationService.getBatchDetail(batchNo)));
     }
 }
+

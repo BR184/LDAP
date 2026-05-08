@@ -30,6 +30,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -41,7 +42,7 @@ public class FeishuUserImportService {
     private static final String DEFAULT_IMPORTED_PASSWORD = "123456";
     private static final String NORMAL_USER_ROLE_CODE = "NORMAL_USER";
     private static final String USER_FILE_IMPORT_REQUIRES_DEPARTMENT_FILE_CODE = "FEISHU_USER_IMPORT_DEPARTMENT_FILE_REQUIRED";
-    private static final String USER_FILE_IMPORT_REQUIRES_DEPARTMENT_FILE_MESSAGE = "请先更新部门文件后再导入用户文件";
+    private static final String USER_FILE_IMPORT_REQUIRES_DEPARTMENT_FILE_MESSAGE = "请先导入部门文件后再导入用户文件";
 
     private final FeishuUserRemoteService userRemoteService;
     private final FeishuDepartmentRemoteService departmentRemoteService;
@@ -53,10 +54,10 @@ public class FeishuUserImportService {
     private final LdapGroupService ldapGroupService;
     private final PolicyRefreshService policyRefreshService;
     private final PasswordPolicyValidator passwordPolicyValidator;
-    private final UsernameGenerationService usernameGenerationService;
     private final IntranetEmailGenerationService intranetEmailGenerationService;
     private final AppLdapProperties ldapProperties;
 
+    @Autowired
     public FeishuUserImportService(
         FeishuUserRemoteService userRemoteService,
         FeishuDepartmentRemoteService departmentRemoteService,
@@ -68,7 +69,6 @@ public class FeishuUserImportService {
         LdapGroupService ldapGroupService,
         PolicyRefreshService policyRefreshService,
         PasswordPolicyValidator passwordPolicyValidator,
-        UsernameGenerationService usernameGenerationService,
         IntranetEmailGenerationService intranetEmailGenerationService,
         AppLdapProperties ldapProperties
     ) {
@@ -82,9 +82,39 @@ public class FeishuUserImportService {
         this.ldapGroupService = ldapGroupService;
         this.policyRefreshService = policyRefreshService;
         this.passwordPolicyValidator = passwordPolicyValidator;
-        this.usernameGenerationService = usernameGenerationService;
         this.intranetEmailGenerationService = intranetEmailGenerationService;
         this.ldapProperties = ldapProperties;
+    }
+
+    public FeishuUserImportService(
+        FeishuUserRemoteService userRemoteService,
+        FeishuDepartmentRemoteService departmentRemoteService,
+        FeishuImportDocumentResolver importDocumentResolver,
+        UserRepository userRepository,
+        DepartmentRepository departmentRepository,
+        RoleRepository roleRepository,
+        LdapDirectoryService ldapDirectoryService,
+        LdapGroupService ldapGroupService,
+        PolicyRefreshService policyRefreshService,
+        PasswordPolicyValidator passwordPolicyValidator,
+        UsernameGenerationService ignoredUsernameGenerationService,
+        IntranetEmailGenerationService intranetEmailGenerationService,
+        AppLdapProperties ldapProperties
+    ) {
+        this(
+            userRemoteService,
+            departmentRemoteService,
+            importDocumentResolver,
+            userRepository,
+            departmentRepository,
+            roleRepository,
+            ldapDirectoryService,
+            ldapGroupService,
+            policyRefreshService,
+            passwordPolicyValidator,
+            intranetEmailGenerationService,
+            ldapProperties
+        );
     }
 
     public FeishuUserImportResult preview(SyncRequestPayload payload) {
@@ -147,21 +177,21 @@ public class FeishuUserImportService {
     }
 
     private String syncLdapUser(User saved, List<Department> departments) {
-        boolean existsInLdap = ldapDirectoryService.existsByUid(saved.getUsername());
+        boolean existsInLdap = ldapDirectoryService.existsByUid(saved.getUserId());
         String ldapDn;
         if (!existsInLdap) {
             ldapDn = ldapDirectoryService.createUser(saved, DEFAULT_IMPORTED_PASSWORD);
         } else {
             ldapDirectoryService.updateUser(saved);
-            ldapDn = buildUserDn(saved.getUsername());
+            ldapDn = buildUserDn(saved.getUserId());
         }
         if (saved.getStatus() == UserStatus.ENABLED) {
-            ldapDirectoryService.enableUser(saved.getUsername());
+            ldapDirectoryService.enableUser(saved.getUserId());
         } else {
-            ldapDirectoryService.disableUser(saved.getUsername());
+            ldapDirectoryService.disableUser(saved.getUserId());
         }
         if (departments.isEmpty()) {
-            ldapGroupService.removeUserFromAllGroups(saved.getUsername());
+            ldapGroupService.removeUserFromAllGroups(saved.getUserId());
             return ldapDn;
         }
         for (Department department : departments) {
@@ -169,7 +199,7 @@ public class FeishuUserImportService {
             updateDepartmentLdapDn(department, groupDn);
         }
         ldapGroupService.syncUserGroups(
-            saved.getUsername(),
+            saved.getUserId(),
             departments.stream().map(Department::getDeptCode).toList()
         );
         return ldapDn;
@@ -202,8 +232,8 @@ public class FeishuUserImportService {
             User target = buildTargetUser(payloadItem, departmentAssignment, existing, importedLeaderRefByKey);
             ChangeType changeType = resolveChangeType(existing, target);
             boolean ldapRepairRequired = target.getLdapDn() == null
-                || !ldapDirectoryService.existsByUid(target.getUsername())
-                || !safe(target.getLdapDn()).equals(safe(buildUserDn(target.getUsername())));
+                || !ldapDirectoryService.existsByUid(target.getUserId())
+                || !safe(target.getLdapDn()).equals(safe(buildUserDn(target.getUserId())));
 
             if (changeType == ChangeType.NEW) {
                 newCount++;
@@ -255,7 +285,7 @@ public class FeishuUserImportService {
                     USER_FILE_IMPORT_REQUIRES_DEPARTMENT_FILE_MESSAGE
                 );
             }
-            throw new BizException("FEISHU_USER_DEPT_NOT_FOUND", "飞书用户主部门不存在");
+            throw new BizException("FEISHU_USER_DEPT_NOT_FOUND", "飞书用户部门不存在");
         }
 
         LinkedHashSet<String> partTimeDepartmentExternalIds = new LinkedHashSet<>();
@@ -280,7 +310,7 @@ public class FeishuUserImportService {
                         USER_FILE_IMPORT_REQUIRES_DEPARTMENT_FILE_MESSAGE
                     );
                 }
-                throw new BizException("FEISHU_USER_DEPT_NOT_FOUND", "飞书用户兼职部门不存在");
+                throw new BizException("FEISHU_USER_DEPT_NOT_FOUND", "飞书用户部门不存在");
             }
             departments.add(partTimeDepartment);
             partTimeDeptCodes.add(partTimeDepartment.getDeptCode());
@@ -289,48 +319,24 @@ public class FeishuUserImportService {
     }
 
     private User resolveExistingUser(FeishuUserPayload payload) {
-        String expectedUsername = resolveUsername(payload);
-        User byExternalId = userRepository.findByExternalId(payload.externalId()).orElse(null);
+        String expectedUserId = requireUserId(payload.userId());
         User byEmployeeNo = userRepository.findByEmployeeNo(payload.employeeNo()).orElse(null);
-        User byUsername = userRepository.findByUsername(expectedUsername).orElse(null);
+        User byUserId = userRepository.findByUserId(expectedUserId).orElse(null);
 
-        if (byExternalId != null
-            && payload.employeeNo() != null
-            && !payload.employeeNo().isBlank()
-            && byExternalId.getEmployeeNo() != null
-            && !byExternalId.getEmployeeNo().equals(payload.employeeNo())) {
-            throw new BizException("FEISHU_USER_EMPLOYEE_NO_CONFLICT", "飞书用户 external_id 与 employee_no 映射冲突");
+        if (byEmployeeNo != null && byUserId != null && !isSameUser(byEmployeeNo, byUserId)) {
+            throw new BizException("FEISHU_USER_IDENTITY_CONFLICT", "飞书用户 user_id 与 employee_no 映射到了不同用户");
         }
 
-        if (byEmployeeNo != null && byUsername != null && !isSameUser(byEmployeeNo, byUsername)) {
-            throw new BizException("FEISHU_USER_IDENTITY_CONFLICT", "飞书用户 employee_no 与 username 映射到了不同用户");
+        if (byUserId != null) {
+            return byUserId;
         }
-
-        if (byExternalId == null && byEmployeeNo != null) {
+        if (byEmployeeNo != null) {
             if (byEmployeeNo.getSourceType() == SourceType.MANUAL) {
-                throw new BizException("FEISHU_USER_SOURCE_CONFLICT", "飞书用户 employee_no 与手工用户冲突");
-            }
-            if (byEmployeeNo.getExternalId() != null
-                && !byEmployeeNo.getExternalId().isBlank()
-                && !byEmployeeNo.getExternalId().equals(payload.externalId())) {
-                throw new BizException("FEISHU_USER_DUPLICATE_EMPLOYEE_NO", "飞书用户 employee_no 已被其他用户占用");
+                throw new BizException("FEISHU_USER_SOURCE_CONFLICT", "飞书用户与手工用户身份冲突");
             }
             return byEmployeeNo;
         }
-
-        if (byExternalId == null && byUsername != null) {
-            if (byUsername.getSourceType() == SourceType.MANUAL) {
-                throw new BizException("FEISHU_USER_SOURCE_CONFLICT", "飞书用户 username 与手工用户冲突");
-            }
-            if (byUsername.getExternalId() != null
-                && !byUsername.getExternalId().isBlank()
-                && !byUsername.getExternalId().equals(payload.externalId())) {
-                throw new BizException("FEISHU_USER_DUPLICATE_USERNAME", "飞书用户 username 已被其他用户占用");
-            }
-            return byUsername;
-        }
-
-        return byExternalId;
+        return null;
     }
 
     private User buildTargetUser(
@@ -339,14 +345,14 @@ public class FeishuUserImportService {
         User existing,
         Map<LeaderMatchKey, String> importedLeaderRefByKey
     ) {
-        String username = existing == null ? resolveUsername(payload) : existing.getUsername();
+        String userId = existing == null ? requireUserId(payload.userId()) : existing.getUserId();
         String preservedEmail = preserveExistingOptionalValue(payload.email(), existing == null ? null : existing.getEmail());
         String preservedMobile = preserveExistingOptionalValue(payload.mobile(), existing == null ? null : existing.getMobile());
         String intranetEmail = resolveIntranetEmail(payload, existing);
         String leaderRef = resolveLeaderRef(payload, existing, importedLeaderRefByKey);
         return User.builder()
             .id(existing == null ? null : existing.getId())
-            .username(username)
+            .userId(userId)
             .realName(payload.realName())
             .email(preservedEmail)
             .intranetEmail(intranetEmail)
@@ -361,8 +367,7 @@ public class FeishuUserImportService {
             .status(normalizeStatus(payload.status()))
             .employmentStatus(resolveEmploymentStatus(payload, existing))
             .sourceType(SourceType.FEISHU)
-            .externalId(payload.externalId())
-            .ldapDn(existing == null ? buildUserDn(username) : existing.getLdapDn())
+            .ldapDn(existing == null ? buildUserDn(userId) : existing.getLdapDn())
             .tokenVersion(existing == null ? 0 : existing.getTokenVersion())
             .roleCodes(existing == null ? Set.of() : existing.getRoleCodes())
             .build();
@@ -393,7 +398,7 @@ public class FeishuUserImportService {
         if (changeType == ChangeType.NEW) {
             diffs.add(new SyncDiffPayload(
                 SyncTargetType.USER,
-                target.getUsername(),
+                target.getUserId(),
                 SyncDiffType.MISSING_IN_MYSQL,
                 snapshotTarget(target),
                 null,
@@ -406,7 +411,7 @@ public class FeishuUserImportService {
                 || !normalizeDeptCodes(existing.getPartTimeDeptCodes()).equals(normalizeDeptCodes(target.getPartTimeDeptCodes()));
             diffs.add(new SyncDiffPayload(
                 SyncTargetType.USER,
-                target.getUsername(),
+                target.getUserId(),
                 deptChanged ? SyncDiffType.RELATION_MISMATCH : SyncDiffType.FIELD_MISMATCH,
                 snapshotTarget(target),
                 snapshotExisting(existing),
@@ -415,7 +420,7 @@ public class FeishuUserImportService {
         } else if (ldapRepairRequired) {
             diffs.add(new SyncDiffPayload(
                 SyncTargetType.USER,
-                target.getUsername(),
+                target.getUserId(),
                 SyncDiffType.MISSING_IN_LDAP,
                 snapshotTarget(target),
                 snapshotExisting(existing),
@@ -426,25 +431,18 @@ public class FeishuUserImportService {
     }
 
     private void validateDuplicates(List<FeishuUserPayload> users) {
-        Map<String, Integer> externalIdCounter = new LinkedHashMap<>();
-        Map<String, Integer> generatedUsernameCounter = new LinkedHashMap<>();
+        Map<String, Integer> userIdCounter = new LinkedHashMap<>();
         Map<String, Integer> employeeNoCounter = new LinkedHashMap<>();
         for (FeishuUserPayload payload : users) {
-            externalIdCounter.merge(payload.externalId(), 1, Integer::sum);
+            userIdCounter.merge(requireUserId(payload.userId()), 1, Integer::sum);
             if (payload.employeeNo() == null || payload.employeeNo().isBlank()) {
                 throw new BizException("FEISHU_USER_EMPLOYEE_NO_REQUIRED", "飞书用户 employee_no 不能为空");
             }
             employeeNoCounter.merge(payload.employeeNo(), 1, Integer::sum);
-            generatedUsernameCounter.merge(resolveUsername(payload), 1, Integer::sum);
         }
-        externalIdCounter.forEach((externalId, count) -> {
+        userIdCounter.forEach((userId, count) -> {
             if (count > 1) {
-                throw new BizException("FEISHU_USER_DUPLICATE_EXTERNAL_ID", "飞书用户 external_id 重复");
-            }
-        });
-        generatedUsernameCounter.forEach((username, count) -> {
-            if (count > 1) {
-                throw new BizException("FEISHU_USER_DUPLICATE_USERNAME", "飞书用户 username 重复");
+                throw new BizException("FEISHU_USER_DUPLICATE_USER_ID", "飞书用户 user_id 重复");
             }
         });
         employeeNoCounter.forEach((employeeNo, count) -> {
@@ -490,15 +488,11 @@ public class FeishuUserImportService {
         return normalizeStatus(payload.status()) == UserStatus.ENABLED ? "正常" : "冻结";
     }
 
-    private String resolveUsername(FeishuUserPayload payload) {
-        return usernameGenerationService.generate(payload.realName(), payload.employeeNo());
-    }
-
     private String resolveIntranetEmail(FeishuUserPayload payload, User existing) {
         if (existing != null && existing.getIntranetEmail() != null && !existing.getIntranetEmail().isBlank()) {
             return existing.getIntranetEmail();
         }
-        return intranetEmailGenerationService.generate(blankToNull(payload.externalId()), existing == null ? null : existing.getId());
+        return intranetEmailGenerationService.generate(requireUserId(payload.userId()), existing == null ? null : existing.getId());
     }
 
     private String resolveLeaderRef(FeishuUserPayload payload, User existing, Map<LeaderMatchKey, String> importedLeaderRefByKey) {
@@ -574,19 +568,18 @@ public class FeishuUserImportService {
         if (left.getId() != null && right.getId() != null) {
             return left.getId().equals(right.getId());
         }
-        return left.getUsername() != null && left.getUsername().equals(right.getUsername());
+        return left.getUserId() != null && left.getUserId().equals(right.getUserId());
     }
 
-    private String buildUserDn(String username) {
-        return LdapDnHelper.buildUserDn(ldapProperties, username);
+    private String buildUserDn(String userId) {
+        return LdapDnHelper.buildUserDn(ldapProperties, userId);
     }
 
     private String snapshotTarget(User user) {
         return """
-            {"externalId":"%s","username":"%s","realName":"%s","employeeNo":"%s","deptCode":"%s","partTimeDeptCodes":"%s","status":%s}
+            {"userId":"%s","realName":"%s","employeeNo":"%s","deptCode":"%s","partTimeDeptCodes":"%s","status":%s}
             """.formatted(
-            safe(user.getExternalId()),
-            safe(user.getUsername()),
+            safe(user.getUserId()),
             safe(user.getRealName()),
             safe(user.getEmployeeNo()),
             safe(user.getDeptCode()),
@@ -597,10 +590,9 @@ public class FeishuUserImportService {
 
     private String snapshotExisting(User user) {
         return """
-            {"externalId":"%s","username":"%s","realName":"%s","employeeNo":"%s","deptCode":"%s","partTimeDeptCodes":"%s","status":%s,"ldapDn":"%s"}
+            {"userId":"%s","realName":"%s","employeeNo":"%s","deptCode":"%s","partTimeDeptCodes":"%s","status":%s,"ldapDn":"%s"}
             """.formatted(
-            safe(user.getExternalId()),
-            safe(user.getUsername()),
+            safe(user.getUserId()),
             safe(user.getRealName()),
             safe(user.getEmployeeNo()),
             safe(user.getDeptCode()),
@@ -624,6 +616,13 @@ public class FeishuUserImportService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private String requireUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new BizException("FEISHU_USER_ID_REQUIRED", "飞书用户 user_id 不能为空");
+        }
+        return userId.trim();
     }
 
     private String safe(String value) {
@@ -673,3 +672,4 @@ public class FeishuUserImportService {
         NO_CHANGE
     }
 }
+

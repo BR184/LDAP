@@ -13,7 +13,7 @@ public class UserDO {
 
     @TableId(type = IdType.AUTO)
     private Long id;
-    private String username;
+    private String userId;
     private String realName;
     private String email;
     private String intranetEmail;
@@ -28,7 +28,6 @@ public class UserDO {
     private String employmentStatus;
     private Integer status;
     private String sourceType;
-    private String externalId;
     private String ldapDn;
     private Integer tokenVersion;
     private Integer deleted;
@@ -45,12 +44,28 @@ public class UserDO {
         this.id = id;
     }
 
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
     public String getUsername() {
-        return username;
+        return userId;
     }
 
     public void setUsername(String username) {
-        this.username = username;
+        this.userId = username;
+    }
+
+    public String getExternalId() {
+        return userId;
+    }
+
+    public void setExternalId(String externalId) {
+        this.userId = externalId;
     }
 
     public String getRealName() {
@@ -163,14 +178,6 @@ public class UserDO {
 
     public void setSourceType(String sourceType) {
         this.sourceType = sourceType;
-    }
-
-    public String getExternalId() {
-        return externalId;
-    }
-
-    public void setExternalId(String externalId) {
-        this.externalId = externalId;
     }
 
     public String getLdapDn() {

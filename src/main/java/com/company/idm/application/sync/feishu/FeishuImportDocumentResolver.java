@@ -28,12 +28,10 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.system.ApplicationHome;
 import org.springframework.stereotype.Component;
 
-/**
- * Resolve FEISHU import documents from the controlled import directory.
- */
 @Component
 public class FeishuImportDocumentResolver {
 
@@ -68,18 +66,25 @@ public class FeishuImportDocumentResolver {
     private final FeishuFileImportProperties properties;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
-    private final UsernameGenerationService usernameGenerationService;
+
+    @Autowired
+    public FeishuImportDocumentResolver(
+        FeishuFileImportProperties properties,
+        ObjectMapper objectMapper,
+        UserRepository userRepository
+    ) {
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+        this.userRepository = userRepository;
+    }
 
     public FeishuImportDocumentResolver(
         FeishuFileImportProperties properties,
         ObjectMapper objectMapper,
         UserRepository userRepository,
-        UsernameGenerationService usernameGenerationService
+        UsernameGenerationService ignoredUsernameGenerationService
     ) {
-        this.properties = properties;
-        this.objectMapper = objectMapper;
-        this.userRepository = userRepository;
-        this.usernameGenerationService = usernameGenerationService;
+        this(properties, objectMapper, userRepository);
     }
 
     public List<FeishuDepartmentPayload> resolveDepartments(String documentPath) {
@@ -126,7 +131,7 @@ public class FeishuImportDocumentResolver {
         JsonNode departmentsNode = rootNode.get("departments");
         JsonNode usersNode = rootNode.get("users");
         if (departmentsNode == null || !departmentsNode.isArray() || usersNode == null || !usersNode.isArray()) {
-            throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "飞书一键导入 JSON 文件必须包含 departments 和 users 数组");
+            throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "飞书一键导入 JSON 必须包含 departments 和 users 数组");
         }
         return new FeishuFullImportDocument(
             objectMapper.convertValue(departmentsNode, DEPARTMENT_LIST_TYPE),
@@ -147,15 +152,14 @@ public class FeishuImportDocumentResolver {
         } catch (IOException exception) {
             throw new BizException("FEISHU_FILE_IMPORT_READ_FAILED", "飞书导入文件读取失败");
         }
-        throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "飞书花名册工作簿缺少可识别的在职人员工作表");
+        throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "花名册工作表中未找到可识别的表头");
     }
 
     private FeishuFullImportDocument resolveRosterDocument(Sheet sheet, ResolvedHeader resolvedHeader) {
         DataFormatter formatter = new DataFormatter();
         Map<String, FeishuDepartmentPayload> departmentMap = new LinkedHashMap<>();
+        Map<String, User> existingUserByUserId = buildExistingUserByUserId(userRepository.findAll());
         List<RosterUserRow> rosterUsers = new ArrayList<>();
-        List<User> existingUsers = userRepository.findAll();
-        Map<String, User> existingUserByExternalId = buildExistingUserByExternalId(existingUsers);
         Map<String, Integer> headerIndex = resolvedHeader.headerIndex();
 
         int orderNo = 1;
@@ -165,12 +169,12 @@ public class FeishuImportDocumentResolver {
                 continue;
             }
 
-            String externalId = readRequiredCell(row, headerIndex, formatter, HEADER_USER_ID, HEADER_USER_ID_LOWER);
+            String userId = readRequiredCell(row, headerIndex, formatter, HEADER_USER_ID, HEADER_USER_ID_LOWER);
             String realName = readRequiredCell(row, headerIndex, formatter, HEADER_NAME);
             String employeeNo = readRequiredCell(row, headerIndex, formatter, HEADER_EMPLOYEE_NO);
             List<List<String>> departmentHierarchies = resolveDepartmentHierarchies(row, headerIndex, formatter);
             if (departmentHierarchies.isEmpty()) {
-                throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "飞书花名册中存在缺少部门信息的用户行");
+                throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "花名册中存在缺少部门信息的用户行");
             }
 
             List<String> departmentExternalIds = new ArrayList<>();
@@ -178,24 +182,19 @@ public class FeishuImportDocumentResolver {
                 departmentExternalIds.add(upsertDepartmentHierarchy(hierarchy, departmentMap));
             }
 
-            String email = readOptionalCell(row, headerIndex, formatter, HEADER_WORK_EMAIL);
-            User existingUser = existingUserByExternalId.get(externalId);
-            String username = existingUser != null
-                ? existingUser.getUsername()
-                : usernameGenerationService.generate(realName, employeeNo);
-
+            User existingUser = existingUserByUserId.get(userId);
+            String resolvedUserId = existingUser == null ? userId : existingUser.getUserId();
             rosterUsers.add(new RosterUserRow(
-                externalId,
-                username,
+                resolvedUserId,
                 realName,
-                normalizeEmail(email),
+                normalizeEmail(readOptionalCell(row, headerIndex, formatter, HEADER_WORK_EMAIL)),
                 normalizeMobile(readOptionalCell(row, headerIndex, formatter, HEADER_MOBILE, HEADER_CONTACT_MOBILE, HEADER_MOBILE_NUMBER)),
                 employeeNo,
                 readOptionalCell(row, headerIndex, formatter, HEADER_JOB_TITLE),
                 readOptionalCell(row, headerIndex, formatter, HEADER_DIRECT_LEADER),
                 readOptionalCell(row, headerIndex, formatter, HEADER_ACCOUNT_STATUS),
                 departmentExternalIds.get(0),
-                departmentExternalIds.size() > 1 ? departmentExternalIds.subList(1, departmentExternalIds.size()) : List.of(),
+                departmentExternalIds.size() > 1 ? List.copyOf(departmentExternalIds.subList(1, departmentExternalIds.size())) : List.of(),
                 resolveUserStatus(firstNonBlank(
                     readOptionalCell(row, headerIndex, formatter, HEADER_STATUS),
                     readOptionalCell(row, headerIndex, formatter, HEADER_ACCOUNT_STATUS)
@@ -206,8 +205,7 @@ public class FeishuImportDocumentResolver {
 
         List<FeishuUserPayload> users = rosterUsers.stream()
             .map(item -> new FeishuUserPayload(
-                item.externalId(),
-                item.username(),
+                item.userId(),
                 item.realName(),
                 item.email(),
                 item.mobile(),
@@ -225,6 +223,30 @@ public class FeishuImportDocumentResolver {
         return new FeishuFullImportDocument(new ArrayList<>(departmentMap.values()), users);
     }
 
+    private ResolvedHeader resolveHeader(Sheet sheet) {
+        DataFormatter formatter = new DataFormatter();
+        int firstRowNum = sheet.getFirstRowNum();
+        int lastRowNum = Math.min(sheet.getLastRowNum(), firstRowNum + MAX_HEADER_SCAN_ROWS - 1);
+        for (int rowIndex = firstRowNum; rowIndex <= lastRowNum; rowIndex++) {
+            Row headerRow = sheet.getRow(rowIndex);
+            if (headerRow == null || isRowBlank(headerRow, formatter)) {
+                continue;
+            }
+            Map<String, Integer> headerIndex = new LinkedHashMap<>();
+            short lastCellNum = headerRow.getLastCellNum();
+            for (int cellIndex = 0; cellIndex < lastCellNum; cellIndex++) {
+                String header = formatter.formatCellValue(headerRow.getCell(cellIndex));
+                if (header != null && !header.isBlank()) {
+                    headerIndex.put(normalizeHeader(header), cellIndex);
+                }
+            }
+            if (isRosterSheet(headerIndex)) {
+                return new ResolvedHeader(rowIndex, headerIndex);
+            }
+        }
+        return null;
+    }
+
     private boolean isRosterSheet(Map<String, Integer> headerIndex) {
         return headerIndex.containsKey(normalizeHeader(HEADER_NAME))
             && (headerIndex.containsKey(normalizeHeader(HEADER_USER_ID))
@@ -236,30 +258,10 @@ public class FeishuImportDocumentResolver {
             || headerIndex.containsKey(normalizeHeader(HEADER_DEPARTMENT)));
     }
 
-    private String upsertDepartmentHierarchy(List<String> hierarchy, Map<String, FeishuDepartmentPayload> departmentMap) {
-        String parentExternalId = null;
-        String pathKey = "";
-        for (String name : hierarchy) {
-            pathKey = pathKey.isBlank() ? name : pathKey + "/" + name;
-            if (!departmentMap.containsKey(pathKey)) {
-                departmentMap.put(pathKey, new FeishuDepartmentPayload(
-                    buildDepartmentExternalId(pathKey),
-                    buildDepartmentCode(pathKey),
-                    name,
-                    parentExternalId,
-                    1,
-                    departmentMap.size() + 1
-                ));
-            }
-            parentExternalId = departmentMap.get(pathKey).externalId();
-        }
-        return parentExternalId;
-    }
-
     private List<List<String>> resolveDepartmentHierarchies(Row row, Map<String, Integer> headerIndex, DataFormatter formatter) {
         LinkedHashMap<String, List<String>> hierarchies = new LinkedHashMap<>();
-        List<String> levelHierarchy = resolveLevelHierarchy(row, headerIndex, formatter);
 
+        List<String> levelHierarchy = resolveLevelHierarchy(row, headerIndex, formatter);
         String explicitPaths = firstNonBlank(
             readOptionalCell(row, headerIndex, formatter, HEADER_DEPARTMENT_FULL_PATH),
             readOptionalCell(row, headerIndex, formatter, HEADER_DEPARTMENT_FULL_PATH_WITH_SPACE),
@@ -286,12 +288,9 @@ public class FeishuImportDocumentResolver {
             }
         }
 
-        if (hierarchies.isEmpty()) {
-            if (!levelHierarchy.isEmpty()) {
-                hierarchies.put(String.join("/", levelHierarchy), levelHierarchy);
-            }
+        if (hierarchies.isEmpty() && !levelHierarchy.isEmpty()) {
+            hierarchies.put(String.join("/", levelHierarchy), levelHierarchy);
         }
-
         return new ArrayList<>(hierarchies.values());
     }
 
@@ -305,11 +304,42 @@ public class FeishuImportDocumentResolver {
         return hierarchy;
     }
 
+    private String upsertDepartmentHierarchy(List<String> hierarchy, Map<String, FeishuDepartmentPayload> departmentMap) {
+        String parentExternalId = null;
+        String pathKey = "";
+        for (String name : hierarchy) {
+            pathKey = pathKey.isBlank() ? name : pathKey + "/" + name;
+            if (!departmentMap.containsKey(pathKey)) {
+                departmentMap.put(pathKey, new FeishuDepartmentPayload(
+                    buildDepartmentExternalId(pathKey),
+                    buildDepartmentCode(pathKey),
+                    name,
+                    parentExternalId,
+                    1,
+                    departmentMap.size() + 1
+                ));
+            }
+            parentExternalId = departmentMap.get(pathKey).externalId();
+        }
+        return parentExternalId;
+    }
+
+    private Map<String, User> buildExistingUserByUserId(List<User> existingUsers) {
+        Map<String, User> result = new LinkedHashMap<>();
+        for (User user : existingUsers) {
+            if (user.getUserId() == null || user.getUserId().isBlank()) {
+                continue;
+            }
+            result.putIfAbsent(user.getUserId(), user);
+        }
+        return result;
+    }
+
     private List<String> splitDepartmentPaths(String rawValue) {
         if (rawValue == null || rawValue.isBlank()) {
             return List.of();
         }
-        return java.util.Arrays.stream(rawValue.split("[,，;；\\r\\n]+"))
+        return java.util.Arrays.stream(rawValue.split("[,\uFF0C\r\n]+"))
             .map(String::trim)
             .filter(item -> !item.isBlank())
             .toList();
@@ -324,17 +354,6 @@ public class FeishuImportDocumentResolver {
             .map(String::trim)
             .filter(segment -> !segment.isBlank())
             .collect(Collectors.toCollection(ArrayList::new));
-    }
-
-    private Map<String, User> buildExistingUserByExternalId(List<User> existingUsers) {
-        Map<String, User> result = new LinkedHashMap<>();
-        for (User user : existingUsers) {
-            if (user.getExternalId() == null || user.getExternalId().isBlank()) {
-                continue;
-            }
-            result.putIfAbsent(user.getExternalId(), user);
-        }
-        return result;
     }
 
     private String normalizeMobile(String mobile) {
@@ -390,32 +409,8 @@ public class FeishuImportDocumentResolver {
             }
             return builder.toString();
         } catch (NoSuchAlgorithmException exception) {
-            throw new BizException("FEISHU_FILE_IMPORT_HASH_FAILED", "飞书花名册导入哈希计算失败");
+            throw new BizException("FEISHU_FILE_IMPORT_HASH_FAILED", "飞书导入路径哈希失败");
         }
-    }
-
-    private ResolvedHeader resolveHeader(Sheet sheet) {
-        DataFormatter formatter = new DataFormatter();
-        int firstRowNum = sheet.getFirstRowNum();
-        int lastRowNum = Math.min(sheet.getLastRowNum(), firstRowNum + MAX_HEADER_SCAN_ROWS - 1);
-        for (int rowIndex = firstRowNum; rowIndex <= lastRowNum; rowIndex++) {
-            Row headerRow = sheet.getRow(rowIndex);
-            if (headerRow == null || isRowBlank(headerRow, formatter)) {
-                continue;
-            }
-            Map<String, Integer> headerIndex = new LinkedHashMap<>();
-            short lastCellNum = headerRow.getLastCellNum();
-            for (int cellIndex = 0; cellIndex < lastCellNum; cellIndex++) {
-                String header = formatter.formatCellValue(headerRow.getCell(cellIndex));
-                if (header != null && !header.isBlank()) {
-                    headerIndex.put(normalizeHeader(header), cellIndex);
-                }
-            }
-            if (isRosterSheet(headerIndex)) {
-                return new ResolvedHeader(rowIndex, headerIndex);
-            }
-        }
-        return null;
     }
 
     private boolean isRowBlank(Row row, DataFormatter formatter) {
@@ -429,27 +424,15 @@ public class FeishuImportDocumentResolver {
         return true;
     }
 
-    private String readRequiredCell(
-        Row row,
-        Map<String, Integer> headerIndex,
-        DataFormatter formatter,
-        String primaryHeader,
-        String... aliases
-    ) {
+    private String readRequiredCell(Row row, Map<String, Integer> headerIndex, DataFormatter formatter, String primaryHeader, String... aliases) {
         String value = readOptionalCell(row, headerIndex, formatter, primaryHeader, aliases);
         if (value == null || value.isBlank()) {
-            throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "飞书花名册中存在必填列空值");
+            throw new BizException("FEISHU_FILE_IMPORT_FORMAT_INVALID", "飞书导入文件缺少必填列值");
         }
         return value;
     }
 
-    private String readOptionalCell(
-        Row row,
-        Map<String, Integer> headerIndex,
-        DataFormatter formatter,
-        String primaryHeader,
-        String... aliases
-    ) {
+    private String readOptionalCell(Row row, Map<String, Integer> headerIndex, DataFormatter formatter, String primaryHeader, String... aliases) {
         Integer index = headerIndex.get(normalizeHeader(primaryHeader));
         if (index == null) {
             for (String alias : aliases) {
@@ -477,7 +460,7 @@ public class FeishuImportDocumentResolver {
 
     private void validateFileSize(Path resolvedPath) throws IOException {
         if (Files.size(resolvedPath) > properties.getMaxFileSizeBytes()) {
-            throw new BizException("FEISHU_FILE_IMPORT_TOO_LARGE", "飞书导入文件大小超出限制");
+            throw new BizException("FEISHU_FILE_IMPORT_TOO_LARGE", "飞书导入文件大小超过限制");
         }
     }
 
@@ -517,7 +500,6 @@ public class FeishuImportDocumentResolver {
         if (configuredPath.isAbsolute()) {
             return List.of(configuredPath.toAbsolutePath().normalize());
         }
-
         List<Path> candidates = new ArrayList<>();
         Path workingDirectory = Paths.get("").toAbsolutePath().normalize();
         candidates.add(workingDirectory.resolve(configuredPath).normalize());
@@ -596,8 +578,7 @@ public class FeishuImportDocumentResolver {
     }
 
     private record RosterUserRow(
-        String externalId,
-        String username,
+        String userId,
         String realName,
         String email,
         String mobile,

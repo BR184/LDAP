@@ -19,9 +19,6 @@ import org.springframework.ldap.core.LdapTemplate;
 import org.springframework.ldap.query.LdapQueryBuilder;
 import org.springframework.stereotype.Service;
 
-/**
- * 基于 Spring LDAP 实现真实目录服务操作。
- */
 @Service
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "app.ldap", name = "mode", havingValue = "spring")
@@ -31,10 +28,10 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
     private final AppLdapProperties ldapProperties;
 
     @Override
-    public boolean authenticate(String username, String password) {
+    public boolean authenticate(String userId, String password) {
         try {
             ldapTemplate.authenticate(
-                LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("uid").is(username),
+                LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("uid").is(userId),
                 password
             );
             return true;
@@ -44,18 +41,18 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
     }
 
     @Override
-    public boolean existsByUid(String username) {
+    public boolean existsByUid(String userId) {
         return !ldapTemplate.search(
-            LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("uid").is(username),
+            LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("uid").is(userId),
             (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
         ).isEmpty();
     }
 
     @Override
-    public LdapUserSnapshot findUserSnapshot(String username) {
-        DirContextAdapter context = lookup(username);
+    public LdapUserSnapshot findUserSnapshot(String userId) {
+        DirContextAdapter context = lookup(userId);
         return LdapUserSnapshot.builder()
-            .username(username)
+            .userId(userId)
             .realName(context.getStringAttribute("cn"))
             .email(context.getStringAttribute("mail"))
             .mobile(context.getStringAttribute("mobile"))
@@ -72,17 +69,17 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
             LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("objectClass").is("inetOrgPerson"),
             (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()
         ).stream()
-            .filter(username -> username != null && !"placeholder".equals(username))
+            .filter(userId -> userId != null && !"placeholder".equals(userId))
             .sorted()
             .toList();
     }
 
     @Override
     public String createUser(User user, String rawPassword) {
-        Name dn = LdapDnHelper.buildRelativeUserDn(ldapProperties, user.getUsername());
+        Name dn = LdapDnHelper.buildRelativeUserDn(ldapProperties, user.getUserId());
         BasicAttributes attributes = new BasicAttributes();
         attributes.put("objectClass", "inetOrgPerson");
-        attributes.put(new BasicAttribute("uid", user.getUsername()));
+        attributes.put(new BasicAttribute("uid", user.getUserId()));
         attributes.put(new BasicAttribute("cn", user.getRealName()));
         attributes.put(new BasicAttribute("sn", user.getRealName()));
         putIfPresent(attributes, "mail", resolveMail(user));
@@ -97,7 +94,7 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
 
     @Override
     public void updateUser(User user) {
-        DirContextAdapter context = lookup(user.getUsername());
+        DirContextAdapter context = lookup(user.getUserId());
         context.setAttributeValue("cn", user.getRealName());
         context.setAttributeValue("sn", user.getRealName());
         setOrRemoveAttribute(context, "mail", resolveMail(user));
@@ -108,36 +105,36 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
     }
 
     @Override
-    public void enableUser(String username) {
-        updateUserAttribute(username, "employeeType", "ENABLED");
+    public void enableUser(String userId) {
+        updateUserAttribute(userId, "employeeType", "ENABLED");
     }
 
     @Override
-    public void disableUser(String username) {
-        updateUserAttribute(username, "employeeType", "DISABLED");
+    public void disableUser(String userId) {
+        updateUserAttribute(userId, "employeeType", "DISABLED");
     }
 
     @Override
-    public void deleteUser(String username) {
-        DirContextAdapter context = lookup(username);
+    public void deleteUser(String userId) {
+        DirContextAdapter context = lookup(userId);
         ldapTemplate.unbind(context.getDn());
     }
 
     @Override
-    public void resetPassword(String username, String rawPassword) {
-        updateUserAttribute(username, "userPassword", rawPassword);
+    public void resetPassword(String userId, String rawPassword) {
+        updateUserAttribute(userId, "userPassword", rawPassword);
     }
 
-    private void updateUserAttribute(String username, String attributeName, String value) {
-        DirContextAdapter context = lookup(username);
+    private void updateUserAttribute(String userId, String attributeName, String value) {
+        DirContextAdapter context = lookup(userId);
         context.setAttributeValue(attributeName, value);
         ldapTemplate.modifyAttributes(context);
     }
 
-    private DirContextAdapter lookup(String username) {
+    private DirContextAdapter lookup(String userId) {
         try {
             return ldapTemplate.search(
-                LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("uid").is(username),
+                LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("uid").is(userId),
                 (ContextMapper<DirContextAdapter>) ctx -> (DirContextAdapter) ctx
             ).stream().findFirst().orElseThrow(() -> new BizException("LDAP_USER_NOT_FOUND", "LDAP 用户不存在"));
         } catch (NameNotFoundException exception) {

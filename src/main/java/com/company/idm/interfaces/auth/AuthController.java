@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 提供登录与当前用户信息接口。
+ * 鎻愪緵鐧诲綍涓庡綋鍓嶇敤鎴蜂俊鎭帴鍙ｃ€?
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -31,10 +31,10 @@ public class AuthController {
 
     @PostMapping("/login")
     public ApiResponse<AuthLoginResponse> login(@Valid @RequestBody AuthLoginRequest request) {
-        LoginResult result = authApplicationService.login(new LoginCommand(request.username(), request.password()));
+        LoginResult result = authApplicationService.login(new LoginCommand(request.loginId(), request.password()));
         return ApiResponse.success(new AuthLoginResponse(
+            result.id(),
             result.userId(),
-            result.username(),
             result.roleCodes(),
             result.accessToken(),
             result.expiresAt()
@@ -47,7 +47,7 @@ public class AuthController {
         HttpServletRequest httpServletRequest
     ) {
         passwordResetApplicationService.forgotPassword(new ForgotPasswordCommand(
-            request.username(),
+            request.loginId(),
             resolveClientIp(httpServletRequest)
         ));
         return ApiResponse.success(passwordResetApplicationService.forgotPasswordSuccessNotice());
@@ -55,11 +55,11 @@ public class AuthController {
 
     @GetMapping("/me")
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/auth/me', 'GET')")
-    public ApiResponse<CurrentUserResponse> me(@AuthenticationPrincipal(expression = "username") String username) {
+    public ApiResponse<CurrentUserResponse> me(@AuthenticationPrincipal(expression = "userId") String username) {
         User user = authApplicationService.loadProfile(username);
         return ApiResponse.success(new CurrentUserResponse(
             user.getId(),
-            user.getUsername(),
+            user.getUserId(),
             user.getRealName(),
             user.getEmail(),
             user.getIntranetEmail(),
@@ -80,3 +80,4 @@ public class AuthController {
         return remoteAddr == null || remoteAddr.isBlank() ? "UNKNOWN" : remoteAddr;
     }
 }
+

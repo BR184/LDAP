@@ -6,7 +6,7 @@ import type { RoleOption } from '@/types/role'
 import type { CreateUserPayload, UpdateUserPayload, UserItem } from '@/types/user'
 
 interface UserFormValue {
-  username: string
+  userId: string
   realName: string
   email: string
   intranetEmail: string
@@ -55,6 +55,7 @@ const rules = computed<FormRules<UserFormValue>>(() => ({
     },
   ],
   employeeNo: [{ required: true, message: '工号不能为空', trigger: 'blur' }],
+  userId: [{ required: true, message: '用户ID不能为空', trigger: 'blur' }],
   initialPassword: isCreate.value
     ? [{ required: true, message: '初始密码不能为空', trigger: 'blur' }]
     : [],
@@ -73,7 +74,7 @@ watch(
     Object.assign(form, buildDefaultForm())
 
     if (props.user) {
-      form.username = props.user.username
+      form.userId = props.user.userId
       form.realName = props.user.realName
       form.email = props.user.email || ''
       form.intranetEmail = props.user.intranetEmail || ''
@@ -90,7 +91,7 @@ watch(
 
 function buildDefaultForm(): UserFormValue {
   return {
-    username: '',
+    userId: '',
     realName: '',
     email: '',
     intranetEmail: '',
@@ -131,6 +132,7 @@ async function handleSubmit() {
   if (isCreate.value) {
     emit('submit', {
       realName: form.realName.trim(),
+      userId: form.userId.trim(),
       email: form.email.trim() || undefined,
       intranetEmail: form.intranetEmail.trim(),
       mobile: form.mobile.trim(),
@@ -145,6 +147,7 @@ async function handleSubmit() {
 
   emit('submit', {
     realName: form.realName.trim(),
+    userId: form.userId.trim(),
     email: form.email.trim() || undefined,
     intranetEmail: form.intranetEmail.trim(),
     mobile: form.mobile.trim(),
@@ -163,13 +166,12 @@ function closeDrawer() {
   <el-drawer :model-value="modelValue" :title="title" size="520px" @close="closeDrawer">
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-alert v-if="isCreate" :closable="false" class="form-alert" type="info">
-        登录账号将由系统自动生成，普通用户后续使用工号登录；内网邮箱需手工填写。
+        用户ID将作为 LDAP 目录登录主标识，请按业务要求手工填写；项目后台普通用户仍使用工号登录。
       </el-alert>
 
-      <el-form-item v-if="!isCreate" label="用户名">
-        <el-input :model-value="form.username" disabled />
+      <el-form-item label="用户ID" prop="userId">
+        <el-input v-model="form.userId" :disabled="!isCreate" placeholder="请输入用户ID" />
       </el-form-item>
-
       <el-form-item label="姓名" prop="realName">
         <el-input v-model="form.realName" placeholder="请输入姓名" />
       </el-form-item>

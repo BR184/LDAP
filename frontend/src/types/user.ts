@@ -1,6 +1,6 @@
 export interface UserItem {
   id: number
-  username: string
+  userId: string
   realName: string
   email: string | null
   intranetEmail: string | null
@@ -22,12 +22,13 @@ export interface UserItem {
 }
 
 export interface UserListQuery {
-  username?: string
+  userId?: string
   deptName?: string
   status?: number
 }
 
 export interface CreateUserPayload {
+  userId: string
   realName: string
   email?: string
   intranetEmail: string
@@ -40,6 +41,7 @@ export interface CreateUserPayload {
 }
 
 export interface UpdateUserPayload {
+  userId: string
   realName: string
   email?: string
   intranetEmail: string
@@ -61,7 +63,7 @@ export interface ChangePasswordPayload {
 
 export interface BatchDeleteUsersPayload {
   userIds: number[]
-  usernameKeyword?: string
+  userIdKeyword?: string
   deptNameKeyword?: string
   statusCode?: number
 }

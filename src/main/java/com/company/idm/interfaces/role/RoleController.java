@@ -26,8 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 提供角色查询、创建、更新、删除与授权接口。
- */
+ * 鎻愪緵瑙掕壊鏌ヨ銆佸垱寤恒€佹洿鏂般€佸垹闄や笌鎺堟潈鎺ュ彛銆? */
 @RestController
 @RequestMapping("/api/v1/roles")
 @RequiredArgsConstructor
@@ -66,7 +65,7 @@ public class RoleController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles', 'POST')")
     public ApiResponse<RoleResponse> create(
         @Valid @RequestBody CreateRoleRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         Role role = rbacApplicationService.createRole(
             new CreateRoleCommand(request.roleCode(), request.roleName(), request.permissionLevel(), request.remark()), username
@@ -79,7 +78,7 @@ public class RoleController {
     public ApiResponse<RoleResponse> update(
         @PathVariable Long id,
         @Valid @RequestBody UpdateRoleRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         Role role = rbacApplicationService.updateRole(
             new UpdateRoleCommand(id, request.roleName(), request.permissionLevel(), request.remark()),
@@ -93,7 +92,7 @@ public class RoleController {
     public ApiResponse<Void> updateStatus(
         @PathVariable Long id,
         @Valid @RequestBody UpdateRoleStatusRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         rbacApplicationService.updateRoleStatus(new UpdateRoleStatusCommand(id, request.status(), username));
         return ApiResponse.success();
@@ -103,7 +102,7 @@ public class RoleController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id, 'DELETE')")
     public ApiResponse<Void> delete(
         @PathVariable Long id,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         rbacApplicationService.deleteRole(new DeleteRoleCommand(id, username));
         return ApiResponse.success();
@@ -113,7 +112,7 @@ public class RoleController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/batch-delete', 'POST')")
     public ApiResponse<BatchDeleteRolesResponse> batchDelete(
         @Valid @RequestBody BatchDeleteRolesRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         BatchDeleteRolesResult result = rbacApplicationService.batchDeleteRoles(new BatchDeleteRolesCommand(
             request.roleIds(),
@@ -127,7 +126,7 @@ public class RoleController {
     public ApiResponse<Void> grantPermissions(
         @PathVariable Long id,
         @Valid @RequestBody GrantRolePermissionsRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         rbacApplicationService.grantPermissions(new GrantRolePermissionsCommand(id, request.permissionIds(), username));
         return ApiResponse.success();
@@ -138,7 +137,7 @@ public class RoleController {
     public ApiResponse<Void> bindMenus(
         @PathVariable Long id,
         @Valid @RequestBody BindRoleMenusRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         rbacApplicationService.bindMenus(new BindRoleMenusCommand(id, request.menuIds(), username));
         return ApiResponse.success();
@@ -156,3 +155,4 @@ public class RoleController {
         );
     }
 }
+

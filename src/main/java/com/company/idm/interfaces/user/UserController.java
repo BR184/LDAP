@@ -39,8 +39,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 提供用户查询、创建、更新、删除、状态变更和密码管理接口。
- */
+ * 鎻愪緵鐢ㄦ埛鏌ヨ銆佸垱寤恒€佹洿鏂般€佸垹闄ゃ€佺姸鎬佸彉鏇村拰瀵嗙爜绠＄悊鎺ュ彛銆? */
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -55,13 +54,13 @@ public class UserController {
     @GetMapping
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'GET')")
     public ApiResponse<List<UserResponse>> list(
-        @RequestParam(required = false) String username,
+        @RequestParam(required = false) String userId,
         @RequestParam(required = false) String deptName,
         @RequestParam(required = false) String deptCode,
         @RequestParam(required = false) Integer status
     ) {
         String departmentKeyword = deptName != null && !deptName.isBlank() ? deptName : deptCode;
-        List<UserResponse> users = userApplicationService.listUsers(username, departmentKeyword, status).stream()
+        List<UserResponse> users = userApplicationService.listUsers(userId, departmentKeyword, status).stream()
             .map(this::toResponse)
             .toList();
         return ApiResponse.success(users);
@@ -77,9 +76,10 @@ public class UserController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'POST')")
     public ApiResponse<UserResponse> create(
         @Valid @RequestBody CreateUserRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         User user = userApplicationService.createUser(new CreateUserCommand(
+            request.userId(),
             request.realName(),
             request.email(),
             request.intranetEmail(),
@@ -99,10 +99,11 @@ public class UserController {
     public ApiResponse<UserResponse> update(
         @PathVariable Long id,
         @Valid @RequestBody UpdateUserRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         User user = userApplicationService.updateUser(new UpdateUserCommand(
             id,
+            request.userId(),
             request.realName(),
             request.email(),
             request.intranetEmail(),
@@ -120,7 +121,7 @@ public class UserController {
     public ApiResponse<Void> updateStatus(
         @PathVariable Long id,
         @Valid @RequestBody UpdateUserStatusRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         userApplicationService.updateStatus(new UpdateUserStatusCommand(id, request.statusCode(), username));
         return ApiResponse.success();
@@ -130,7 +131,7 @@ public class UserController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id, 'DELETE')")
     public ApiResponse<Void> delete(
         @PathVariable Long id,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         userApplicationService.deleteUser(new DeleteUserCommand(id, username));
         return ApiResponse.success();
@@ -140,11 +141,11 @@ public class UserController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/batch-delete', 'POST')")
     public ApiResponse<BatchDeleteUsersResponse> batchDelete(
         @Valid @RequestBody BatchDeleteUsersRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         BatchDeleteUsersResult result = userApplicationService.batchDeleteUsers(new BatchDeleteUsersCommand(
             request.userIds(),
-            request.usernameKeyword(),
+            request.userIdKeyword(),
             request.deptNameKeyword(),
             request.statusCode(),
             username
@@ -155,7 +156,7 @@ public class UserController {
     @PutMapping("/me/password")
     public ApiResponse<Void> changePassword(
         @Valid @RequestBody ChangePasswordRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         userApplicationService.changePassword(new ChangePasswordCommand(
             username,
@@ -170,7 +171,7 @@ public class UserController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/password/reset', 'PUT')")
     public ApiResponse<Void> resetPassword(
         @PathVariable Long id,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         passwordResetApplicationService.adminResetPassword(new AdminResetPasswordCommand(id, username));
         return ApiResponse.success();
@@ -181,7 +182,7 @@ public class UserController {
     public ApiResponse<Void> assignRoles(
         @PathVariable Long id,
         @Valid @RequestBody AssignUserRolesRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         rbacApplicationService.assignUserRoles(new AssignUserRolesCommand(id, request.roleIds(), username));
         return ApiResponse.success();
@@ -191,7 +192,7 @@ public class UserController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/sync/feishu', 'POST')")
     public ApiResponse<SyncBatchDetailResponse> syncFeishu(
         @RequestBody(required = false) FeishuSyncRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(syncResponseAssembler.toResponse(
             syncApplicationService.executeFeishuUserSync(username, SyncTriggerMode.MANUAL)
@@ -202,7 +203,7 @@ public class UserController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/import/feishu-file', 'POST')")
     public ApiResponse<SyncBatchDetailResponse> importFeishuFile(
         @Valid @RequestBody FeishuFileImportRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         SyncBatchDetail detail = syncApplicationService.executeFeishuUserFileImport(
             request.documentPath(),
@@ -219,7 +220,7 @@ public class UserController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/sync-ldap', 'POST')")
     public ApiResponse<UserResponse> syncLdap(
         @PathVariable Long id,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(toResponse(userApplicationService.syncUserToLdap(id, username)));
     }
@@ -232,14 +233,14 @@ public class UserController {
             .map(job -> job.getErrorMessage())
             .filter(message -> message != null && !message.isBlank())
             .findFirst()
-            .orElse("用户文件导入失败");
+            .orElse("鐢ㄦ埛鏂囦欢瀵煎叆澶辫触");
         throw new BizException("USER_FILE_IMPORT_FAILED", errorMessage);
     }
 
     private UserResponse toResponse(User user) {
         return new UserResponse(
             user.getId(),
-            user.getUsername(),
+            user.getUserId(),
             user.getRealName(),
             user.getEmail(),
             user.getIntranetEmail(),
@@ -261,3 +262,4 @@ public class UserController {
         );
     }
 }
+

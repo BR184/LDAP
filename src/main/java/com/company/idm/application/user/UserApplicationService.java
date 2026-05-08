@@ -1,6 +1,7 @@
 package com.company.idm.application.user;
 
 import com.company.idm.application.rbac.PolicyRefreshService;
+import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
@@ -49,15 +50,14 @@ public class UserApplicationService {
     private final PasswordPolicyValidator passwordPolicyValidator;
     private final PermissionLevelRuleService permissionLevelRuleService;
     private final RoleRepository roleRepository;
-    private final UsernameGenerationService usernameGenerationService;
     private final IntranetEmailGenerationService intranetEmailGenerationService;
     private final AppLdapProperties ldapProperties;
 
-    public List<User> listUsers(String username, String departmentKeyword, Integer statusCode) {
-        String normalizedUsername = normalize(username);
+    public List<User> listUsers(String keyword, String departmentKeyword, Integer statusCode) {
+        String normalizedKeyword = normalize(keyword);
         String normalizedDepartmentKeyword = normalize(departmentKeyword);
         Map<String, Department> departmentByCode = loadDepartmentMap();
-        return userRepository.findByConditions(normalizedUsername, null, statusCode).stream()
+        return userRepository.findByConditions(normalizedKeyword, null, statusCode).stream()
             .map(user -> enrichDepartment(user, departmentByCode))
             .filter(user -> matchesDepartmentKeyword(user, normalizedDepartmentKeyword))
             .sorted((left, right) -> compareUsersForList(left, right, departmentByCode))
@@ -75,23 +75,23 @@ public class UserApplicationService {
         passwordPolicyValidator.validate(DEFAULT_INITIAL_PASSWORD);
         DepartmentAssignment departmentAssignment = resolveDepartmentAssignment(command.deptCode(), command.partTimeDeptCodes());
         List<Role> roles = loadEnabledRoles(command.roleIds());
-        String generatedUsername = usernameGenerationService.generate(command.realName(), command.employeeNo());
+        String normalizedUserId = requireUserIdentifier(command.userId());
         String normalizedIntranetEmail = normalizeRequiredIntranetEmail(command.intranetEmail(), null);
+
         userRepository.findByEmployeeNo(command.employeeNo())
             .ifPresent(user -> {
                 throw new BizException("USER_EMPLOYEE_NO_DUPLICATE", "工号已存在");
             });
-        userRepository.findByUsername(generatedUsername)
+        userRepository.findByUserId(normalizedUserId)
             .ifPresent(user -> {
-                throw new BizException("USER_DUPLICATE", "用户名已存在");
+                throw new BizException("USER_IDENTIFIER_DUPLICATE", "用户ID已存在");
             });
-
-        if (ldapDirectoryService.existsByUid(generatedUsername)) {
+        if (ldapDirectoryService.existsByUid(normalizedUserId)) {
             throw new BizException("LDAP_UID_DUPLICATE", "LDAP 用户已存在");
         }
 
         User saved = userRepository.save(User.builder()
-            .username(generatedUsername)
+            .userId(normalizedUserId)
             .realName(command.realName())
             .email(command.email())
             .intranetEmail(normalizedIntranetEmail)
@@ -100,7 +100,7 @@ public class UserApplicationService {
             .deptCode(departmentAssignment.mainDepartmentCode())
             .partTimeDeptCodes(departmentAssignment.partTimeDeptCodes())
             .status(UserStatus.ENABLED)
-            .employmentStatus(com.company.idm.common.enums.EmploymentStatus.ACTIVE)
+            .employmentStatus(EmploymentStatus.ACTIVE)
             .accountStatus("正常")
             .sourceType(SourceType.MANUAL)
             .tokenVersion(0)
@@ -119,7 +119,7 @@ public class UserApplicationService {
             .operationType("USER_CREATE")
             .bizType("USER")
             .bizId(String.valueOf(saved.getId()))
-            .afterJson(saved.getUsername())
+            .afterJson(saved.getUserId())
             .result("SUCCESS")
             .build());
         return enrichDepartment(saved, loadDepartmentMap());
@@ -131,6 +131,7 @@ public class UserApplicationService {
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         permissionLevelRuleService.checkCanModifyBasicUser(command.operator(), user);
         validateEditableEmployeeNo(command.employeeNo(), user);
+        validateImmutableUserIdentifier(command.userIdentifier(), user);
         DepartmentAssignment departmentAssignment = resolveDepartmentAssignment(command.deptCode(), command.partTimeDeptCodes());
 
         User updated = user.toBuilder()
@@ -150,7 +151,7 @@ public class UserApplicationService {
             .operationType("USER_UPDATE")
             .bizType("USER")
             .bizId(String.valueOf(command.userId()))
-            .afterJson(updated.getUsername())
+            .afterJson(updated.getUserId())
             .result("SUCCESS")
             .build());
         return enrichDepartment(updated, loadDepartmentMap());
@@ -164,9 +165,9 @@ public class UserApplicationService {
         int nextTokenVersion = nextTokenVersion(user);
         userRepository.updateStatus(command.userId(), command.statusCode(), nextTokenVersion);
         if (command.statusCode() == UserStatus.ENABLED.getCode()) {
-            ldapDirectoryService.enableUser(user.getUsername());
+            ldapDirectoryService.enableUser(user.getUserId());
         } else {
-            ldapDirectoryService.disableUser(user.getUsername());
+            ldapDirectoryService.disableUser(user.getUserId());
         }
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
@@ -195,6 +196,7 @@ public class UserApplicationService {
                 java.util.stream.Collectors.toCollection(LinkedHashSet::new),
                 List::copyOf
             ));
+
         List<User> users;
         if (!uniqueUserIds.isEmpty()) {
             users = uniqueUserIds.stream()
@@ -202,7 +204,7 @@ public class UserApplicationService {
                     .orElseThrow(() -> new BizException("USER_NOT_FOUND", "存在待删除用户不存在")))
                 .toList();
         } else {
-            users = listUsers(command.usernameKeyword(), command.deptNameKeyword(), command.statusCode());
+            users = listUsers(command.userIdKeyword(), command.deptNameKeyword(), command.statusCode());
         }
         if (users.isEmpty()) {
             throw new BizException("USER_BATCH_DELETE_EMPTY", "待删除用户不能为空");
@@ -210,7 +212,7 @@ public class UserApplicationService {
 
         for (User user : users) {
             ensureNotSuperAdmin(user);
-            if (command.operator().equals(user.getUsername())) {
+            if (command.operator().equals(user.getUserId())) {
                 throw new BizException("USER_BATCH_DELETE_SELF_FORBIDDEN", "不允许批量删除当前登录用户");
             }
             permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
@@ -233,7 +235,7 @@ public class UserApplicationService {
 
     @Transactional
     public void changePassword(ChangePasswordCommand command) {
-        User user = userRepository.findByUsername(command.operator())
+        User user = userRepository.findByUserId(command.operator())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         if (!ldapDirectoryService.authenticate(command.operator(), command.oldPassword())) {
             throw new BizException("OLD_PASSWORD_INVALID", "旧密码错误");
@@ -263,7 +265,7 @@ public class UserApplicationService {
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
         passwordPolicyValidator.validate(DEFAULT_RESET_PASSWORD);
-        ldapDirectoryService.resetPassword(user.getUsername(), DEFAULT_RESET_PASSWORD);
+        ldapDirectoryService.resetPassword(user.getUserId(), DEFAULT_RESET_PASSWORD);
         userRepository.bumpTokenVersion(user.getId(), nextTokenVersion(user));
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
@@ -283,18 +285,18 @@ public class UserApplicationService {
         permissionLevelRuleService.checkCanModifySensitiveUser(operator, user);
         resolveDepartmentAssignment(user.getDeptCode(), user.getPartTimeDeptCodes());
         String ldapDn;
-        if (ldapDirectoryService.existsByUid(user.getUsername())) {
+        if (ldapDirectoryService.existsByUid(user.getUserId())) {
             ldapDirectoryService.updateUser(user);
             ldapDn = user.getLdapDn() != null && !user.getLdapDn().isBlank()
                 ? user.getLdapDn()
-                : buildUserDn(user.getUsername());
+                : buildUserDn(user.getUserId());
         } else {
             ldapDn = ldapDirectoryService.createUser(user, DEFAULT_RESET_PASSWORD);
         }
         if (user.getStatus() == UserStatus.ENABLED) {
-            ldapDirectoryService.enableUser(user.getUsername());
+            ldapDirectoryService.enableUser(user.getUserId());
         } else {
-            ldapDirectoryService.disableUser(user.getUsername());
+            ldapDirectoryService.disableUser(user.getUserId());
         }
         syncUserDepartmentGroups(user);
         User synced = user;
@@ -306,7 +308,7 @@ public class UserApplicationService {
             .operationType("USER_SYNC_LDAP")
             .bizType("USER")
             .bizId(String.valueOf(userId))
-            .afterJson(synced.getUsername())
+            .afterJson(synced.getUserId())
             .result("SUCCESS")
             .build());
         return enrichDepartment(synced, loadDepartmentMap());
@@ -345,10 +347,8 @@ public class UserApplicationService {
             return true;
         }
         String keyword = departmentKeyword.toLowerCase(Locale.ROOT);
-        boolean deptNameMatches = user.getDeptName() != null
-            && user.getDeptName().toLowerCase(Locale.ROOT).contains(keyword);
-        boolean deptCodeMatches = user.getDeptCode() != null
-            && user.getDeptCode().equalsIgnoreCase(departmentKeyword);
+        boolean deptNameMatches = user.getDeptName() != null && user.getDeptName().toLowerCase(Locale.ROOT).contains(keyword);
+        boolean deptCodeMatches = user.getDeptCode() != null && user.getDeptCode().equalsIgnoreCase(departmentKeyword);
         return deptNameMatches || deptCodeMatches;
     }
 
@@ -376,7 +376,7 @@ public class UserApplicationService {
         if (byRealName != 0) {
             return byRealName;
         }
-        return compareNullable(safe(left.getUsername()), safe(right.getUsername()));
+        return compareNullable(safe(left.getUserId()), safe(right.getUserId()));
     }
 
     private int compareDepartmentUsers(User left, User right, Map<String, Department> departmentByCode) {
@@ -403,7 +403,7 @@ public class UserApplicationService {
         if (byRealName != 0) {
             return byRealName;
         }
-        return compareNullable(safe(left.getUsername()), safe(right.getUsername()));
+        return compareNullable(safe(left.getUserId()), safe(right.getUserId()));
     }
 
     private int adminDisplayRank(User user) {
@@ -442,17 +442,14 @@ public class UserApplicationService {
         DepartmentAssignment assignment = resolveDepartmentAssignment(user.getDeptCode(), user.getPartTimeDeptCodes());
         List<Department> departments = assignment.departments();
         if (departments.isEmpty()) {
-            ldapGroupService.removeUserFromAllGroups(user.getUsername());
+            ldapGroupService.removeUserFromAllGroups(user.getUserId());
             return;
         }
         for (Department department : departments) {
             String ldapDn = ldapGroupService.createGroup(department.getDeptCode(), department.getDeptName());
             updateDepartmentLdapDn(department, ldapDn);
         }
-        ldapGroupService.syncUserGroups(
-            user.getUsername(),
-            departments.stream().map(Department::getDeptCode).toList()
-        );
+        ldapGroupService.syncUserGroups(user.getUserId(), departments.stream().map(Department::getDeptCode).toList());
     }
 
     private void updateDepartmentLdapDn(Department department, String ldapDn) {
@@ -479,8 +476,7 @@ public class UserApplicationService {
         if (roles.size() != roleIds.size()) {
             throw new BizException("ROLE_NOT_FOUND", "部分角色不存在");
         }
-        boolean containsDisabledRole = roles.stream()
-            .anyMatch(role -> role.getStatus() == null || role.getStatus() != 1);
+        boolean containsDisabledRole = roles.stream().anyMatch(role -> role.getStatus() == null || role.getStatus() != 1);
         if (containsDisabledRole) {
             throw new BizException("ROLE_ASSIGN_DISABLED", "已禁用角色不允许分配");
         }
@@ -523,10 +519,7 @@ public class UserApplicationService {
         LinkedHashSet<String> normalizedCodes = new LinkedHashSet<>();
         for (String deptCode : rawPartTimeDeptCodes) {
             String normalizedDeptCode = normalize(deptCode);
-            if (normalizedDeptCode == null) {
-                continue;
-            }
-            if (normalizedDeptCode.equals(mainDeptCode)) {
+            if (normalizedDeptCode == null || normalizedDeptCode.equals(mainDeptCode)) {
                 continue;
             }
             normalizedCodes.add(normalizedDeptCode);
@@ -612,7 +605,7 @@ public class UserApplicationService {
         if (safe(user.getIntranetEmail()) != null) {
             return user.getIntranetEmail();
         }
-        String uniqueIdentifier = safe(user.getExternalId()) != null ? user.getExternalId() : String.valueOf(user.getId());
+        String uniqueIdentifier = safe(user.getUserId()) != null ? user.getUserId() : String.valueOf(user.getId());
         return generateIntranetEmail(uniqueIdentifier, user.getId());
     }
 
@@ -633,22 +626,38 @@ public class UserApplicationService {
         return normalizedIntranetEmail.toLowerCase(Locale.ROOT);
     }
 
+    private String requireUserIdentifier(String userIdentifier) {
+        String normalizedUserIdentifier = safe(userIdentifier);
+        if (normalizedUserIdentifier == null) {
+            throw new BizException("USER_IDENTIFIER_REQUIRED", "用户ID不能为空");
+        }
+        return normalizedUserIdentifier;
+    }
+
+    private void validateImmutableUserIdentifier(String userIdentifier, User currentUser) {
+        String normalizedUserIdentifier = requireUserIdentifier(userIdentifier);
+        if (currentUser != null && normalizedUserIdentifier.equals(currentUser.getUserId())) {
+            return;
+        }
+        throw new BizException("USER_IDENTIFIER_IMMUTABLE", "用户ID不允许修改");
+    }
+
     private void ensureNotSuperAdmin(User user) {
         if (user != null && user.getRoleCodes() != null && user.getRoleCodes().contains(SUPER_ADMIN_ROLE_CODE)) {
             throw new BizException("USER_DELETE_SUPER_ADMIN_FORBIDDEN", "不允许删除超级管理员");
         }
     }
 
-    private String buildUserDn(String username) {
-        return LdapDnHelper.buildUserDn(ldapProperties, username);
+    private String buildUserDn(String userId) {
+        return LdapDnHelper.buildUserDn(ldapProperties, userId);
     }
 
     private String buildRecycledUsername(User user) {
-        return user.getUsername() + "__deleted__" + user.getId();
+        return user.getUserId() + "__deleted__" + user.getId();
     }
 
     private void deleteUserInternal(User user, String operator) {
-        cleanupLdapUser(user.getUsername());
+        cleanupLdapUser(user.getUserId());
         userRepository.removeAllRoles(user.getId());
         userRepository.logicalDelete(user.getId(), buildRecycledUsername(user), nextTokenVersion(user));
         auditLogRepository.save(AuditLog.builder()
@@ -661,16 +670,16 @@ public class UserApplicationService {
             .build());
     }
 
-    private void cleanupLdapUser(String username) {
-        if (username == null || username.isBlank()) {
+    private void cleanupLdapUser(String userId) {
+        if (userId == null || userId.isBlank()) {
             return;
         }
-        ldapGroupService.removeUserFromAllGroups(username);
-        if (!ldapDirectoryService.existsByUid(username)) {
+        ldapGroupService.removeUserFromAllGroups(userId);
+        if (!ldapDirectoryService.existsByUid(userId)) {
             return;
         }
         try {
-            ldapDirectoryService.deleteUser(username);
+            ldapDirectoryService.deleteUser(userId);
         } catch (BizException exception) {
             if (!"LDAP_USER_NOT_FOUND".equals(exception.getCode())) {
                 throw exception;
@@ -695,10 +704,7 @@ public class UserApplicationService {
     }
 
     private String normalize(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String safe(String value) {

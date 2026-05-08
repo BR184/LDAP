@@ -14,12 +14,12 @@ const loading = ref(false)
 const forgotPasswordLoading = ref(false)
 const loginFormRef = ref()
 const form = reactive({
-  username: '',
+  loginId: '',
   password: '',
 })
 
 const rules = {
-  username: [{ required: true, message: '请输入工号', trigger: 'blur' }],
+  loginId: [{ required: true, message: '请输入工号或用户ID', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
@@ -37,7 +37,7 @@ async function handleSubmit() {
 
   try {
     await authStore.signIn({
-      username: form.username,
+      loginId: form.loginId,
       password: form.password,
     })
 
@@ -52,19 +52,19 @@ async function handleSubmit() {
 async function handleForgotPassword() {
   try {
     const { value } = await ElMessageBox.prompt(
-      '请输入需要重置密码的工号，系统会将新密码发送到绑定内网邮箱。',
+      '请输入需要重置密码的工号或用户ID，系统会将新密码发送到绑定内网邮箱。',
       '忘记密码',
       {
         confirmButtonText: '发送邮件',
         cancelButtonText: '取消',
-        inputPlaceholder: '请输入工号',
-        inputValidator: (inputValue) => (inputValue && inputValue.trim() ? true : '请输入工号'),
+        inputPlaceholder: '请输入工号或用户ID',
+        inputValidator: (inputValue) => (inputValue && inputValue.trim() ? true : '请输入工号或用户ID'),
       },
     )
 
     forgotPasswordLoading.value = true
     const notice = await forgotPassword({
-      username: value.trim(),
+      loginId: value.trim(),
     })
     ElMessage.success(notice || '如账号信息有效，系统已向绑定内网邮箱发送重置邮件，请注意查收')
   } catch {
@@ -95,8 +95,8 @@ async function handleForgotPassword() {
       </template>
 
       <el-form ref="loginFormRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-        <el-form-item label="工号" prop="username">
-          <el-input v-model="form.username" :prefix-icon="User" placeholder="请输入工号" />
+        <el-form-item label="工号/用户ID" prop="loginId">
+          <el-input v-model="form.loginId" :prefix-icon="User" placeholder="请输入工号或用户ID" />
         </el-form-item>
 
         <el-form-item label="密码" prop="password">

@@ -7,6 +7,7 @@ import java.util.List;
  */
 public record UpdateUserCommand(
     Long userId,
+    String userIdentifier,
     String realName,
     String email,
     String intranetEmail,
@@ -18,6 +19,7 @@ public record UpdateUserCommand(
 ) {
     public UpdateUserCommand(
         Long userId,
+        String userIdentifier,
         String realName,
         String email,
         String intranetEmail,
@@ -26,6 +28,21 @@ public record UpdateUserCommand(
         String deptCode,
         String operator
     ) {
-        this(userId, realName, email, intranetEmail, mobile, employeeNo, deptCode, List.of(), operator);
+        this(userId, userIdentifier, realName, email, intranetEmail, mobile, employeeNo, deptCode, List.of(), operator);
+    }
+
+    public UpdateUserCommand(
+        Long userId,
+        String userIdentifier,
+        String realName,
+        String email,
+        String intranetEmail,
+        String mobile,
+        String employeeNo,
+        List<String> partTimeDeptCodes,
+        String deptCode,
+        String operator
+    ) {
+        this(userId, userIdentifier, realName, email, intranetEmail, mobile, employeeNo, deptCode, partTimeDeptCodes, operator);
     }
 }

@@ -16,9 +16,6 @@ import com.company.idm.infrastructure.config.PasswordResetProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-/**
- * 统一收口管理员重置密码与忘记密码流程。
- */
 @Service
 @RequiredArgsConstructor
 public class PasswordResetApplicationService {
@@ -49,39 +46,39 @@ public class PasswordResetApplicationService {
     }
 
     public void forgotPassword(ForgotPasswordCommand command) {
-        String username = normalizeUsername(command.username());
+        String loginId = normalizeLoginId(command.userId());
         String clientIp = normalizeClientIp(command.clientIp());
-        if (!passwordResetThrottleService.tryAcquire(username, clientIp)) {
+        if (!passwordResetThrottleService.tryAcquire(loginId, clientIp)) {
             auditLogRepository.save(AuditLog.builder()
-                .operator(username)
+                .operator(loginId)
                 .operationType("USER_PASSWORD_FORGOT")
                 .bizType("USER")
-                .bizId(username)
+                .bizId(loginId)
                 .result("THROTTLED")
                 .errorMessage("忘记密码请求过于频繁")
                 .build());
             return;
         }
 
-        User user = resolveUserForPasswordReset(username);
+        User user = resolveUserForPasswordReset(loginId);
         if (user == null) {
-            auditFailure(username, "USER_PASSWORD_FORGOT", username, "用户不存在");
+            auditFailure(loginId, "USER_PASSWORD_FORGOT", loginId, "用户不存在");
             return;
         }
         if (user.getStatus() != UserStatus.ENABLED) {
-            auditFailure(username, "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), "用户已被禁用");
+            auditFailure(loginId, "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), "用户已被禁用");
             return;
         }
         user = ensureIntranetEmail(user);
         if (!hasIntranetEmail(user)) {
-            auditFailure(username, "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), "用户未配置内网邮箱");
+            auditFailure(loginId, "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), "用户未配置内网邮箱");
             return;
         }
 
         try {
-            doForgotPasswordReset(user, user.getUsername(), "USER_PASSWORD_FORGOT");
+            doForgotPasswordReset(user, user.getUserId(), "USER_PASSWORD_FORGOT");
         } catch (RuntimeException exception) {
-            auditFailure(user.getUsername(), "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), exception.getMessage());
+            auditFailure(user.getUserId(), "USER_PASSWORD_FORGOT", String.valueOf(user.getId()), exception.getMessage());
         }
     }
 
@@ -91,14 +88,14 @@ public class PasswordResetApplicationService {
 
     private void doAdminReset(User user, String operator, String operationType) {
         passwordPolicyValidator.validate(DEFAULT_ADMIN_RESET_PASSWORD);
-        ldapDirectoryService.resetPassword(user.getUsername(), DEFAULT_ADMIN_RESET_PASSWORD);
+        ldapDirectoryService.resetPassword(user.getUserId(), DEFAULT_ADMIN_RESET_PASSWORD);
         userRepository.bumpTokenVersion(user.getId(), nextTokenVersion(user));
         auditLogRepository.save(AuditLog.builder()
             .operator(operator)
             .operationType(operationType)
             .bizType("USER")
             .bizId(String.valueOf(user.getId()))
-            .afterJson(user.getUsername())
+            .afterJson(user.getUserId())
             .result("SUCCESS")
             .build());
     }
@@ -106,7 +103,7 @@ public class PasswordResetApplicationService {
     private void doForgotPasswordReset(User user, String operator, String operationType) {
         String generatedPassword = passwordGenerator.generateSixDigitNumericPassword();
         passwordPolicyValidator.validate(generatedPassword);
-        ldapDirectoryService.resetPassword(user.getUsername(), generatedPassword);
+        ldapDirectoryService.resetPassword(user.getUserId(), generatedPassword);
         userRepository.bumpTokenVersion(user.getId(), nextTokenVersion(user));
         passwordResetNotificationService.sendPasswordResetMail(user, generatedPassword);
         auditLogRepository.save(AuditLog.builder()
@@ -114,7 +111,7 @@ public class PasswordResetApplicationService {
             .operationType(operationType)
             .bizType("USER")
             .bizId(String.valueOf(user.getId()))
-            .afterJson(user.getUsername())
+            .afterJson(user.getUserId())
             .result("SUCCESS")
             .build());
     }
@@ -127,8 +124,8 @@ public class PasswordResetApplicationService {
         if (user == null || hasIntranetEmail(user)) {
             return user;
         }
-        String uniqueIdentifier = user.getExternalId() != null && !user.getExternalId().isBlank()
-            ? user.getExternalId()
+        String uniqueIdentifier = user.getUserId() != null && !user.getUserId().isBlank()
+            ? user.getUserId()
             : String.valueOf(user.getId());
         String intranetEmail = intranetEmailGenerationService.generate(uniqueIdentifier, user.getId());
         return userRepository.save(user.toBuilder().intranetEmail(intranetEmail).build());
@@ -149,8 +146,8 @@ public class PasswordResetApplicationService {
         return user.getTokenVersion() == null ? 1 : user.getTokenVersion() + 1;
     }
 
-    private String normalizeUsername(String username) {
-        return username == null ? "" : username.trim();
+    private String normalizeLoginId(String loginId) {
+        return loginId == null ? "" : loginId.trim();
     }
 
     private String normalizeClientIp(String clientIp) {
@@ -160,14 +157,14 @@ public class PasswordResetApplicationService {
         return clientIp.trim();
     }
 
-    private User resolveUserForPasswordReset(String loginName) {
-        if (loginName == null || loginName.isBlank()) {
+    private User resolveUserForPasswordReset(String loginId) {
+        if (loginId == null || loginId.isBlank()) {
             return null;
         }
-        User byUsername = userRepository.findByUsername(loginName).orElse(null);
-        if (byUsername != null) {
-            return byUsername;
+        User byUserId = userRepository.findByUserId(loginId).orElse(null);
+        if (byUserId != null) {
+            return byUserId;
         }
-        return userRepository.findByEmployeeNo(loginName).orElse(null);
+        return userRepository.findByEmployeeNo(loginId).orElse(null);
     }
 }

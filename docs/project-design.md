@@ -3643,6 +3643,81 @@ LDAP 控制面页直接对接以下接口：
 - 旧配置在后台邮件配置未启用时仍可继续工作
 - 后续若需要彻底统一为后台配置，可再单独设计“移除固定 SMTP 配置回退”的收口方案
 
+### 16.36 用户身份主标识重构
+
+本轮代码已按“大改且不保留前端/接口层旧用户名语义”的方向完成用户身份模型收口，后续开发统一以 `userId` 为准，不再以历史 `username/externalId` 作为业务主口径。
+
+#### 16.36.1 主键与业务键
+
+- `sys_user.id` 继续作为数据库自增主键，仅用于内部关联与外键引用
+- `sys_user.user_id` 作为新的唯一业务身份标识
+- `user_id` 同时承担以下职责：
+  - 平台用户列表展示标识
+  - LDAP `uid`
+  - 第三方 LDAP 系统登录标识
+  - JWT 中的主体标识
+- 用户领域模型 `User` 已以 `userId` 替代原 `username` 作为主身份字段
+
+#### 16.36.2 数据迁移规则
+
+- 数据库迁移脚本：
+  - `V24__user_identifier_rekey.sql`
+  - `V25__rename_user_identity_column.sql`
+- 迁移顺序：
+  1. 先根据历史数据重算身份值
+  2. 再将 `sys_user.username` 重命名为 `sys_user.user_id`
+  3. 最后删除用户表历史 `external_id` 列
+- 历史值归并规则：
+  - FEISHU 用户：优先使用历史 `external_id`
+  - 超级管理员：保留为 `admin`
+  - 手工用户：回退为 `manual_<employee_no>`，若工号为空则为 `manual_<id>`
+  - 已逻辑删除用户：统一追加 `__deleted__<id>` 后缀，释放唯一键占用
+
+#### 16.36.3 前后端接口口径
+
+- 用户响应体已统一返回：
+  - `id`
+  - `userId`
+  - 其他用户属性
+- 用户管理列表前端已删除旧“用户名”展示，改为直接展示：
+  - 数据库ID
+  - 用户ID
+- 用户查询参数已由 `username` 调整为 `userId`
+- 批量删除条件参数已由 `usernameKeyword` 调整为 `userIdKeyword`
+- 当前用户信息接口 `/api/v1/auth/me` 已统一返回 `id + userId`
+
+#### 16.36.4 LDAP 与第三方登录
+
+- LDAP 用户 DN 规则统一为：
+  - `uid=<userId>,ou=people,<baseDn>`
+- LDAP 条目中：
+  - `uid = userId`
+  - `employeeNumber = employeeNo`
+- 第三方 LDAP 接入框架已统一改为：
+  - 登录字段：`uid`
+  - 标准过滤器：`(&(objectClass=inetOrgPerson)(uid={login})(employeeType=ENABLED))`
+- `deploy/docker-compose-dev.yml` 中 GitLab 测试容器已同步改为使用 `uid`
+
+#### 16.36.5 用户导入口径
+
+- 花名册与飞书用户导入统一使用文件中的“用户ID”列作为 `userId`
+- 用户导入幂等匹配顺序已收口为：
+  1. `userId`
+  2. `employeeNo`
+- 用户导入后写入 LDAP 时，`uid` 直接取 `userId`
+- 对齐导入中缺失用户仍按既有规则转为离职/禁用，不再使用历史 `external_id` 识别
+
+#### 16.36.6 当前实现边界
+
+- 已完成：
+  - 后端主模型、JWT、LDAP、第三方 LDAP 模板、GitLab 本地联调配置切换到 `userId`
+  - 前端用户列表、详情、表单、个人中心切换到 `userId`
+  - 用户表数据库迁移脚本补齐
+  - 主工程 `mvn clean -DskipTests compile` 可通过
+  - 前端 `npm run build` 可通过
+- 暂未同步清理：
+  - 大量历史测试用例仍使用旧 `username/externalId` API，后续需专项更新测试基线
+
 
 
 

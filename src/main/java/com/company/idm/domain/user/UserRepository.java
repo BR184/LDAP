@@ -11,9 +11,15 @@ public interface UserRepository {
 
     Optional<User> findById(Long id);
 
-    Optional<User> findByUsername(String username);
+    Optional<User> findByUserId(String userId);
 
-    Optional<User> findByExternalId(String externalId);
+    default Optional<User> findByUsername(String username) {
+        return findByUserId(username);
+    }
+
+    default Optional<User> findByExternalId(String externalId) {
+        return findByUserId(externalId);
+    }
 
     Optional<User> findByEmployeeNo(String employeeNo);
 
@@ -21,7 +27,7 @@ public interface UserRepository {
 
     List<User> findAll();
 
-    List<User> findByConditions(String username, String deptCode, Integer statusCode);
+    List<User> findByConditions(String keyword, String deptCode, Integer statusCode);
 
     User save(User user);
 
@@ -37,7 +43,11 @@ public interface UserRepository {
 
     void removeAllRoles(Long userId);
 
-    Set<String> findRoleCodesByUsername(String username);
+    Set<String> findRoleCodesByUserId(String userId);
+
+    default Set<String> findRoleCodesByUsername(String username) {
+        return findRoleCodesByUserId(username);
+    }
 
     List<UserRoleBinding> listUserRoleBindings();
 

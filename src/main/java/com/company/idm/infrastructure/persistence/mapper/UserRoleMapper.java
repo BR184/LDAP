@@ -18,12 +18,12 @@ public interface UserRoleMapper extends BaseMapper<UserRoleDO> {
         FROM sys_user_role ur
         INNER JOIN sys_user u ON ur.user_id = u.id
         INNER JOIN sys_role r ON ur.role_id = r.id
-        WHERE u.username = #{username} AND u.deleted = 0 AND r.status = 1
+        WHERE u.user_id = #{userId} AND u.deleted = 0 AND r.status = 1
         """)
-    List<String> selectRoleCodesByUsername(String username);
+    List<String> selectRoleCodesByUserId(String userId);
 
     @Select("""
-        SELECT u.username AS username, r.role_code AS roleCode
+        SELECT u.user_id AS userId, r.role_code AS roleCode
         FROM sys_user_role ur
         INNER JOIN sys_user u ON ur.user_id = u.id
         INNER JOIN sys_role r ON ur.role_id = r.id

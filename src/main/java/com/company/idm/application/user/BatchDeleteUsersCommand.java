@@ -7,7 +7,7 @@ import java.util.List;
  */
 public record BatchDeleteUsersCommand(
     List<Long> userIds,
-    String usernameKeyword,
+    String userIdKeyword,
     String deptNameKeyword,
     Integer statusCode,
     String operator

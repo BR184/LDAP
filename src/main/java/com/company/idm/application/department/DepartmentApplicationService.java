@@ -15,9 +15,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * 部门应用服务，负责组织树维护与 LDAP 分组映射联动。
- */
 @Service
 @RequiredArgsConstructor
 public class DepartmentApplicationService {
@@ -28,26 +25,17 @@ public class DepartmentApplicationService {
     private final AuditLogRepository auditLogRepository;
     private final PermissionLevelRuleService permissionLevelRuleService;
 
-    /**
-     * 查询全部部门主数据，用于树渲染与后台管理。
-     */
     public List<Department> listDepartments() {
         return departmentRepository.findAll().stream()
             .sorted(Comparator.comparing(Department::getAncestorPath).thenComparing(Department::getDeptCode))
             .toList();
     }
 
-    /**
-     * 查询部门详情。
-     */
     public Department getDepartment(String deptCode) {
         return departmentRepository.findByDeptCode(deptCode)
             .orElseThrow(() -> new BizException("DEPT_NOT_FOUND", "部门不存在"));
     }
 
-    /**
-     * 手工同步单个部门到 LDAP，并修正当前部门成员关系。
-     */
     @Transactional
     public Department syncDepartmentToLdap(String deptCode, String operator) {
         permissionLevelRuleService.checkCanManageDepartment(operator);
@@ -62,10 +50,10 @@ public class DepartmentApplicationService {
         }
         for (com.company.idm.domain.user.User user : userRepository.findAll()) {
             if (deptCode.equals(user.getDeptCode())) {
-                ldapGroupService.addUserToGroup(user.getUsername(), deptCode);
+                ldapGroupService.addUserToGroup(user.getUserId(), deptCode);
                 continue;
             }
-            ldapGroupService.removeUserFromGroup(user.getUsername(), deptCode);
+            ldapGroupService.removeUserFromGroup(user.getUserId(), deptCode);
         }
         auditLogRepository.save(AuditLog.builder()
             .operator(operator)
@@ -78,9 +66,6 @@ public class DepartmentApplicationService {
         return synced;
     }
 
-    /**
-     * 创建手工部门并同步创建 LDAP group。
-     */
     @Transactional
     public Department createDepartment(CreateDepartmentCommand command, String operator) {
         permissionLevelRuleService.checkCanManageDepartment(operator);
@@ -120,9 +105,6 @@ public class DepartmentApplicationService {
         return saved;
     }
 
-    /**
-     * 更新部门基础信息、组织树路径和 LDAP group 映射。
-     */
     @Transactional
     public Department updateDepartment(UpdateDepartmentCommand command, String operator) {
         permissionLevelRuleService.checkCanManageDepartment(operator);
@@ -154,9 +136,6 @@ public class DepartmentApplicationService {
         return updated;
     }
 
-    /**
-     * 删除部门前先校验无子部门、无用户引用，再清理 LDAP group。
-     */
     @Transactional
     public void deleteDepartment(DeleteDepartmentCommand command) {
         permissionLevelRuleService.checkCanManageDepartment(command.operator());
@@ -166,7 +145,7 @@ public class DepartmentApplicationService {
             throw new BizException("DEPT_DELETE_FORBIDDEN", "当前部门存在子部门，不能直接删除");
         }
         if (userRepository.existsActiveDeptBinding(command.deptCode())) {
-            throw new BizException("DEPT_IN_USE", "当前部门已绑定用户，不能直接删除");
+            throw new BizException("DEPT_IN_USE", "当前部门仍有关联用户，不能直接删除");
         }
         ldapGroupService.deleteGroup(command.deptCode());
         departmentRepository.deleteByDeptCode(command.deptCode());
@@ -195,7 +174,9 @@ public class DepartmentApplicationService {
         if (current.getDeptCode().equals(parent.getDeptCode())) {
             throw new BizException("DEPT_PARENT_INVALID", "父部门不能选择自身");
         }
-        if (parent.getAncestorPath() != null && parent.getAncestorPath().startsWith(current.getAncestorPath() + "/")) {
+        if (parent.getAncestorPath() != null
+            && current.getAncestorPath() != null
+            && parent.getAncestorPath().startsWith(current.getAncestorPath() + "/")) {
             throw new BizException("DEPT_PARENT_INVALID", "父部门不能选择当前部门的下级节点");
         }
     }
@@ -203,6 +184,7 @@ public class DepartmentApplicationService {
     private void updateDescendantPaths(Department original, Department updated) {
         List<Department> descendants = departmentRepository.findAll().stream()
             .filter(item -> item.getAncestorPath() != null
+                && original.getAncestorPath() != null
                 && item.getAncestorPath().startsWith(original.getAncestorPath() + "/"))
             .toList();
         for (Department descendant : descendants) {

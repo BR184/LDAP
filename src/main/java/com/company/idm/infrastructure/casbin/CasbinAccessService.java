@@ -19,7 +19,7 @@ public class CasbinAccessService {
         if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
             return false;
         }
-        return enforcer.enforce(principal.username(), obj, act);
+        return enforcer.enforce(principal.userId(), obj, act);
     }
 }
 

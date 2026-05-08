@@ -18,8 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 提供系统管理下的邮件配置入口。
- */
+ * 鎻愪緵绯荤粺绠＄悊涓嬬殑閭欢閰嶇疆鍏ュ彛銆? */
 @RestController
 @RequestMapping("/api/v1/system/mail-config")
 @RequiredArgsConstructor
@@ -37,7 +36,7 @@ public class MailConfigController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/system/mail-config', 'PUT')")
     public ApiResponse<MailConfigResponse> save(
         @Valid @RequestBody SaveMailConfigRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         return ApiResponse.success(toResponse(mailConfigApplicationService.saveConfig(new SaveMailConfigCommand(
             request.sendMode(),
@@ -59,7 +58,7 @@ public class MailConfigController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/system/mail-config/test', 'POST')")
     public ApiResponse<MailConfigTestResponse> test(
         @Valid @RequestBody TestMailConfigRequest request,
-        @AuthenticationPrincipal(expression = "username") String username
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         MailConfigTestResult result = mailConfigApplicationService.testConfig(new MailConfigTestCommand(
             request.sendMode(),
@@ -100,3 +99,4 @@ public class MailConfigController {
         );
     }
 }
+

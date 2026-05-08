@@ -40,15 +40,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         try {
             ParsedToken parsedToken = tokenService.parse(authorization.substring(7));
-            User user = userRepository.findByUsername(parsedToken.username()).orElse(null);
+            User user = userRepository.findByUserId(parsedToken.userId()).orElse(null);
             if (user != null
                 && user.getId() != null
-                && user.getId().equals(parsedToken.userId())
+                && user.getId().equals(parsedToken.id())
                 && user.getStatus() == UserStatus.ENABLED
                 && user.getTokenVersion().equals(parsedToken.tokenVersion())) {
                 AuthenticatedUser principal = new AuthenticatedUser(
                     user.getId(),
-                    user.getUsername(),
+                    user.getUserId(),
                     user.getTokenVersion(),
                     user.getRoleCodes()
                 );

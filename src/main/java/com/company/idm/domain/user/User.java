@@ -20,7 +20,7 @@ import lombok.NoArgsConstructor;
 public class User {
 
     private Long id;
-    private String username;
+    private String userId;
     private String realName;
     private String email;
     private String intranetEmail;
@@ -37,10 +37,29 @@ public class User {
     private UserStatus status;
     private EmploymentStatus employmentStatus;
     private SourceType sourceType;
-    private String externalId;
     private String ldapDn;
     private Integer tokenVersion;
     private Integer permissionLevel;
     private Set<String> roleCodes;
+
+    public String getUsername() {
+        return userId;
+    }
+
+    public String getExternalId() {
+        return userId;
+    }
+
+    public static class UserBuilder {
+        public UserBuilder username(String username) {
+            this.userId = username;
+            return this;
+        }
+
+        public UserBuilder externalId(String externalId) {
+            this.userId = externalId;
+            return this;
+        }
+    }
 }
 

@@ -68,8 +68,8 @@ public class RbacApplicationService {
             .orElseThrow(() -> new BizException("MENU_NOT_FOUND", "菜单不存在"));
     }
 
-    public List<Menu> listCurrentUserMenus(String username) {
-        Set<String> roleCodes = userRepository.findRoleCodesByUsername(username);
+    public List<Menu> listCurrentUserMenus(String userId) {
+        Set<String> roleCodes = userRepository.findRoleCodesByUserId(userId);
         return menuRepository.findByRoleCodes(roleCodes);
     }
 
@@ -172,7 +172,6 @@ public class RbacApplicationService {
         for (Role role : roles) {
             validateRoleDeletion(role, command.operator());
         }
-
         for (Role role : roles) {
             deleteRoleInternal(role, command.operator());
         }
@@ -292,10 +291,10 @@ public class RbacApplicationService {
         Long parentId = normalizeParentId(command.parentId());
         validateMenuPayload(parentId, command.menuType(), command.path(), command.component(), existing.getId());
         if (command.menuType() == MenuType.MENU && menuRepository.existsChildren(existing.getId())) {
-            throw new BizException("MENU_TYPE_INVALID", "存在子菜单时不允许将当前菜单调整为 MENU");
+            throw new BizException("MENU_TYPE_INVALID", "存在子菜单的目录不能直接改为菜单");
         }
         if (menuRepository.existsRoleBindingConflict(existing.getId(), command.minPermissionLevel())) {
-            throw new BizException("MENU_PERMISSION_CONFLICT", "当前菜单已绑定更低权限角色，无法收紧可绑定等级");
+            throw new BizException("MENU_PERMISSION_CONFLICT", "已有角色绑定与新的最小权限等级冲突");
         }
         Menu updated = menuRepository.save(Menu.builder()
             .id(existing.getId())
@@ -329,7 +328,7 @@ public class RbacApplicationService {
         Menu menu = menuRepository.findById(command.menuId())
             .orElseThrow(() -> new BizException("MENU_NOT_FOUND", "菜单不存在"));
         if (menuRepository.existsChildren(command.menuId())) {
-            throw new BizException("MENU_DELETE_FORBIDDEN", "当前菜单存在子菜单，不能直接删除");
+            throw new BizException("MENU_DELETE_FORBIDDEN", "当前菜单存在子节点，不能直接删除");
         }
         menuRepository.removeRoleBindings(command.menuId());
         menuRepository.delete(command.menuId());
@@ -354,16 +353,10 @@ public class RbacApplicationService {
     private void collectMenuWithAncestors(Menu menu, LinkedHashSet<Long> menuIds) {
         if (menu.getParentId() != null && menu.getParentId() > 0) {
             Menu parent = menuRepository.findById(menu.getParentId())
-                .orElseThrow(() -> new BizException("MENU_PARENT_NOT_FOUND", "菜单父节点不存在"));
+                .orElseThrow(() -> new BizException("MENU_PARENT_NOT_FOUND", "父菜单不存在"));
             collectMenuWithAncestors(parent, menuIds);
         }
         menuIds.add(menu.getId());
-    }
-
-    private void bindMenuToAdmin(Long menuId) {
-        Role adminRole = roleRepository.findByCode("ADMIN")
-            .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "管理员角色不存在"));
-        menuRepository.bindRole(adminRole.getId(), menuId);
     }
 
     private void bindMenuToBuiltInManagers(Menu menu) {
@@ -373,28 +366,22 @@ public class RbacApplicationService {
             .filter(role -> role.getPermissionLevel() != null && role.getPermissionLevel() <= menu.getMinPermissionLevel())
             .toList();
         if (builtInRoles.isEmpty()) {
-            throw new BizException("ROLE_NOT_FOUND", "内置管理角色不存在");
+            throw new BizException("ROLE_NOT_FOUND", "未找到可绑定的内置角色");
         }
         for (Role role : builtInRoles) {
             menuRepository.bindRole(role.getId(), menu.getId());
         }
     }
 
-    private void validateMenuPayload(
-        Long parentId,
-        MenuType menuType,
-        String path,
-        String component,
-        Long selfMenuId
-    ) {
+    private void validateMenuPayload(Long parentId, MenuType menuType, String path, String component, Long selfMenuId) {
         if (menuType == null) {
             throw new BizException("MENU_TYPE_REQUIRED", "菜单类型不能为空");
         }
         if (path == null || path.isBlank()) {
-            throw new BizException("MENU_PATH_REQUIRED", "菜单路由不能为空");
+            throw new BizException("MENU_PATH_REQUIRED", "菜单路径不能为空");
         }
         if (menuType == MenuType.MENU && (component == null || component.isBlank())) {
-            throw new BizException("MENU_COMPONENT_REQUIRED", "菜单组件路径不能为空");
+            throw new BizException("MENU_COMPONENT_REQUIRED", "菜单组件不能为空");
         }
         if (parentId == null || parentId <= 0) {
             return;
@@ -405,7 +392,7 @@ public class RbacApplicationService {
         Menu parent = menuRepository.findById(parentId)
             .orElseThrow(() -> new BizException("MENU_PARENT_NOT_FOUND", "父菜单不存在"));
         if (parent.getMenuType() != MenuType.CATALOG) {
-            throw new BizException("MENU_PARENT_INVALID", "仅目录类型菜单允许挂载子菜单");
+            throw new BizException("MENU_PARENT_INVALID", "只有目录可以作为父节点");
         }
         validateParentCycle(parent, selfMenuId);
     }
@@ -449,7 +436,7 @@ public class RbacApplicationService {
     private void validateRoleDeletion(Role role, String operator) {
         permissionLevelRuleService.checkCanDeleteRole(operator, role);
         if (roleRepository.existsUserBinding(role.getId())) {
-            throw new BizException("ROLE_IN_USE", "当前角色已绑定用户，不能直接删除");
+            throw new BizException("ROLE_IN_USE", "当前角色仍绑定用户，不能删除");
         }
     }
 
@@ -476,12 +463,8 @@ public class RbacApplicationService {
     private void applyDefaultAccessGrants(Role role, boolean createOperation) {
         List<Permission> allPermissions = permissionRepository.findAll();
         if (role.getPermissionLevel() != null && role.getPermissionLevel() <= FULL_ACCESS_PERMISSION_LEVEL) {
-            List<Long> permissionIds = allPermissions.stream()
-                .map(Permission::getId)
-                .toList();
-            List<Long> menuIds = menuRepository.findAllEnabled().stream()
-                .map(Menu::getId)
-                .toList();
+            List<Long> permissionIds = allPermissions.stream().map(Permission::getId).toList();
+            List<Long> menuIds = menuRepository.findAllEnabled().stream().map(Menu::getId).toList();
             roleRepository.assignPermissions(role.getId(), permissionIds);
             roleRepository.bindMenus(role.getId(), menuIds);
             policyRefreshService.refresh();

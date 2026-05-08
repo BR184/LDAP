@@ -45,7 +45,7 @@ function handleSubmit() {
   <el-drawer :model-value="modelValue" title="分配角色" size="440px" @close="closeDrawer">
     <template v-if="user">
       <el-alert :closable="false" show-icon type="info">
-        当前用户：{{ user.realName }}（{{ user.username }}）
+        当前用户：{{ user.realName }}（{{ user.userId }}）
       </el-alert>
 
       <el-form class="role-drawer__form" label-position="top">
