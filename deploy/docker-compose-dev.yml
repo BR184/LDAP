@@ -53,7 +53,7 @@ services:
             'label' => 'Corp LDAP',
             'host' => 'host.docker.internal',
             'port' => 3389,
-            'uid' => 'uid',
+            'uid' => 'employeeNumber',
             'bind_dn' => 'cn=admin,dc=corp,dc=local',
             'password' => 'admin',
             'encryption' => 'plain',
@@ -65,7 +65,7 @@ services:
             'base' => 'ou=people,dc=corp,dc=local',
             'user_filter' => '(&(objectClass=inetOrgPerson)(employeeType=ENABLED))',
             'attributes' => {
-              'username' => ['uid'],
+              'username' => ['employeeNumber'],
               'email' => ['mail'],
               'name' => 'cn'
             }
