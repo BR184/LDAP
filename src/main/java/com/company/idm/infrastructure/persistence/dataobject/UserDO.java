@@ -52,22 +52,6 @@ public class UserDO {
         this.userId = userId;
     }
 
-    public String getUsername() {
-        return userId;
-    }
-
-    public void setUsername(String username) {
-        this.userId = username;
-    }
-
-    public String getExternalId() {
-        return userId;
-    }
-
-    public void setExternalId(String externalId) {
-        this.userId = externalId;
-    }
-
     public String getRealName() {
         return realName;
     }

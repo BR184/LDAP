@@ -13,14 +13,6 @@ public interface UserRepository {
 
     Optional<User> findByUserId(String userId);
 
-    default Optional<User> findByUsername(String username) {
-        return findByUserId(username);
-    }
-
-    default Optional<User> findByExternalId(String externalId) {
-        return findByUserId(externalId);
-    }
-
     Optional<User> findByEmployeeNo(String employeeNo);
 
     Optional<User> findByIntranetEmail(String intranetEmail);
@@ -44,10 +36,6 @@ public interface UserRepository {
     void removeAllRoles(Long userId);
 
     Set<String> findRoleCodesByUserId(String userId);
-
-    default Set<String> findRoleCodesByUsername(String username) {
-        return findRoleCodesByUserId(username);
-    }
 
     List<UserRoleBinding> listUserRoleBindings();
 

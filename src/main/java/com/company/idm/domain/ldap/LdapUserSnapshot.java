@@ -22,15 +22,4 @@ public class LdapUserSnapshot {
     private String deptCode;
     private String status;
     private String dn;
-
-    public String getUsername() {
-        return userId;
-    }
-
-    public static class LdapUserSnapshotBuilder {
-        public LdapUserSnapshotBuilder username(String username) {
-            this.userId = username;
-            return this;
-        }
-    }
 }

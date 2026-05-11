@@ -1,6 +1,5 @@
 package com.company.idm.application.sync.feishu;
 
-import com.company.idm.application.user.UsernameGenerationService;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
@@ -28,7 +27,6 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.system.ApplicationHome;
 import org.springframework.stereotype.Component;
 
@@ -67,7 +65,6 @@ public class FeishuImportDocumentResolver {
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
 
-    @Autowired
     public FeishuImportDocumentResolver(
         FeishuFileImportProperties properties,
         ObjectMapper objectMapper,
@@ -76,15 +73,6 @@ public class FeishuImportDocumentResolver {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.userRepository = userRepository;
-    }
-
-    public FeishuImportDocumentResolver(
-        FeishuFileImportProperties properties,
-        ObjectMapper objectMapper,
-        UserRepository userRepository,
-        UsernameGenerationService ignoredUsernameGenerationService
-    ) {
-        this(properties, objectMapper, userRepository);
     }
 
     public List<FeishuDepartmentPayload> resolveDepartments(String documentPath) {

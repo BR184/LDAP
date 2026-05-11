@@ -41,25 +41,5 @@ public class User {
     private Integer tokenVersion;
     private Integer permissionLevel;
     private Set<String> roleCodes;
-
-    public String getUsername() {
-        return userId;
-    }
-
-    public String getExternalId() {
-        return userId;
-    }
-
-    public static class UserBuilder {
-        public UserBuilder username(String username) {
-            this.userId = username;
-            return this;
-        }
-
-        public UserBuilder externalId(String externalId) {
-            this.userId = externalId;
-            return this;
-        }
-    }
 }
 

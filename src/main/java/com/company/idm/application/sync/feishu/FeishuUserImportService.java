@@ -4,7 +4,6 @@ import com.company.idm.application.rbac.PolicyRefreshService;
 import com.company.idm.application.sync.SyncDiffPayload;
 import com.company.idm.application.sync.SyncRequestPayload;
 import com.company.idm.application.user.IntranetEmailGenerationService;
-import com.company.idm.application.user.UsernameGenerationService;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.enums.SyncDiffType;
 import com.company.idm.common.enums.SyncTargetType;
@@ -30,7 +29,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -57,7 +55,6 @@ public class FeishuUserImportService {
     private final IntranetEmailGenerationService intranetEmailGenerationService;
     private final AppLdapProperties ldapProperties;
 
-    @Autowired
     public FeishuUserImportService(
         FeishuUserRemoteService userRemoteService,
         FeishuDepartmentRemoteService departmentRemoteService,
@@ -84,37 +81,6 @@ public class FeishuUserImportService {
         this.passwordPolicyValidator = passwordPolicyValidator;
         this.intranetEmailGenerationService = intranetEmailGenerationService;
         this.ldapProperties = ldapProperties;
-    }
-
-    public FeishuUserImportService(
-        FeishuUserRemoteService userRemoteService,
-        FeishuDepartmentRemoteService departmentRemoteService,
-        FeishuImportDocumentResolver importDocumentResolver,
-        UserRepository userRepository,
-        DepartmentRepository departmentRepository,
-        RoleRepository roleRepository,
-        LdapDirectoryService ldapDirectoryService,
-        LdapGroupService ldapGroupService,
-        PolicyRefreshService policyRefreshService,
-        PasswordPolicyValidator passwordPolicyValidator,
-        UsernameGenerationService ignoredUsernameGenerationService,
-        IntranetEmailGenerationService intranetEmailGenerationService,
-        AppLdapProperties ldapProperties
-    ) {
-        this(
-            userRemoteService,
-            departmentRemoteService,
-            importDocumentResolver,
-            userRepository,
-            departmentRepository,
-            roleRepository,
-            ldapDirectoryService,
-            ldapGroupService,
-            policyRefreshService,
-            passwordPolicyValidator,
-            intranetEmailGenerationService,
-            ldapProperties
-        );
     }
 
     public FeishuUserImportResult preview(SyncRequestPayload payload) {
