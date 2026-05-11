@@ -15,15 +15,15 @@ public final class LdapDnHelper {
     private LdapDnHelper() {
     }
 
-    public static Name buildRelativeUserDn(AppLdapProperties ldapProperties, String username) {
+    public static Name buildRelativeUserDn(AppLdapProperties ldapProperties, String userId) {
         return LdapNameBuilder.newInstance()
             .add("ou", normalizeOuValue(ldapProperties.getPeopleOu()))
-            .add("uid", username)
+            .add("uid", userId)
             .build();
     }
 
-    public static String buildUserDn(AppLdapProperties ldapProperties, String username) {
-        return toAbsoluteDn(ldapProperties, buildRelativeUserDn(ldapProperties, username));
+    public static String buildUserDn(AppLdapProperties ldapProperties, String userId) {
+        return toAbsoluteDn(ldapProperties, buildRelativeUserDn(ldapProperties, userId));
     }
 
     public static Name buildRelativeGroupDn(AppLdapProperties ldapProperties, String groupCode, String groupName) {

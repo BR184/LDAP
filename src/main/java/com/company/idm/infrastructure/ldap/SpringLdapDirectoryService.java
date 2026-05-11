@@ -64,7 +64,7 @@ public class SpringLdapDirectoryService implements LdapDirectoryService {
     }
 
     @Override
-    public List<String> listAllUsernames() {
+    public List<String> listAllUserIds() {
         return ldapTemplate.search(
             LdapQueryBuilder.query().base(ldapProperties.getPeopleOu()).where("objectClass").is("inetOrgPerson"),
             (AttributesMapper<String>) attributes -> attributes.get("uid") == null ? null : attributes.get("uid").get().toString()

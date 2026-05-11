@@ -60,9 +60,9 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
     private List<SyncDiffPayload> scanDiffs(boolean autoRepair) {
         List<SyncDiffPayload> diffs = new ArrayList<>();
         List<User> users = userRepository.findAll();
-        Set<String> mysqlUsernames = new HashSet<>();
+        Set<String> mysqlUserIds = new HashSet<>();
         for (User user : users) {
-            mysqlUsernames.add(user.getUserId());
+            mysqlUserIds.add(user.getUserId());
             boolean ldapExists = ldapDirectoryService.existsByUid(user.getUserId());
             if (!ldapExists) {
                 if (autoRepair) {
@@ -118,14 +118,14 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
                 ));
             }
         }
-        for (String ldapUsername : ldapDirectoryService.listAllUsernames()) {
-            if (!mysqlUsernames.contains(ldapUsername)) {
+        for (String ldapUserId : ldapDirectoryService.listAllUserIds()) {
+            if (!mysqlUserIds.contains(ldapUserId)) {
                 diffs.add(new SyncDiffPayload(
                     SyncTargetType.USER,
-                    ldapUsername,
+                    ldapUserId,
                     SyncDiffType.MISSING_IN_MYSQL,
                     null,
-                    snapshotLdapUser(ldapDirectoryService.findUserSnapshot(ldapUsername)),
+                    snapshotLdapUser(ldapDirectoryService.findUserSnapshot(ldapUserId)),
                     false
                 ));
             }
@@ -140,8 +140,8 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
         return new SyncJobExecutionResult(SyncRunStatus.SUCCESS, summaryJson, null, diffs);
     }
 
-    private String buildExpectedDn(String username) {
-        return LdapDnHelper.buildUserDn(ldapProperties, username);
+    private String buildExpectedDn(String userId) {
+        return LdapDnHelper.buildUserDn(ldapProperties, userId);
     }
 
     private String expectedStatus(UserStatus status) {
@@ -150,7 +150,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
 
     private String snapshotUser(User user) {
         return """
-            {"username":"%s","realName":"%s","email":"%s","mobile":"%s","employeeNo":"%s","deptCode":"%s","status":"%s","ldapDn":"%s"}
+            {"userId":"%s","realName":"%s","email":"%s","mobile":"%s","employeeNo":"%s","deptCode":"%s","status":"%s","ldapDn":"%s"}
             """.formatted(
             safe(user.getUserId()),
             safe(user.getRealName()),
@@ -168,7 +168,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
             return null;
         }
         return """
-            {"username":"%s","realName":"%s","email":"%s","mobile":"%s","employeeNo":"%s","deptCode":"%s","status":"%s","ldapDn":"%s"}
+            {"userId":"%s","realName":"%s","email":"%s","mobile":"%s","employeeNo":"%s","deptCode":"%s","status":"%s","ldapDn":"%s"}
             """.formatted(
             safe(snapshot.getUserId()),
             safe(snapshot.getRealName()),

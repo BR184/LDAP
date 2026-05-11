@@ -108,16 +108,16 @@ public class FeishuImportAlignmentService {
         return (user.getTokenVersion() == null ? 0 : user.getTokenVersion()) + 1;
     }
 
-    private void cleanupLdapUser(String username) {
-        if (username == null || username.isBlank()) {
+    private void cleanupLdapUser(String userId) {
+        if (userId == null || userId.isBlank()) {
             return;
         }
-        ldapGroupService.removeUserFromAllGroups(username);
-        if (!ldapDirectoryService.existsByUid(username)) {
+        ldapGroupService.removeUserFromAllGroups(userId);
+        if (!ldapDirectoryService.existsByUid(userId)) {
             return;
         }
         try {
-            ldapDirectoryService.deleteUser(username);
+            ldapDirectoryService.deleteUser(userId);
         } catch (BizException exception) {
             if (!"LDAP_USER_NOT_FOUND".equals(exception.getCode())) {
                 throw exception;

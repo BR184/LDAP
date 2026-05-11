@@ -8,24 +8,24 @@ import java.util.List;
  */
 public interface LdapDirectoryService {
 
-    boolean authenticate(String username, String password);
+    boolean authenticate(String userId, String password);
 
-    boolean existsByUid(String username);
+    boolean existsByUid(String userId);
 
-    LdapUserSnapshot findUserSnapshot(String username);
+    LdapUserSnapshot findUserSnapshot(String userId);
 
-    List<String> listAllUsernames();
+    List<String> listAllUserIds();
 
     String createUser(User user, String rawPassword);
 
     void updateUser(User user);
 
-    void enableUser(String username);
+    void enableUser(String userId);
 
-    void disableUser(String username);
+    void disableUser(String userId);
 
-    void deleteUser(String username);
+    void deleteUser(String userId);
 
-    void resetPassword(String username, String rawPassword);
+    void resetPassword(String userId, String rawPassword);
 }
 

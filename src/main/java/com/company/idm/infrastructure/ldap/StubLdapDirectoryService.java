@@ -59,7 +59,7 @@ public class StubLdapDirectoryService implements LdapDirectoryService {
     }
 
     @Override
-    public List<String> listAllUsernames() {
+    public List<String> listAllUserIds() {
         return entries.keySet().stream()
             .filter(username -> !"placeholder".equals(username))
             .sorted()
