@@ -83,6 +83,7 @@ public class MailConfigApplicationService {
         return toDetail(saved);
     }
 
+    @Transactional
     public MailConfigTestResult testConfig(MailConfigTestCommand command) {
         MailServerConfig existing = mailServerConfigRepository.findCurrent().orElse(null);
         validateConfig(command.sendMode(), command.secureMode(), command.host(), command.port(), command.fromAddress(),
@@ -101,11 +102,26 @@ public class MailConfigApplicationService {
             .enabled(true)
             .build();
         String rawPassword = resolveRawPassword(command.password(), existing, command.authRequired());
-        mailSender.sendTestMail(config, rawPassword, new MailTestMessage(
-            normalize(command.testToAddress()),
-            "统一身份管理平台邮件配置测试",
-            "这是一封系统自动发送的测试邮件，若您收到该邮件，说明当前 SMTP 配置可用。"
-        ));
+        try {
+            mailSender.sendTestMail(config, rawPassword, new MailTestMessage(
+                normalize(command.testToAddress()),
+                "统一身份管理平台邮件配置测试",
+                "这是一封系统自动发送的测试邮件，若您收到该邮件，说明当前 SMTP 配置可用。"
+            ));
+        } catch (RuntimeException exception) {
+            String failureMessage = buildTestFailureMessage(exception);
+            updateLastTestResult(existing, false, failureMessage);
+            auditLogRepository.save(AuditLog.builder()
+                .operator(command.operator())
+                .operationType("MAIL_CONFIG_TEST")
+                .bizType("SYSTEM")
+                .bizId("MAIL_CONFIG_TEST")
+                .afterJson(config.getHost())
+                .result("FAILURE")
+                .build());
+            return new MailConfigTestResult(false, failureMessage);
+        }
+        updateLastTestResult(existing, true, "测试邮件发送成功");
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
             .operationType("MAIL_CONFIG_TEST")
@@ -119,6 +135,30 @@ public class MailConfigApplicationService {
 
     public String decryptPassword(String ciphertext) {
         return cryptoService.decrypt(ciphertext);
+    }
+
+    private void updateLastTestResult(MailServerConfig existing, boolean success, String message) {
+        if (existing == null) {
+            return;
+        }
+        mailServerConfigRepository.save(existing.toBuilder()
+            .lastTestSuccess(success)
+            .lastTestAt(LocalDateTime.now())
+            .lastTestMessage(message)
+            .build());
+    }
+
+    private String buildTestFailureMessage(RuntimeException exception) {
+        Throwable rootCause = exception;
+        while (rootCause.getCause() != null) {
+            rootCause = rootCause.getCause();
+        }
+        String detail = normalize(rootCause.getMessage());
+        if (detail == null) {
+            detail = rootCause.getClass().getSimpleName();
+        }
+        String message = "测试邮件发送失败：" + detail;
+        return message.length() > 500 ? message.substring(0, 500) : message;
     }
 
     private MailServerConfigDetail toDetail(MailServerConfig config) {

@@ -68,7 +68,12 @@ const saveMutation = useMutation({
 const testMutation = useMutation({
   mutationFn: testMailConfig,
   onSuccess: (data) => {
-    ElMessage.success(data.message)
+    if (data.success) {
+      ElMessage.success(data.message)
+    } else {
+      ElMessage.error(data.message)
+    }
+    currentConfigQuery.refetch()
   },
 })
 
