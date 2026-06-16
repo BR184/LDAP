@@ -17,7 +17,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: AdminLayout,
-    redirect: '/dashboard',
+    redirect: '/profile',
     children: [
       {
         path: 'dashboard',
@@ -107,7 +107,7 @@ router.beforeEach(async (to) => {
 
   if (!requiresAuth) {
     if (to.path === '/login' && authStore.token) {
-      return '/dashboard'
+      return authStore.defaultEntryPath
     }
 
     return true

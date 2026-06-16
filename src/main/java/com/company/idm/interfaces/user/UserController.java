@@ -160,11 +160,20 @@ public class UserController {
     ) {
         userApplicationService.changePassword(new ChangePasswordCommand(
             username,
-            request.oldPassword(),
+            request.verificationToken(),
             request.newPassword(),
             request.confirmPassword()
         ));
         return ApiResponse.success();
+    }
+
+    @PostMapping("/me/password/verify")
+    public ApiResponse<VerifyPasswordResponse> verifyPassword(
+        @Valid @RequestBody VerifyPasswordRequest request,
+        @AuthenticationPrincipal(expression = "userId") String username
+    ) {
+        String verificationToken = userApplicationService.verifyPassword(username, request.oldPassword());
+        return ApiResponse.success(new VerifyPasswordResponse(verificationToken));
     }
 
     @PutMapping("/{id}/password/reset")

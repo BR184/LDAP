@@ -7,6 +7,8 @@ import type {
   ChangePasswordPayload,
   CreateUserPayload,
   UpdateUserPayload,
+  VerifyPasswordPayload,
+  VerifyPasswordResult,
   UserItem,
   UserListQuery,
 } from '@/types/user'
@@ -47,6 +49,10 @@ export function resetUserPassword(userId: number) {
 
 export function changeMyPassword(payload: ChangePasswordPayload) {
   return request.put<never, void>('/v1/users/me/password', payload)
+}
+
+export function verifyMyPassword(payload: VerifyPasswordPayload) {
+  return request.post<never, VerifyPasswordResult>('/v1/users/me/password/verify', payload)
 }
 
 export function assignUserRoles(userId: number, payload: AssignUserRolesPayload) {

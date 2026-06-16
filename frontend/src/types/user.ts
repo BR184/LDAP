@@ -56,9 +56,17 @@ export interface AssignUserRolesPayload {
 }
 
 export interface ChangePasswordPayload {
-  oldPassword: string
+  verificationToken: string
   newPassword: string
   confirmPassword: string
+}
+
+export interface VerifyPasswordPayload {
+  oldPassword: string
+}
+
+export interface VerifyPasswordResult {
+  verificationToken: string
 }
 
 export interface BatchDeleteUsersPayload {

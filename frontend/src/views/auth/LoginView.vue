@@ -42,7 +42,7 @@ async function handleSubmit() {
     })
 
     ElMessage.success('登录成功')
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : authStore.defaultEntryPath
     await router.replace(redirect)
   } finally {
     loading.value = false

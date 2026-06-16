@@ -1,4 +1,15 @@
 services:
+  idm-web:
+    build:
+      context: ../frontend
+    image: corp-idm-web:local
+    container_name: corp-idm-web
+    restart: unless-stopped
+    environment:
+      BACKEND_UPSTREAM: corp-idm-backend-dev:8083
+    ports:
+      - "5173:80"
+
   mysql:
     image: mysql:8.0
     container_name: corp-idm-mysql

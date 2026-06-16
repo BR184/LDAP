@@ -52,6 +52,7 @@ public class UserApplicationService {
     private final RoleRepository roleRepository;
     private final IntranetEmailGenerationService intranetEmailGenerationService;
     private final AppLdapProperties ldapProperties;
+    private final PasswordVerificationTokenService passwordVerificationTokenService;
 
     public List<User> listUsers(String keyword, String departmentKeyword, Integer statusCode) {
         String normalizedKeyword = normalize(keyword);
@@ -237,14 +238,9 @@ public class UserApplicationService {
     public void changePassword(ChangePasswordCommand command) {
         User user = userRepository.findByUserId(command.operator())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
-        if (!ldapDirectoryService.authenticate(command.operator(), command.oldPassword())) {
-            throw new BizException("OLD_PASSWORD_INVALID", "旧密码错误");
-        }
+        passwordVerificationTokenService.verify(command.verificationToken(), user);
         if (!command.newPassword().equals(command.confirmPassword())) {
             throw new BizException("PASSWORD_CONFIRM_MISMATCH", "两次输入的新密码不一致");
-        }
-        if (command.oldPassword().equals(command.newPassword())) {
-            throw new BizException("PASSWORD_SAME_AS_OLD", "新密码不能与旧密码相同");
         }
         passwordPolicyValidator.validate(command.newPassword());
         ldapDirectoryService.resetPassword(command.operator(), command.newPassword());
@@ -257,6 +253,13 @@ public class UserApplicationService {
             .afterJson("CHANGED")
             .result("SUCCESS")
             .build());
+    }
+
+    public String verifyPassword(String operator, String oldPassword) {
+        User user = userRepository.findByUserId(operator)
+            .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        verifyOldPassword(operator, oldPassword);
+        return passwordVerificationTokenService.generate(user);
     }
 
     @Transactional
@@ -684,6 +687,12 @@ public class UserApplicationService {
             if (!"LDAP_USER_NOT_FOUND".equals(exception.getCode())) {
                 throw exception;
             }
+        }
+    }
+
+    private void verifyOldPassword(String operator, String oldPassword) {
+        if (!ldapDirectoryService.authenticate(operator, oldPassword)) {
+            throw new BizException("OLD_PASSWORD_INVALID", "旧密码错误");
         }
     }
 

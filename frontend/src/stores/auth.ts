@@ -5,6 +5,8 @@ import { fetchCurrentUser, login } from '@/api/modules/auth'
 import { useMenuStore } from '@/stores/menu'
 import type { CurrentUser, LoginCommand } from '@/types/auth'
 
+const ADMIN_ROLE_CODES = new Set(['ADMIN', 'SUPER_ADMIN'])
+
 export const useAuthStore = defineStore('auth', () => {
   const token = useStorage('idm-access-token', '')
   const currentUser = ref<CurrentUser | null>(null)
@@ -13,6 +15,8 @@ export const useAuthStore = defineStore('auth', () => {
   const menuStore = useMenuStore()
 
   const displayName = computed(() => currentUser.value?.realName || currentUser.value?.userId || '未登录')
+  const isAdmin = computed(() => currentUser.value?.roleCodes.some((roleCode) => ADMIN_ROLE_CODES.has(roleCode)) ?? false)
+  const defaultEntryPath = computed(() => (isAdmin.value ? '/dashboard' : '/profile'))
 
   async function signIn(payload: LoginCommand) {
     const result = await login(payload)
@@ -60,6 +64,8 @@ export const useAuthStore = defineStore('auth', () => {
     currentUser,
     profileLoaded,
     displayName,
+    isAdmin,
+    defaultEntryPath,
     signIn,
     loadProfile,
     clearSession,

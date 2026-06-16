@@ -5,9 +5,8 @@ package com.company.idm.application.user;
  */
 public record ChangePasswordCommand(
     String operator,
-    String oldPassword,
+    String verificationToken,
     String newPassword,
     String confirmPassword
 ) {
 }
-
