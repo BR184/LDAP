@@ -7,6 +7,7 @@ import com.company.idm.application.user.CreateUserCommand;
 import com.company.idm.application.user.DeleteUserCommand;
 import com.company.idm.application.user.AdminResetPasswordCommand;
 import com.company.idm.application.user.PasswordResetApplicationService;
+import com.company.idm.application.user.PasswordResetAuthorizationService;
 import com.company.idm.application.user.UpdateUserCommand;
 import com.company.idm.application.user.UpdateUserStatusCommand;
 import com.company.idm.application.user.UserApplicationService;
@@ -19,12 +20,16 @@ import com.company.idm.common.enums.SyncRunStatus;
 import com.company.idm.common.enums.SyncTriggerMode;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserRepository;
+import com.company.idm.infrastructure.util.ClientIpUtil;
 import com.company.idm.interfaces.sync.FeishuFileImportRequest;
 import com.company.idm.interfaces.sync.FeishuSyncRequest;
 import com.company.idm.interfaces.sync.SyncBatchDetailResponse;
 import com.company.idm.interfaces.sync.SyncResponseAssembler;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -47,6 +52,8 @@ public class UserController {
 
     private final UserApplicationService userApplicationService;
     private final PasswordResetApplicationService passwordResetApplicationService;
+    private final PasswordResetAuthorizationService passwordResetAuthorizationService;
+    private final UserRepository userRepository;
     private final RbacApplicationService rbacApplicationService;
     private final SyncApplicationService syncApplicationService;
     private final SyncResponseAssembler syncResponseAssembler;
@@ -57,19 +64,33 @@ public class UserController {
         @RequestParam(required = false) String userId,
         @RequestParam(required = false) String deptName,
         @RequestParam(required = false) String deptCode,
-        @RequestParam(required = false) Integer status
+        @RequestParam(required = false) Integer status,
+        @AuthenticationPrincipal(expression = "userId") String username
     ) {
         String departmentKeyword = deptName != null && !deptName.isBlank() ? deptName : deptCode;
-        List<UserResponse> users = userApplicationService.listUsers(userId, departmentKeyword, status).stream()
-            .map(this::toResponse)
+        List<User> userList = userApplicationService.listUsers(userId, departmentKeyword, status);
+        User operator = resolveOperator(username);
+        List<User> organizationSnapshot = userRepositorySnapshot();
+        Set<String> operatorPermissionCodes = passwordResetAuthorizationService.loadPermissionCodes(operator);
+        List<UserResponse> users = userList.stream()
+            .map(user -> toResponse(user, canResetPassword(operator, user, organizationSnapshot, operatorPermissionCodes)))
             .toList();
         return ApiResponse.success(users);
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id, 'GET')")
-    public ApiResponse<UserResponse> detail(@PathVariable Long id) {
-        return ApiResponse.success(toResponse(userApplicationService.getUser(id)));
+    public ApiResponse<UserResponse> detail(
+        @PathVariable Long id,
+        @AuthenticationPrincipal(expression = "userId") String username
+    ) {
+        User user = userApplicationService.getUser(id);
+        User operator = resolveOperator(username);
+        Set<String> operatorPermissionCodes = passwordResetAuthorizationService.loadPermissionCodes(operator);
+        return ApiResponse.success(toResponse(
+            user,
+            canResetPassword(operator, user, userRepositorySnapshot(), operatorPermissionCodes)
+        ));
     }
 
     @PostMapping
@@ -180,9 +201,14 @@ public class UserController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/password/reset', 'PUT')")
     public ApiResponse<Void> resetPassword(
         @PathVariable Long id,
-        @AuthenticationPrincipal(expression = "userId") String username
+        @AuthenticationPrincipal(expression = "userId") String username,
+        HttpServletRequest httpServletRequest
     ) {
-        passwordResetApplicationService.adminResetPassword(new AdminResetPasswordCommand(id, username));
+        passwordResetApplicationService.adminResetPassword(new AdminResetPasswordCommand(
+            id,
+            username,
+            ClientIpUtil.getClientIp(httpServletRequest)
+        ));
         return ApiResponse.success();
     }
 
@@ -247,6 +273,10 @@ public class UserController {
     }
 
     private UserResponse toResponse(User user) {
+        return toResponse(user, false);
+    }
+
+    private UserResponse toResponse(User user, boolean canResetPassword) {
         return new UserResponse(
             user.getId(),
             user.getUserId(),
@@ -267,8 +297,28 @@ public class UserController {
             user.getStatus().getCode(),
             user.getEmploymentStatus() == null ? null : user.getEmploymentStatus().name(),
             user.getLdapDn(),
-            user.getRoleCodes()
+            user.getRoleCodes(),
+            canResetPassword
         );
+    }
+
+    private User resolveOperator(String username) {
+        if (username == null || username.isBlank()) {
+            return null;
+        }
+        try {
+            return userRepository.findByUserId(username).orElse(null);
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private boolean canResetPassword(User operator, User target, List<User> allUsers, Set<String> operatorPermissionCodes) {
+        return passwordResetAuthorizationService.evaluate(operator, target, allUsers, operatorPermissionCodes).allowed();
+    }
+
+    private List<User> userRepositorySnapshot() {
+        return userRepository.findAll();
     }
 }
 

@@ -24,6 +24,7 @@ public class MybatisAuditLogRepository implements AuditLogRepository {
         AuditLogDO dataObject = new AuditLogDO();
         dataObject.setTraceId(resolveTraceId(auditLog));
         dataObject.setOperator(auditLog.getOperator());
+        dataObject.setOperatorIp(auditLog.getOperatorIp());
         dataObject.setOperationType(auditLog.getOperationType());
         dataObject.setBizType(auditLog.getBizType());
         dataObject.setBizId(auditLog.getBizId());

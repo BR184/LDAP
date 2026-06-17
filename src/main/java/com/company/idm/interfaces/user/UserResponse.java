@@ -26,7 +26,8 @@ public record UserResponse(
     Integer status,
     String employmentStatus,
     String ldapDn,
-    Set<String> roleCodes
+    Set<String> roleCodes,
+    boolean canResetPassword
 ) {
 }
 

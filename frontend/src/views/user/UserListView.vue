@@ -16,8 +16,8 @@ import {
   updateUser,
   updateUserStatus,
 } from '@/api/modules/user'
-import { fetchRoles } from '@/api/modules/role'
 import { fetchDepartmentTree } from '@/api/modules/department'
+import { fetchRoles } from '@/api/modules/role'
 import { useAuthStore } from '@/stores/auth'
 import UserDetailDrawer from '@/views/user/components/UserDetailDrawer.vue'
 import UserFormDrawer from '@/views/user/components/UserFormDrawer.vue'
@@ -31,14 +31,10 @@ const queryClient = useQueryClient()
 const authStore = useAuthStore()
 const tableRef = ref<{ clearSelection?: () => void } | null>(null)
 
-const searchForm = reactive<{
-  userId: string
-  deptName: string
-  status: number | undefined
-}>({
+const searchForm = reactive({
   userId: '',
   deptName: '',
-  status: undefined,
+  status: undefined as number | undefined,
 })
 
 const appliedQuery = reactive<UserListQuery>({
@@ -55,11 +51,9 @@ const pagination = reactive({
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailUser = ref<UserItem | null>(null)
-
 const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const formUser = ref<UserItem | null>(null)
-
 const roleVisible = ref(false)
 const roleUser = ref<UserItem | null>(null)
 const selectedRoleIds = ref<number[]>([])
@@ -101,6 +95,7 @@ const roleIdMapByCode = computed<Record<string, number>>(() =>
     return accumulator
   }, {}),
 )
+
 const currentOperatorPermissionLevel = computed(() => {
   const currentUser = authStore.currentUser
   if (!currentUser) {
@@ -108,6 +103,7 @@ const currentOperatorPermissionLevel = computed(() => {
   }
   return resolvePermissionLevel(currentUser.roleCodes)
 })
+
 const isCurrentUserSuperAdmin = computed(() => authStore.currentUser?.roleCodes.includes(SUPER_ADMIN_ROLE_CODE) ?? false)
 const canBatchDelete = computed(() =>
   selectedUsers.value.length > 0
@@ -253,7 +249,6 @@ async function openDetail(userId: number) {
   detailVisible.value = true
   detailLoading.value = true
   detailUser.value = null
-
   try {
     detailUser.value = await fetchUserDetail(userId)
   } finally {
@@ -286,11 +281,9 @@ async function handleFormSubmit(payload: CreateUserPayload | UpdateUserPayload) 
     await createUserMutation.mutateAsync(payload as CreateUserPayload)
     return
   }
-
   if (!formUser.value) {
     return
   }
-
   await updateUserMutation.mutateAsync({
     userId: formUser.value.id,
     payload: payload as UpdateUserPayload,
@@ -301,7 +294,6 @@ async function handleRoleSubmit(roleIds: number[]) {
   if (!roleUser.value) {
     return
   }
-
   await assignRolesMutation.mutateAsync({
     userId: roleUser.value.id,
     roleIds,
@@ -311,20 +303,18 @@ async function handleRoleSubmit(roleIds: number[]) {
 async function handleToggleStatus(user: UserItem) {
   const nextStatus = user.status === 1 ? 0 : 1
   const actionText = nextStatus === 1 ? '启用' : '禁用'
-
   try {
     await ElMessageBox.confirm(`确认${actionText}用户 ${user.realName}（${user.userId}）吗？`, `${actionText}用户`, {
       type: 'warning',
       confirmButtonText: '确认',
       cancelButtonText: '取消',
     })
-
     await updateStatusMutation.mutateAsync({
       userId: user.id,
       statusCode: nextStatus,
     })
   } catch {
-    // 用户取消时不额外处理
+    // 用户取消时不处理。
   }
 }
 
@@ -333,10 +323,9 @@ async function handleDelete(user: UserItem) {
     ElMessage.warning('当前用户无权删除该账号')
     return
   }
-
   try {
     await ElMessageBox.confirm(
-      `删除后会同时清理 LDAP 账号映射与登录能力，确认删除用户 ${user.realName}（${user.userId}）吗？`,
+      `删除后会同步清理 LDAP 账号映射与登录能力，确认删除用户 ${user.realName}（${user.userId}）吗？`,
       '删除用户',
       {
         type: 'warning',
@@ -344,10 +333,9 @@ async function handleDelete(user: UserItem) {
         cancelButtonText: '取消',
       },
     )
-
     await deleteUserMutation.mutateAsync(user.id)
   } catch {
-    // 用户取消时不额外处理
+    // 用户取消时不处理。
   }
 }
 
@@ -364,21 +352,9 @@ async function handleBatchDelete() {
     return
   }
 
-  const previewUsers = targetUsers.slice(0, 5).map((user) => `${user.realName}（${user.employeeNo || user.userId}）`)
-  const previewText = previewUsers.join('、')
-  const moreCount = targetUsers.length - previewUsers.length
-  const summaryText = hasSelectedRows
-    ? (moreCount > 0 ? `${previewText} 等已选中的 ${targetUsers.length} 人` : previewText)
-    : (previewUsers.length
-        ? (moreCount > 0 ? `${previewText} 等 ${targetUsers.length} 人` : previewText)
-        : `当前筛选条件下的全部可删除用户，共 ${targetUsers.length} 人`)
-  const confirmMessage = hasSelectedRows
-    ? `删除后将同步清理 LDAP 账号映射、角色绑定与登录能力。确认批量删除已选中的用户吗？\n${summaryText}`
-    : `删除后将同步清理 LDAP 账号映射、角色绑定与登录能力。确认批量删除当前筛选结果中的全部用户吗？\n${summaryText}`
-
   try {
     await ElMessageBox.confirm(
-      confirmMessage,
+      `确认批量删除 ${targetUsers.length} 个用户吗？删除后会同步清理 LDAP 账号映射、角色绑定与登录能力。`,
       '确认批量删除',
       {
         type: 'warning',
@@ -390,17 +366,20 @@ async function handleBatchDelete() {
     return
   }
 
-  await batchDeleteUsersMutation.mutateAsync(
-    {
-      userIds: targetUsers.map((user) => user.id),
-      userIdKeyword: hasSelectedRows ? undefined : appliedQuery.userId || undefined,
-      deptNameKeyword: hasSelectedRows ? undefined : appliedQuery.deptName || undefined,
-      statusCode: hasSelectedRows ? undefined : appliedQuery.status,
-    },
-  )
+  await batchDeleteUsersMutation.mutateAsync({
+    userIds: targetUsers.map((user) => user.id),
+    userIdKeyword: hasSelectedRows ? undefined : appliedQuery.userId || undefined,
+    deptNameKeyword: hasSelectedRows ? undefined : appliedQuery.deptName || undefined,
+    statusCode: hasSelectedRows ? undefined : appliedQuery.status,
+  })
 }
 
 async function handleResetPassword(user: UserItem) {
+  if (!user.canResetPassword) {
+    ElMessage.warning('无权限重置该用户密码')
+    return
+  }
+
   try {
     await ElMessageBox.confirm(
       `确认将用户 ${user.realName}（${user.userId}）的密码重置为默认密码 123456 吗？`,
@@ -411,11 +390,11 @@ async function handleResetPassword(user: UserItem) {
         cancelButtonText: '取消',
       },
     )
-
     await resetPasswordMutation.mutateAsync(user.id)
-    ElMessage.success(`用户 ${user.userId} 的密码已重置为 123456`)
+    ElMessage.success('密码已重置为默认密码 123456')
+    await refreshUsers()
   } catch {
-    // 用户取消时不额外处理
+    // 用户取消时不处理。
   }
 }
 
@@ -589,7 +568,20 @@ function statusTagType(status: number) {
                     <el-dropdown-item @click="handleToggleStatus(row)">
                       {{ row.status === 1 ? '禁用用户' : '启用用户' }}
                     </el-dropdown-item>
-                    <el-dropdown-item @click="handleResetPassword(row)">重置密码</el-dropdown-item>
+                    <el-tooltip
+                      :disabled="row.canResetPassword"
+                      content="无权重置此用户密码"
+                      placement="left"
+                    >
+                      <span class="dropdown-tooltip-wrap">
+                        <el-dropdown-item
+                          :disabled="!row.canResetPassword"
+                          @click="handleResetPassword(row)"
+                        >
+                          重置密码
+                        </el-dropdown-item>
+                      </span>
+                    </el-tooltip>
                     <el-dropdown-item @click="handleSyncLdap(row)">同步 LDAP</el-dropdown-item>
                     <el-dropdown-item divided :disabled="!canDeleteUser(row)" @click="handleDelete(row)">
                       删除用户
@@ -660,5 +652,9 @@ function statusTagType(status: number) {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.dropdown-tooltip-wrap {
+  display: block;
 }
 </style>

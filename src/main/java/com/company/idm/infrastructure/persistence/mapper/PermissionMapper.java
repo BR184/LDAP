@@ -21,5 +21,19 @@ public interface PermissionMapper extends BaseMapper<PermissionDO> {
         WHERE r.status = 1 AND p.status = 1
         """)
     List<RolePolicyRecord> selectRolePolicies();
+
+    @Select("""
+        SELECT DISTINCT p.permission_code
+        FROM sys_user u
+        INNER JOIN sys_user_role ur ON ur.user_id = u.id
+        INNER JOIN sys_role r ON r.id = ur.role_id
+        INNER JOIN sys_role_permission rp ON rp.role_id = r.id
+        INNER JOIN sys_permission p ON p.id = rp.permission_id
+        WHERE u.user_id = #{userId}
+          AND u.deleted = 0
+          AND r.status = 1
+          AND p.status = 1
+        """)
+    List<String> selectPermissionCodesByUserId(String userId);
 }
 

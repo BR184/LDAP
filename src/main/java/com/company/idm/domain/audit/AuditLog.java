@@ -17,6 +17,7 @@ public class AuditLog {
     private Long id;
     private String traceId;
     private String operator;
+    private String operatorIp;
     private String operationType;
     private String bizType;
     private String bizId;

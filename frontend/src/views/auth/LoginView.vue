@@ -3,7 +3,6 @@ import { reactive, ref } from 'vue'
 import { Lock, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { forgotPassword } from '@/api/modules/auth'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
@@ -11,7 +10,6 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(false)
-const forgotPasswordLoading = ref(false)
 const loginFormRef = ref()
 const form = reactive({
   loginId: '',
@@ -49,29 +47,11 @@ async function handleSubmit() {
   }
 }
 
-async function handleForgotPassword() {
-  try {
-    const { value } = await ElMessageBox.prompt(
-      '请输入需要重置密码的工号或用户ID，系统会将新密码发送到绑定内网邮箱。',
-      '忘记密码',
-      {
-        confirmButtonText: '发送邮件',
-        cancelButtonText: '取消',
-        inputPlaceholder: '请输入工号或用户ID',
-        inputValidator: (inputValue) => (inputValue && inputValue.trim() ? true : '请输入工号或用户ID'),
-      },
-    )
-
-    forgotPasswordLoading.value = true
-    const notice = await forgotPassword({
-      loginId: value.trim(),
-    })
-    ElMessage.success(notice || '如账号信息有效，系统已向绑定内网邮箱发送重置邮件，请注意查收')
-  } catch {
-    // 用户取消时不做额外处理
-  } finally {
-    forgotPasswordLoading.value = false
-  }
+function handleForgotPassword() {
+  ElMessageBox.alert('请联系直属上级或系统管理员重置密码', '忘记密码', {
+    confirmButtonText: '知道了',
+    type: 'info',
+  })
 }
 </script>
 
@@ -113,7 +93,7 @@ async function handleForgotPassword() {
           登录管理台
         </el-button>
         <div class="login-view__assist">
-          <el-button link type="primary" :loading="forgotPasswordLoading" @click="handleForgotPassword">
+          <el-button link type="primary" @click="handleForgotPassword">
             忘记密码
           </el-button>
         </div>

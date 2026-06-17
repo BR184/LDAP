@@ -15,6 +15,7 @@ public class AuditLogDO {
     private Long id;
     private String traceId;
     private String operator;
+    private String operatorIp;
     private String operationType;
     private String bizType;
     private String bizId;
@@ -46,6 +47,14 @@ public class AuditLogDO {
 
     public void setOperator(String operator) {
         this.operator = operator;
+    }
+
+    public String getOperatorIp() {
+        return operatorIp;
+    }
+
+    public void setOperatorIp(String operatorIp) {
+        this.operatorIp = operatorIp;
     }
 
     public String getOperationType() {

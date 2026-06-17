@@ -19,6 +19,7 @@ export interface UserItem {
   employmentStatus: string | null
   ldapDn: string | null
   roleCodes: string[]
+  canResetPassword: boolean
 }
 
 export interface UserListQuery {

@@ -9,6 +9,7 @@ import com.company.idm.infrastructure.persistence.dataobject.PermissionDO;
 import com.company.idm.infrastructure.persistence.mapper.PermissionMapper;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -41,6 +42,15 @@ public class MybatisPermissionRepository implements PermissionRepository {
     @Override
     public Optional<Permission> findById(Long id) {
         return Optional.ofNullable(permissionMapper.selectById(id)).map(this::toDomain);
+    }
+
+    @Override
+    public Set<String> findPermissionCodesByUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return Set.of();
+        }
+        List<String> permissionCodes = permissionMapper.selectPermissionCodesByUserId(userId);
+        return permissionCodes == null || permissionCodes.isEmpty() ? Set.of() : Set.copyOf(permissionCodes);
     }
 
     private Permission toDomain(PermissionDO dataObject) {

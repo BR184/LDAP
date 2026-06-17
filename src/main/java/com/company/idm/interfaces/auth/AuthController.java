@@ -7,6 +7,7 @@ import com.company.idm.application.user.ForgotPasswordCommand;
 import com.company.idm.application.user.PasswordResetApplicationService;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.domain.user.User;
+import com.company.idm.infrastructure.util.ClientIpUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -48,7 +49,7 @@ public class AuthController {
     ) {
         passwordResetApplicationService.forgotPassword(new ForgotPasswordCommand(
             request.loginId(),
-            resolveClientIp(httpServletRequest)
+            ClientIpUtil.getClientIp(httpServletRequest)
         ));
         return ApiResponse.success(passwordResetApplicationService.forgotPasswordSuccessNotice());
     }
@@ -70,14 +71,5 @@ public class AuthController {
         ));
     }
 
-    private String resolveClientIp(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        if (forwardedFor != null && !forwardedFor.isBlank()) {
-            int delimiterIndex = forwardedFor.indexOf(',');
-            return delimiterIndex >= 0 ? forwardedFor.substring(0, delimiterIndex).trim() : forwardedFor.trim();
-        }
-        String remoteAddr = request.getRemoteAddr();
-        return remoteAddr == null || remoteAddr.isBlank() ? "UNKNOWN" : remoteAddr;
-    }
 }
 
