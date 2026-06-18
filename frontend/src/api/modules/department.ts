@@ -5,7 +5,6 @@ import type {
   DepartmentTreeNode,
   UpdateDepartmentPayload,
 } from '@/types/department'
-import type { SyncBatchSummary } from '@/types/sync'
 
 export function fetchDepartmentTree() {
   return request.get<never, DepartmentTreeNode[]>('/v1/departments/tree')
@@ -29,16 +28,4 @@ export function deleteDepartment(deptCode: string) {
 
 export function syncDepartmentToLdap(deptCode: string) {
   return request.post<never, DepartmentDetail>(`/v1/departments/${deptCode}/sync-ldap`)
-}
-
-export function syncDepartmentsFromFeishu(remark?: string) {
-  return request.post<never, SyncBatchSummary>('/v1/departments/sync/feishu', { remark })
-}
-
-export function importDepartmentsFromFeishuFile(documentPath: string, remark?: string, forceFullSync = false) {
-  return request.post<never, SyncBatchSummary>('/v1/departments/import/feishu-file', {
-    documentPath,
-    remark,
-    forceFullSync,
-  })
 }

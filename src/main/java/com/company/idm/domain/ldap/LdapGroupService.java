@@ -29,5 +29,13 @@ public interface LdapGroupService {
 
     void syncUserGroups(String username, List<String> groupCodes);
 
+    default void syncUserGroupsToExactState(String uid, List<String> groupCodes) {
+        syncUserGroups(uid, groupCodes);
+    }
+
     void removeUserFromAllGroups(String username);
+
+    default void removeUserFromAllGroupsIfExists(String uid) {
+        removeUserFromAllGroups(uid);
+    }
 }

@@ -20,9 +20,29 @@ public interface LdapDirectoryService {
 
     void updateUser(User user);
 
+    default String createOrUpdateUser(User user, String rawPassword) {
+        if (existsByUid(user.getUserId())) {
+            updateUser(user);
+            return findUserSnapshot(user.getUserId()).getDn();
+        }
+        return createUser(user, rawPassword);
+    }
+
     void enableUser(String userId);
 
     void disableUser(String userId);
+
+    default void disableUserIfExists(String uid) {
+        if (existsByUid(uid)) {
+            disableUser(uid);
+        }
+    }
+
+    default void enableUserIfExists(String uid) {
+        if (existsByUid(uid)) {
+            enableUser(uid);
+        }
+    }
 
     void deleteUser(String userId);
 

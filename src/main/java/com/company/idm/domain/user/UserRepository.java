@@ -19,6 +19,8 @@ public interface UserRepository {
 
     List<User> findAll();
 
+    List<User> findActiveUsers();
+
     List<User> findByConditions(String keyword, String deptCode, Integer statusCode);
 
     User save(User user);
@@ -32,6 +34,8 @@ public interface UserRepository {
     void bumpTokenVersion(Long id, Integer tokenVersion);
 
     void assignRoles(Long userId, List<Long> roleIds);
+
+    void syncRoleBindings(Long roleId, Set<Long> expectedUserIds);
 
     void removeAllRoles(Long userId);
 

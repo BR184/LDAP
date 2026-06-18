@@ -12,6 +12,7 @@ import com.company.idm.infrastructure.persistence.dataobject.UserRoleDO;
 import com.company.idm.infrastructure.persistence.mapper.UserMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserRoleMapper;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -71,6 +72,18 @@ public class MybatisUserRepository implements UserRepository {
     public List<User> findAll() {
         return userMapper.selectList(new LambdaQueryWrapper<UserDO>()
                 .eq(UserDO::getDeleted, 0)
+                .orderByAsc(UserDO::getId))
+            .stream()
+            .map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())))
+            .toList();
+    }
+
+    @Override
+    public List<User> findActiveUsers() {
+        return userMapper.selectList(new LambdaQueryWrapper<UserDO>()
+                .eq(UserDO::getDeleted, 0)
+                .eq(UserDO::getStatus, UserStatus.ENABLED.getCode())
+                .ne(UserDO::getEmploymentStatus, EmploymentStatus.RESIGNED.name())
                 .orderByAsc(UserDO::getId))
             .stream()
             .map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())))
@@ -185,6 +198,34 @@ public class MybatisUserRepository implements UserRepository {
     public void assignRoles(Long userId, List<Long> roleIds) {
         userRoleMapper.delete(new LambdaQueryWrapper<UserRoleDO>().eq(UserRoleDO::getUserId, userId));
         for (Long roleId : roleIds) {
+            UserRoleDO relation = new UserRoleDO();
+            relation.setUserId(userId);
+            relation.setRoleId(roleId);
+            relation.setCreator("system");
+            relation.setGmtCreate(LocalDateTime.now());
+            userRoleMapper.insert(relation);
+        }
+    }
+
+    @Override
+    public void syncRoleBindings(Long roleId, Set<Long> expectedUserIds) {
+        Set<Long> expected = expectedUserIds == null ? Set.of() : new HashSet<>(expectedUserIds);
+        List<UserRoleDO> currentBindings = userRoleMapper.selectList(new LambdaQueryWrapper<UserRoleDO>()
+            .eq(UserRoleDO::getRoleId, roleId));
+        for (UserRoleDO binding : currentBindings) {
+            if (!expected.contains(binding.getUserId())) {
+                userRoleMapper.delete(new LambdaQueryWrapper<UserRoleDO>()
+                    .eq(UserRoleDO::getUserId, binding.getUserId())
+                    .eq(UserRoleDO::getRoleId, roleId));
+            }
+        }
+        Set<Long> currentUserIds = currentBindings.stream()
+            .map(UserRoleDO::getUserId)
+            .collect(java.util.stream.Collectors.toSet());
+        for (Long userId : expected) {
+            if (currentUserIds.contains(userId)) {
+                continue;
+            }
             UserRoleDO relation = new UserRoleDO();
             relation.setUserId(userId);
             relation.setRoleId(roleId);

@@ -2,14 +2,13 @@
 import { computed, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { FolderAdd, RefreshRight } from '@element-plus/icons-vue'
+import { FolderAdd } from '@element-plus/icons-vue'
 import {
   createDepartment,
   deleteDepartment,
   fetchDepartmentDetail,
   fetchDepartmentTree,
   syncDepartmentToLdap,
-  syncDepartmentsFromFeishu,
   updateDepartment,
 } from '@/api/modules/department'
 import DepartmentFormDrawer from '@/views/department/components/DepartmentFormDrawer.vue'
@@ -65,10 +64,6 @@ const syncLdapMutation = useMutation({
     await refreshDepartments()
     await loadDepartmentDetail(department.deptCode)
   },
-})
-
-const syncFeishuMutation = useMutation({
-  mutationFn: syncDepartmentsFromFeishu,
 })
 
 function buildDepartmentOptions(nodes: DepartmentTreeNode[]): DepartmentTreeOption[] {
@@ -131,7 +126,7 @@ async function handleDelete() {
     currentDepartment.value = null
     await refreshDepartments()
   } catch {
-    // 用户取消时不额外处理
+    // 用户取消时不额外处理。
   }
 }
 
@@ -141,11 +136,6 @@ async function handleSyncLdap() {
   }
 
   await syncLdapMutation.mutateAsync(currentDepartment.value.deptCode)
-}
-
-async function handleSyncFeishu() {
-  const result = await syncFeishuMutation.mutateAsync('manual-sync')
-  ElMessage.success(`部门飞书同步任务已触发，批次号：${result.batch.batchNo}`)
 }
 
 async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentPayload) {
@@ -166,12 +156,9 @@ async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentP
 </script>
 
 <template>
-  <PageContainer title="部门管理" description="统一维护部门树、组织层级与 LDAP 分组映射，支持 CRUD、飞书同步和手工 LDAP 同步。">
+  <PageContainer title="部门管理" description="统一维护部门树、组织层级与 LDAP 分组映射，支持 CRUD 和手工 LDAP 同步。">
     <template #extra>
       <el-space>
-        <el-button :icon="RefreshRight" :loading="syncFeishuMutation.isPending.value" @click="handleSyncFeishu">
-          飞书同步
-        </el-button>
         <el-button type="primary" :icon="FolderAdd" @click="openCreate">新增部门</el-button>
       </el-space>
     </template>

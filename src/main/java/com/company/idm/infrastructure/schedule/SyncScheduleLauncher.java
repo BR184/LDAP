@@ -20,14 +20,6 @@ public class SyncScheduleLauncher {
     private final SyncApplicationService syncApplicationService;
     private final SyncScheduleProperties syncScheduleProperties;
 
-    @Scheduled(cron = "${app.sync.schedule.feishu.cron:0 0 2 * * *}")
-    public void runFeishuImport() {
-        if (!syncScheduleProperties.getFeishu().isEnabled()) {
-            return;
-        }
-        syncApplicationService.executeFeishuUserSync(SCHEDULE_OPERATOR, SyncTriggerMode.SCHEDULED);
-    }
-
     @Scheduled(cron = "${app.sync.schedule.reconcile.cron:0 30 2 * * *}")
     public void runReconcile() {
         if (!syncScheduleProperties.getReconcile().isEnabled()) {

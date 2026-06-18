@@ -1,5 +1,4 @@
 import request from '@/api/request'
-import type { SyncBatchSummary } from '@/types/sync'
 import type {
   AssignUserRolesPayload,
   BatchDeleteUsersPayload,
@@ -61,16 +60,4 @@ export function assignUserRoles(userId: number, payload: AssignUserRolesPayload)
 
 export function syncUserToLdap(userId: number) {
   return request.post<never, UserItem>(`/v1/users/${userId}/sync-ldap`)
-}
-
-export function syncUsersFromFeishu() {
-  return request.post<never, { batch: { batchNo: string } }>('/v1/users/sync/feishu', {})
-}
-
-export function importUsersFromFeishuFile(documentPath: string, remark?: string, forceFullSync = false) {
-  return request.post<never, SyncBatchSummary>('/v1/users/import/feishu-file', {
-    documentPath,
-    remark,
-    forceFullSync,
-  })
 }

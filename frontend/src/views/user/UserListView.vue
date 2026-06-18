@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, MoreFilled, Plus, RefreshRight, Search } from '@element-plus/icons-vue'
+import { Delete, MoreFilled, Plus, Search } from '@element-plus/icons-vue'
 import {
   assignUserRoles,
   batchDeleteUsers,
@@ -12,7 +12,6 @@ import {
   fetchUsers,
   resetUserPassword,
   syncUserToLdap,
-  syncUsersFromFeishu,
   updateUser,
   updateUserStatus,
 } from '@/api/modules/user'
@@ -175,10 +174,6 @@ const syncLdapMutation = useMutation({
     ElMessage.success(`用户 ${user.userId} 已同步到 LDAP`)
     await refreshUsers()
   },
-})
-
-const syncFeishuMutation = useMutation({
-  mutationFn: syncUsersFromFeishu,
 })
 
 function buildDepartmentOptions(nodes: DepartmentTreeNode[]): DepartmentTreeOption[] {
@@ -402,11 +397,6 @@ async function handleSyncLdap(user: UserItem) {
   await syncLdapMutation.mutateAsync(user.id)
 }
 
-async function handleSyncFeishu() {
-  const result = await syncFeishuMutation.mutateAsync()
-  ElMessage.success(`飞书同步任务已触发，批次号：${result.batch.batchNo}`)
-}
-
 function statusText(status: number) {
   return status === 1 ? '启用' : '禁用'
 }
@@ -461,9 +451,6 @@ function statusTagType(status: number) {
               @click="handleBatchDelete"
             >
               批量删除
-            </el-button>
-            <el-button :icon="RefreshRight" :loading="syncFeishuMutation.isPending.value" @click="handleSyncFeishu">
-              飞书同步
             </el-button>
           </div>
         </div>

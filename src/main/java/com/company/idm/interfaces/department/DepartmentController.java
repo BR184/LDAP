@@ -4,14 +4,8 @@ import com.company.idm.application.department.CreateDepartmentCommand;
 import com.company.idm.application.department.DeleteDepartmentCommand;
 import com.company.idm.application.department.DepartmentApplicationService;
 import com.company.idm.application.department.UpdateDepartmentCommand;
-import com.company.idm.application.sync.SyncApplicationService;
 import com.company.idm.common.api.ApiResponse;
-import com.company.idm.common.enums.SyncTriggerMode;
 import com.company.idm.domain.department.Department;
-import com.company.idm.interfaces.sync.FeishuFileImportRequest;
-import com.company.idm.interfaces.sync.FeishuSyncRequest;
-import com.company.idm.interfaces.sync.SyncBatchDetailResponse;
-import com.company.idm.interfaces.sync.SyncResponseAssembler;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -29,16 +23,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 鎻愪緵閮ㄩ棬鏍戙€佽鎯呭拰 CRUD 鎺ュ彛銆? */
 @RestController
 @RequestMapping("/api/v1/departments")
 @RequiredArgsConstructor
 public class DepartmentController {
 
     private final DepartmentApplicationService departmentApplicationService;
-    private final SyncApplicationService syncApplicationService;
-    private final SyncResponseAssembler syncResponseAssembler;
 
     @GetMapping("/tree")
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/tree', 'GET')")
@@ -93,34 +83,6 @@ public class DepartmentController {
         return ApiResponse.success();
     }
 
-    @PostMapping("/sync/feishu")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/sync/feishu', 'POST')")
-    public ApiResponse<SyncBatchDetailResponse> syncFeishu(
-        @RequestBody(required = false) FeishuSyncRequest request,
-        @AuthenticationPrincipal(expression = "userId") String username
-    ) {
-        return ApiResponse.success(syncResponseAssembler.toResponse(
-            syncApplicationService.executeFeishuDepartmentSync(username, SyncTriggerMode.MANUAL)
-        ));
-    }
-
-    @PostMapping("/import/feishu-file")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/import/feishu-file', 'POST')")
-    public ApiResponse<SyncBatchDetailResponse> importFeishuFile(
-        @Valid @RequestBody FeishuFileImportRequest request,
-        @AuthenticationPrincipal(expression = "userId") String username
-    ) {
-        return ApiResponse.success(syncResponseAssembler.toResponse(
-            syncApplicationService.executeFeishuDepartmentFileImport(
-                request.documentPath(),
-                Boolean.TRUE.equals(request.forceFullSync()),
-                request.remark(),
-                username,
-                SyncTriggerMode.MANUAL
-            )
-        ));
-    }
-
     @PostMapping("/{deptCode}/sync-ldap")
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/' + #deptCode + '/sync-ldap', 'POST')")
     public ApiResponse<DepartmentResponse> syncLdap(
@@ -173,4 +135,3 @@ public class DepartmentController {
         );
     }
 }
-
