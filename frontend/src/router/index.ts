@@ -150,7 +150,7 @@ router.beforeEach(async (to) => {
   }
 
   if (!menuStore.canAccess(to.path)) {
-    return '/dashboard'
+    return authStore.defaultEntryPath
   }
 
   return true

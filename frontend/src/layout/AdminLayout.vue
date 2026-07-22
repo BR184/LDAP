@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { DataBoard, Expand, Fold, SwitchButton } from '@element-plus/icons-vue'
+import { DataBoard, Expand, Fold, SwitchButton, User } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -15,8 +15,12 @@ const authStore = useAuthStore()
 const menuStore = useMenuStore()
 
 const activeMenu = computed(() => {
+  if (route.path === '/profile') {
+    return '/profile'
+  }
+
   const match = menuStore.visibleNavigation.find((item) => route.path.startsWith(item.path))
-  return match?.path || '/dashboard'
+  return match?.path || (authStore.isAdmin ? '/dashboard' : '/profile')
 })
 
 const visibleSidebarGroups = computed(() =>
@@ -64,11 +68,13 @@ function handleMenuSelect(index: string) {
   <el-container class="admin-layout">
     <el-aside class="admin-layout__aside" :width="appStore.sidebarCollapsed ? '72px' : '240px'">
       <div class="admin-layout__brand">
-        <div class="admin-layout__logo">ID</div>
-        <div v-if="!appStore.sidebarCollapsed" class="admin-layout__brand-copy">
-          <strong>Corp IDM</strong>
-          <span>统一身份管理平台</span>
-        </div>
+        <img
+          v-if="appStore.sidebarCollapsed"
+          class="admin-layout__brand-icon"
+          src="/CrownCAD_icon.png"
+          alt="CrownCAD"
+        />
+        <img v-else class="admin-layout__brand-logo" src="/CrownCAD_logo.png" alt="CrownCAD" />
       </div>
 
       <el-scrollbar class="admin-layout__menu-scroll">
@@ -78,9 +84,14 @@ function handleMenuSelect(index: string) {
           :default-active="activeMenu"
           @select="handleMenuSelect"
         >
-          <el-menu-item index="/dashboard">
+          <el-menu-item v-if="authStore.isAdmin" index="/dashboard">
             <el-icon><DataBoard /></el-icon>
             <template #title>首页</template>
+          </el-menu-item>
+
+          <el-menu-item index="/profile">
+            <el-icon><User /></el-icon>
+            <template #title>个人中心</template>
           </el-menu-item>
 
           <el-sub-menu v-for="group in visibleSidebarGroups" :key="group.title" :index="group.title">
@@ -116,9 +127,6 @@ function handleMenuSelect(index: string) {
 
         <div class="admin-layout__header-right">
           <span class="admin-layout__username">{{ authStore.displayName }}</span>
-          <el-button class="admin-layout__profile-button" type="primary" @click="router.push('/profile')">
-            个人中心
-          </el-button>
           <el-button circle text @click="handleLogout">
             <el-icon><SwitchButton /></el-icon>
           </el-button>
@@ -149,32 +157,24 @@ function handleMenuSelect(index: string) {
 .admin-layout__brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
   height: 64px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.admin-layout__logo {
-  display: grid;
-  place-items: center;
+.admin-layout__brand-logo {
+  display: block;
+  width: 176px;
+  max-width: 100%;
+  height: auto;
+}
+
+.admin-layout__brand-icon {
+  display: block;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #5b8ff9, #7c4dff);
-  color: #fff;
-  font-weight: 700;
-}
-
-.admin-layout__brand-copy {
-  display: flex;
-  flex-direction: column;
-  color: #f5f7fa;
-}
-
-.admin-layout__brand-copy span {
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 12px;
+  object-fit: contain;
 }
 
 .admin-layout__menu-scroll {
@@ -217,11 +217,6 @@ function handleMenuSelect(index: string) {
 .admin-layout__username {
   color: var(--idm-text-primary);
   font-size: 14px;
-  font-weight: 500;
-}
-
-.admin-layout__profile-button {
-  min-width: 96px;
   font-weight: 500;
 }
 

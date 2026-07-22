@@ -65,6 +65,9 @@ function handleForgotPassword() {
       <div class="login-view__brand-intro">
         <h1 id="login-page-title">统一身份平台</h1>
         <span aria-hidden="true" class="login-view__brand-rule"></span>
+        <div class="login-view__brand-description">
+          <p>欢迎来到华云三维统一身份平台</p>
+        </div>
       </div>
 
       <div class="login-view__visual" aria-hidden="true">
@@ -177,6 +180,17 @@ function handleForgotPassword() {
   width: 48px;
   height: 3px;
   background: #f39a1d;
+}
+
+.login-view__brand-description {
+  margin-top: 22px;
+  color: #58708f;
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.login-view__brand-description p {
+  margin: 0;
 }
 
 .login-view__visual {

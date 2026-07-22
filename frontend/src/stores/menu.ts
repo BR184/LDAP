@@ -4,7 +4,7 @@ import { fetchCurrentUserMenuTree } from '@/api/modules/menu'
 import { flatNavigationItems } from '@/constants/navigation'
 import type { MenuTreeNode } from '@/types/menu'
 
-const ALWAYS_ALLOWED_PATHS = new Set(['/dashboard', '/profile'])
+const ALWAYS_ALLOWED_PATHS = new Set(['/profile'])
 const ADMIN_ROLE_CODES = new Set(['ADMIN', 'SUPER_ADMIN'])
 
 export const useMenuStore = defineStore('menu', () => {
@@ -26,7 +26,7 @@ export const useMenuStore = defineStore('menu', () => {
   const visibleNavigation = computed(() =>
     adminOverride.value
       ? flatNavigationItems
-      : flatNavigationItems.filter((item) => allowedPathSet.value.has(item.path) || item.path === '/dashboard'),
+      : flatNavigationItems.filter((item) => allowedPathSet.value.has(item.path)),
   )
 
   async function loadMenus(force = false) {
@@ -56,6 +56,9 @@ export const useMenuStore = defineStore('menu', () => {
   }
 
   function canAccess(path: string) {
+    if (path === '/dashboard') {
+      return adminOverride.value
+    }
     if (adminOverride.value) {
       return true
     }
