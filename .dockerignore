@@ -11,3 +11,4 @@ logs
 *.iml
 docs/feishu-import
 deploy/.env.internal
+ldap-offline-imagesv0.1/

@@ -5,3 +5,4 @@ target/
 *.log
 scripts/pinyin-helper/node_modules/
 offline-images/
+ldap-offline-imagesv0.1/

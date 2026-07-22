@@ -1,5 +1,11 @@
 # LDAP
 
+## Offline Package
+
+The Docker Compose offline package follows the release contract in
+[`docs/runbooks/offline-package-standard.md`](docs/runbooks/offline-package-standard.md).
+Run `scripts/verify-offline-package.ps1` before copying a package to an offline server.
+
 
 
 ## Getting started
