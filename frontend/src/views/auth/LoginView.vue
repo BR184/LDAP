@@ -56,126 +56,320 @@ function handleForgotPassword() {
 </script>
 
 <template>
-  <div class="login-view">
-    <div class="login-view__hero">
-      <img class="login-view__hero-logo" src="/login-logo.png" alt="统一身份管理平台 Logo" />
-      <div class="login-view__hero-copy">
-        <h1>统一身份管理平台</h1>
+  <main class="login-view">
+    <section class="login-view__brand" aria-labelledby="login-page-title">
+      <div class="login-view__brand-header">
+        <img class="login-view__brand-logo" src="/login-logo.png" alt="华云三维" />
       </div>
-      <div class="login-view__hero-illustration-wrap">
-        <img class="login-view__hero-illustration" src="/login-hero.png" alt="统一身份管理平台品牌视觉" />
-      </div>
-    </div>
 
-    <el-card class="login-view__card" shadow="never">
-      <template #header>
-        <div class="login-view__card-header">
-          <strong>登录系统</strong>
+      <div class="login-view__brand-intro">
+        <h1 id="login-page-title">统一身份平台</h1>
+        <span aria-hidden="true" class="login-view__brand-rule"></span>
+      </div>
+
+      <div class="login-view__visual" aria-hidden="true">
+        <img src="/login-identity-network-v2.png" alt="" />
+      </div>
+    </section>
+
+    <section class="login-view__access" aria-label="登录入口">
+      <div class="login-view__panel" aria-labelledby="login-panel-title">
+        <div class="login-view__panel-header">
+          <h2 id="login-panel-title">欢迎登录</h2>
+          <p>账号登录</p>
         </div>
-      </template>
 
-      <el-form ref="loginFormRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-        <el-form-item label="工号/用户ID" prop="loginId">
-          <el-input v-model="form.loginId" :prefix-icon="User" placeholder="请输入工号或用户ID" />
-        </el-form-item>
+        <el-form ref="loginFormRef" :model="form" :rules="rules" label-position="top" @submit.prevent="handleSubmit">
+          <el-form-item label="工号/用户ID" prop="loginId">
+            <el-input v-model="form.loginId" :prefix-icon="User" placeholder="请输入工号或用户ID" />
+          </el-form-item>
 
-        <el-form-item label="密码" prop="password">
-          <el-input
-            v-model="form.password"
-            :prefix-icon="Lock"
-            placeholder="请输入密码"
-            show-password
-            @keyup.enter="handleSubmit"
-          />
-        </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input
+              v-model="form.password"
+              :prefix-icon="Lock"
+              placeholder="请输入密码"
+              show-password
+            />
+          </el-form-item>
 
-        <el-button class="login-view__submit" type="primary" :loading="loading" @click="handleSubmit">
-          登录管理台
-        </el-button>
-        <div class="login-view__assist">
-          <el-button link type="primary" @click="handleForgotPassword">
-            忘记密码
+          <el-button class="login-view__submit" native-type="submit" type="primary" :loading="loading">
+            登录
           </el-button>
-        </div>
-      </el-form>
-    </el-card>
-  </div>
+          <div class="login-view__assist">
+            <el-button link type="primary" @click="handleForgotPassword">
+              忘记密码
+            </el-button>
+          </div>
+        </el-form>
+      </div>
+    </section>
+  </main>
 </template>
 
 <style scoped lang="scss">
-.login-view {
-  display: grid;
-  grid-template-columns: minmax(420px, 1.2fr) minmax(360px, 420px);
-  gap: 48px;
-  align-items: center;
-  min-height: 100vh;
-  padding: 48px 72px;
-  background:
-    radial-gradient(circle at top left, rgba(91, 143, 249, 0.22), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(124, 77, 255, 0.18), transparent 30%),
-    linear-gradient(135deg, #eef3ff 0%, #f7f9fd 42%, #ffffff 100%);
+:global(body:has(.login-view)) {
+  min-width: 0;
+  background: #f5f7fa;
 }
 
-.login-view__hero {
+.login-view {
+  --login-ink: #142b4a;
+  --login-muted: #7a8ca4;
+  --login-primary: #1769df;
+  --login-border: #dfe7f1;
+  --login-surface: #ffffff;
+
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(480px, 0.9fr);
+  min-height: 100vh;
+  background: #f7f9fd;
+  overflow: hidden;
+}
+
+.login-view__brand {
+  position: relative;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 96px);
+  min-width: 0;
+  padding: clamp(42px, 5vw, 80px) clamp(48px, 7vw, 128px) 0;
+  overflow: hidden;
 }
 
-.login-view__hero-logo {
-  width: 190px;
+.login-view__brand-header,
+.login-view__brand-intro {
+  position: relative;
+  z-index: 2;
+}
+
+.login-view__brand-header {
+  display: flex;
+  align-items: center;
+  min-height: 54px;
+}
+
+.login-view__brand-logo {
+  width: 174px;
   max-width: 100%;
   object-fit: contain;
 }
 
-.login-view__hero-copy {
-  margin-top: 64px;
-}
-
-.login-view__hero h1 {
-  margin: 0;
-  color: var(--idm-text-primary);
-  font-size: 56px;
-  line-height: 1.1;
-}
-
-.login-view__hero-illustration-wrap {
-  display: flex;
-  align-items: flex-end;
-  flex: 1;
-  min-height: 0;
-  padding-top: 20px;
-  margin-left: -72px;
-  margin-bottom: -48px;
-}
-
-.login-view__hero-illustration {
-  width: min(960px, 150%);
-  object-fit: contain;
-  object-position: left bottom;
-}
-
-.login-view__card {
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 28px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
-  backdrop-filter: blur(14px);
-}
-
-.login-view__card-header {
+.login-view__brand-intro {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: flex-start;
+  margin-top: clamp(132px, 16vh, 188px);
+}
+
+.login-view__brand h1 {
+  margin: 0 0 26px;
+  color: var(--login-ink);
+  font-family: 'HarmonyOS Sans SC', 'MiSans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: clamp(42px, 3.8vw, 60px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.login-view__brand-rule {
+  display: block;
+  width: 48px;
+  height: 3px;
+  background: #f39a1d;
+}
+
+.login-view__visual {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: min(40vw, 440px);
+  overflow: hidden;
+}
+
+.login-view__visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center bottom;
+  mix-blend-mode: multiply;
+}
+
+.login-view__access {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  padding: clamp(44px, 7vw, 112px) clamp(40px, 5vw, 88px) clamp(44px, 7vw, 112px) clamp(28px, 4vw, 72px);
+  background: transparent;
+}
+
+.login-view__panel {
+  width: min(100%, 544px);
+  padding: clamp(42px, 4vw, 58px);
+  border: 1px solid #e8edf4;
+  border-radius: 8px;
+  background: var(--login-surface);
+  box-shadow: 0 24px 60px rgba(22, 52, 95, 0.1);
+}
+
+.login-view__panel-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 40px;
+}
+
+.login-view__panel-header h2 {
+  margin: 0;
+  color: var(--login-ink);
+  font-family: 'HarmonyOS Sans SC', 'MiSans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.login-view__panel-header p {
+  margin: 10px 0 0;
+  color: var(--login-muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.login-view :deep(.el-form-item) {
+  margin-bottom: 28px;
+}
+
+.login-view :deep(.el-form-item__label) {
+  height: auto;
+  padding-bottom: 10px;
+  color: var(--login-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.login-view :deep(.el-input__wrapper) {
+  min-height: 50px;
+  padding: 1px 15px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--login-border);
+  transition: box-shadow 0.18s ease;
+}
+
+.login-view :deep(.el-input__wrapper:hover) {
+  box-shadow: inset 0 0 0 1px #aabbd1;
+}
+
+.login-view :deep(.el-input__wrapper.is-focus) {
+  box-shadow: inset 0 0 0 1px var(--login-primary);
+}
+
+.login-view :deep(.el-input__inner) {
+  color: var(--login-ink);
+  font-size: 15px;
+}
+
+.login-view :deep(.el-input__inner::placeholder) {
+  color: #9aa8ba;
+}
+
+.login-view :deep(.el-input__prefix-inner),
+.login-view :deep(.el-input__suffix-inner) {
+  color: #75859a;
 }
 
 .login-view__submit {
   width: 100%;
+  min-height: 50px;
   margin-top: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--login-primary);
+  box-shadow: 0 8px 18px rgba(23, 104, 214, 0.22);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.login-view__submit:hover,
+.login-view__submit:focus-visible {
+  background: #1159bd;
 }
 
 .login-view__assist {
   display: flex;
   justify-content: flex-end;
-  margin-top: 12px;
+  margin-top: 20px;
+}
+
+.login-view__assist :deep(.el-button) {
+  min-height: 24px;
+  padding: 0;
+  color: var(--login-primary);
+  font-size: 14px;
+}
+
+@media (max-width: 960px) {
+  .login-view {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 100vh;
+  }
+
+  .login-view__brand {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 32px 40px 8px;
+    overflow: visible;
+    background: transparent;
+  }
+
+  .login-view__brand-intro,
+  .login-view__visual {
+    display: none;
+  }
+
+  .login-view__brand-logo {
+    width: 156px;
+  }
+
+  .login-view__access {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 32px 40px 56px;
+  }
+}
+
+@media (max-width: 520px) {
+  .login-view__brand {
+    padding: 24px 24px 0;
+  }
+
+  .login-view__brand-logo {
+    width: 144px;
+  }
+
+  .login-view__access {
+    display: block;
+    padding: 24px 16px 40px;
+  }
+
+  .login-view__panel {
+    width: 100%;
+    padding: 34px 24px;
+  }
+
+  .login-view__panel-header {
+    margin-bottom: 32px;
+  }
+
+  .login-view__panel-header h2 {
+    font-size: 28px;
+  }
 }
 </style>
