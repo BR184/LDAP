@@ -16,7 +16,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const displayName = computed(() => currentUser.value?.realName || currentUser.value?.userId || '未登录')
   const isAdmin = computed(() => currentUser.value?.roleCodes.some((roleCode) => ADMIN_ROLE_CODES.has(roleCode)) ?? false)
-  const defaultEntryPath = computed(() => (isAdmin.value ? '/dashboard' : '/profile'))
+  const defaultEntryPath = computed(() => '/profile')
 
   async function signIn(payload: LoginCommand) {
     const result = await login(payload)

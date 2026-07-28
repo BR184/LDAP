@@ -66,7 +66,10 @@ public class AuthController {
             user.getIntranetEmail(),
             user.getMobile(),
             user.getEmployeeNo(),
+            user.getJobTitle(),
             user.getDeptCode(),
+            user.getDeptName(),
+            user.getDepartmentPath(),
             user.getRoleCodes()
         ));
     }

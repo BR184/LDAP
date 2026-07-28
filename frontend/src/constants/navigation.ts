@@ -1,6 +1,5 @@
 import {
   Connection,
-  DataBoard,
   FolderOpened,
   Lock,
   Menu as MenuIcon,
@@ -25,12 +24,6 @@ export interface NavigationGroup {
 }
 
 export const flatNavigationItems: NavigationItem[] = [
-  {
-    title: '首页',
-    path: '/dashboard',
-    icon: DataBoard,
-    description: '查看平台概览与快速入口',
-  },
   {
     title: '用户管理',
     path: '/users',

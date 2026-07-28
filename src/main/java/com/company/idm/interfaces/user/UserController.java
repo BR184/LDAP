@@ -96,7 +96,6 @@ public class UserController {
             request.employeeNo(),
             request.deptCode(),
             request.partTimeDeptCodes(),
-            request.initialPassword(),
             request.roleIds(),
             username
         ));

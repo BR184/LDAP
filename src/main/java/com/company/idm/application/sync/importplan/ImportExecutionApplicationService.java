@@ -2,6 +2,7 @@ package com.company.idm.application.sync.importplan;
 
 import com.company.idm.application.rbac.PolicyRefreshService;
 import com.company.idm.application.sync.LeaderRoleDerivationService;
+import com.company.idm.application.user.InitialPasswordPolicy;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
@@ -27,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ImportExecutionApplicationService {
 
-    private static final String DEFAULT_PASSWORD = "123456";
     private static final String NORMAL_USER_ROLE_CODE = "NORMAL_USER";
 
     private final ImportBatchRepository importBatchRepository;
@@ -39,6 +39,7 @@ public class ImportExecutionApplicationService {
     private final PolicyRefreshService policyRefreshService;
     private final LeaderRoleDerivationService leaderRoleDerivationService;
     private final ImportJsonService jsonService;
+    private final InitialPasswordPolicy initialPasswordPolicy;
 
     @Transactional
     public ImportBatch executePlan(Long batchId, String executedBy) {
@@ -47,10 +48,9 @@ public class ImportExecutionApplicationService {
         batch.execute(executedBy);
         batch = importBatchRepository.save(batch);
 
-        boolean roleBindingChanged = false;
         for (ChangeItem item : batch.getEnabledChangeItems()) {
             try {
-                roleBindingChanged = executeChangeItem(item) || roleBindingChanged;
+                executeChangeItem(item);
                 item.markExecuted();
             } catch (LdapImportException exception) {
                 item.markLdapFailed(exception.getMessage());
@@ -61,31 +61,29 @@ public class ImportExecutionApplicationService {
         batch.complete();
         ImportBatch saved = importBatchRepository.save(batch);
         leaderRoleDerivationService.syncDerivedRoles();
-        if (roleBindingChanged) {
-            policyRefreshService.refresh();
-        }
+        syncBaselineNormalUserRole();
+        policyRefreshService.refresh();
         return saved;
     }
 
-    private boolean executeChangeItem(ChangeItem item) {
+    private void executeChangeItem(ChangeItem item) {
         if (item.getChangeType() == ChangeType.CREATE || item.getChangeType() == ChangeType.UPDATE) {
             if (item.getTargetType() == TargetType.DEPARTMENT) {
                 executeDepartment(item);
-                return false;
+                return;
             }
             if (item.getTargetType() == TargetType.USER) {
-                return executeUser(item);
+                executeUser(item);
+                return;
             }
         }
         if (item.getChangeType() == ChangeType.RESIGN) {
             executeResign(item);
-            return false;
+            return;
         }
         if (item.getChangeType() == ChangeType.DISABLE) {
             executeDisable(item);
-            return false;
         }
-        return false;
     }
 
     private void executeDepartment(ChangeItem item) {
@@ -101,12 +99,11 @@ public class ImportExecutionApplicationService {
         }
     }
 
-    private boolean executeUser(ChangeItem item) {
+    private void executeUser(ChangeItem item) {
         User target = jsonService.readUserSnapshot(item.getAfterJson()).toUser();
-        User existing = userRepository.findByUserId(target.getUserId()).orElse(null);
         User saved = userRepository.save(target);
         try {
-            String ldapDn = ldapDirectoryService.createOrUpdateUser(saved, DEFAULT_PASSWORD);
+            String ldapDn = ldapDirectoryService.createOrUpdateUser(saved, initialPasswordPolicy.resolve(saved.getMobile()));
             if (ldapDn != null && !ldapDn.equals(saved.getLdapDn())) {
                 saved = userRepository.save(saved.toBuilder().ldapDn(ldapDn).build());
             }
@@ -114,13 +111,16 @@ public class ImportExecutionApplicationService {
         } catch (RuntimeException exception) {
             throw new LdapImportException(resolveMessage(exception));
         }
-        if (existing == null || existing.getRoleCodes() == null || existing.getRoleCodes().isEmpty()) {
-            Role role = roleRepository.findByCode(NORMAL_USER_ROLE_CODE)
-                .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "普通用户角色不存在"));
-            userRepository.assignRoles(saved.getId(), List.of(role.getId()));
-            return true;
-        }
-        return false;
+    }
+
+    private void syncBaselineNormalUserRole() {
+        Role role = roleRepository.findByCode(NORMAL_USER_ROLE_CODE)
+            .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "普通用户角色不存在"));
+        java.util.Set<Long> activeUserIds = userRepository.findActiveUsers().stream()
+            .map(User::getId)
+            .filter(java.util.Objects::nonNull)
+            .collect(java.util.stream.Collectors.toSet());
+        userRepository.syncRoleBindings(role.getId(), activeUserIds);
     }
 
     private void executeDisable(ChangeItem item) {

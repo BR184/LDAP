@@ -28,6 +28,7 @@ public class User {
     private String employeeNo;
     private String deptCode;
     private String deptName;
+    private String departmentPath;
     private String jobTitle;
     private String directLeaderRaw;
     private String leaderRef;

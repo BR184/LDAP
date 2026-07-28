@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { DataBoard, Expand, Fold, SwitchButton, User } from '@element-plus/icons-vue'
+import { Expand, Fold, SwitchButton, User } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -20,7 +20,7 @@ const activeMenu = computed(() => {
   }
 
   const match = menuStore.visibleNavigation.find((item) => route.path.startsWith(item.path))
-  return match?.path || (authStore.isAdmin ? '/dashboard' : '/profile')
+  return match?.path || '/profile'
 })
 
 const visibleSidebarGroups = computed(() =>
@@ -85,11 +85,6 @@ function handleMenuSelect(index: string) {
           :default-active="activeMenu"
           @select="handleMenuSelect"
         >
-          <el-menu-item v-if="authStore.isAdmin" index="/dashboard" class="admin-menu-item">
-            <el-icon><DataBoard /></el-icon>
-            <template #title>首页</template>
-          </el-menu-item>
-
           <el-menu-item index="/profile" class="admin-menu-item">
             <el-icon><User /></el-icon>
             <template #title>个人中心</template>

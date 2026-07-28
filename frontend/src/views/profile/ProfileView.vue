@@ -201,14 +201,6 @@ async function downloadCredentialFile() {
         <!-- 用户详细信息 - 横向布局 -->
         <div class="profile-details">
           <div class="detail-item">
-            <el-icon class="detail-icon"><Postcard /></el-icon>
-            <div class="detail-content">
-              <span class="detail-label">数据库ID</span>
-              <span class="detail-value">{{ authStore.currentUser?.id || '--' }}</span>
-            </div>
-          </div>
-
-          <div class="detail-item">
             <el-icon class="detail-icon"><User /></el-icon>
             <div class="detail-content">
               <span class="detail-label">用户ID</span>
@@ -225,10 +217,18 @@ async function downloadCredentialFile() {
           </div>
 
           <div class="detail-item">
-            <el-icon class="detail-icon"><Message /></el-icon>
+            <el-icon class="detail-icon"><Postcard /></el-icon>
             <div class="detail-content">
-              <span class="detail-label">工作邮箱</span>
-              <span class="detail-value">{{ authStore.currentUser?.email || '--' }}</span>
+              <span class="detail-label">工号</span>
+              <span class="detail-value">{{ authStore.currentUser?.employeeNo || '--' }}</span>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <el-icon class="detail-icon"><Postcard /></el-icon>
+            <div class="detail-content">
+              <span class="detail-label">职务</span>
+              <span class="detail-value">{{ authStore.currentUser?.jobTitle || '--' }}</span>
             </div>
           </div>
 
@@ -236,7 +236,15 @@ async function downloadCredentialFile() {
             <el-icon class="detail-icon"><OfficeBuilding /></el-icon>
             <div class="detail-content">
               <span class="detail-label">部门</span>
-              <span class="detail-value">{{ authStore.currentUser?.deptCode || '--' }}</span>
+              <span class="detail-value">{{ authStore.currentUser?.departmentPath || '--' }}</span>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <el-icon class="detail-icon"><Message /></el-icon>
+            <div class="detail-content">
+              <span class="detail-label">内网邮箱</span>
+              <span class="detail-value">{{ authStore.currentUser?.intranetEmail || '--' }}</span>
             </div>
           </div>
         </div>
@@ -312,8 +320,8 @@ async function downloadCredentialFile() {
 
 <style scoped lang="scss">
 .profile-container {
-  max-width: 1200px;
-  margin: 0 auto;
+  /* 移除 max-width 限制，让卡片尽量铺满屏幕 */
+  width: 100%;
 }
 
 .profile-card {
@@ -375,7 +383,7 @@ async function downloadCredentialFile() {
 
 .profile-details {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--idm-padding-lg);
   margin-top: var(--idm-padding-lg);
 }

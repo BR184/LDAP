@@ -2,8 +2,11 @@ package com.company.idm.application.auth;
 
 import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
+import com.company.idm.application.department.DepartmentDisplay;
+import com.company.idm.application.department.DepartmentPathService;
 import com.company.idm.domain.audit.AuditLog;
 import com.company.idm.domain.audit.AuditLogRepository;
+import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.domain.ldap.LdapDirectoryService;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
@@ -22,6 +25,8 @@ public class AuthApplicationService {
     private final LdapDirectoryService ldapDirectoryService;
     private final TokenService tokenService;
     private final AuditLogRepository auditLogRepository;
+    private final DepartmentRepository departmentRepository;
+    private final DepartmentPathService departmentPathService;
 
     /**
      * 执行后台登录流程。
@@ -53,7 +58,12 @@ public class AuthApplicationService {
     public User loadProfile(String userId) {
         User user = userRepository.findByUserId(userId)
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
-        return user.toBuilder().roleCodes(userRepository.findRoleCodesByUserId(userId)).build();
+        DepartmentDisplay department = departmentPathService.resolve(user.getDeptCode(), departmentRepository.findAll());
+        return user.toBuilder()
+            .deptName(department.departmentName())
+            .departmentPath(department.departmentPath())
+            .roleCodes(userRepository.findRoleCodesByUserId(userId))
+            .build();
     }
 
     /**

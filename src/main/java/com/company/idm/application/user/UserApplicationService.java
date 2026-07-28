@@ -35,7 +35,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserApplicationService {
 
-    private static final String DEFAULT_INITIAL_PASSWORD = "123456";
     private static final String DEFAULT_RESET_PASSWORD = "123456";
     private static final String SUPER_ADMIN_ROLE_CODE = "SUPER_ADMIN";
     private static final String ADMIN_ROLE_CODE = "ADMIN";
@@ -53,6 +52,7 @@ public class UserApplicationService {
     private final IntranetEmailGenerationService intranetEmailGenerationService;
     private final AppLdapProperties ldapProperties;
     private final PasswordVerificationTokenService passwordVerificationTokenService;
+    private final InitialPasswordPolicy initialPasswordPolicy;
 
     public List<User> listUsers(String keyword, String departmentKeyword, Integer statusCode) {
         String normalizedKeyword = normalize(keyword);
@@ -73,7 +73,6 @@ public class UserApplicationService {
 
     @Transactional
     public User createUser(CreateUserCommand command) {
-        passwordPolicyValidator.validate(DEFAULT_INITIAL_PASSWORD);
         DepartmentAssignment departmentAssignment = resolveDepartmentAssignment(command.deptCode(), command.partTimeDeptCodes());
         List<Role> roles = loadEnabledRoles(command.roleIds());
         String normalizedUserId = requireUserIdentifier(command.userId());
@@ -106,7 +105,9 @@ public class UserApplicationService {
             .sourceType(SourceType.MANUAL)
             .tokenVersion(0)
             .build());
-        String ldapDn = ldapDirectoryService.createUser(saved, DEFAULT_INITIAL_PASSWORD);
+        String initialPassword = initialPasswordPolicy.resolve(saved.getMobile());
+        passwordPolicyValidator.validate(initialPassword);
+        String ldapDn = ldapDirectoryService.createUser(saved, initialPassword);
         saved = userRepository.save(saved.toBuilder().ldapDn(ldapDn).build());
         syncUserDepartmentGroups(saved);
         userRepository.assignRoles(saved.getId(), command.roleIds());
@@ -294,7 +295,9 @@ public class UserApplicationService {
                 ? user.getLdapDn()
                 : buildUserDn(user.getUserId());
         } else {
-            ldapDn = ldapDirectoryService.createUser(user, DEFAULT_RESET_PASSWORD);
+            String initialPassword = initialPasswordPolicy.resolve(user.getMobile());
+            passwordPolicyValidator.validate(initialPassword);
+            ldapDn = ldapDirectoryService.createUser(user, initialPassword);
         }
         if (user.getStatus() == UserStatus.ENABLED) {
             ldapDirectoryService.enableUser(user.getUserId());

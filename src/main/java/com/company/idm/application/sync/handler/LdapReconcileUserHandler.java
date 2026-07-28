@@ -4,6 +4,7 @@ import com.company.idm.application.sync.SyncDiffPayload;
 import com.company.idm.application.sync.SyncJobExecutionResult;
 import com.company.idm.application.sync.SyncJobHandler;
 import com.company.idm.application.sync.SyncRequestPayload;
+import com.company.idm.application.user.InitialPasswordPolicy;
 import com.company.idm.common.enums.SyncDiffType;
 import com.company.idm.common.enums.SyncJobType;
 import com.company.idm.common.enums.SyncRunStatus;
@@ -26,20 +27,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class LdapReconcileUserHandler implements SyncJobHandler {
 
-    private static final String DEFAULT_RECONCILE_PASSWORD = "123456";
-
     private final UserRepository userRepository;
     private final LdapDirectoryService ldapDirectoryService;
     private final AppLdapProperties ldapProperties;
+    private final InitialPasswordPolicy initialPasswordPolicy;
 
     public LdapReconcileUserHandler(
         UserRepository userRepository,
         LdapDirectoryService ldapDirectoryService,
-        AppLdapProperties ldapProperties
+        AppLdapProperties ldapProperties,
+        InitialPasswordPolicy initialPasswordPolicy
     ) {
         this.userRepository = userRepository;
         this.ldapDirectoryService = ldapDirectoryService;
         this.ldapProperties = ldapProperties;
+        this.initialPasswordPolicy = initialPasswordPolicy;
     }
 
     @Override
@@ -66,7 +68,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
             boolean ldapExists = ldapDirectoryService.existsByUid(user.getUserId());
             if (!ldapExists) {
                 if (autoRepair) {
-                    String ldapDn = ldapDirectoryService.createUser(user, DEFAULT_RECONCILE_PASSWORD);
+                    String ldapDn = ldapDirectoryService.createUser(user, initialPasswordPolicy.resolve(user.getMobile()));
                     if (user.getStatus() == UserStatus.ENABLED) {
                         ldapDirectoryService.enableUser(user.getUserId());
                     } else {

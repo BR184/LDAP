@@ -1,5 +1,6 @@
 package com.company.idm.interfaces.auth;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.Set;
 
 /**
@@ -13,8 +14,10 @@ public record CurrentUserResponse(
     String intranetEmail,
     String mobile,
     String employeeNo,
-    String deptCode,
+    String jobTitle,
+    @JsonInclude(JsonInclude.Include.ALWAYS) String deptCode,
+    @JsonInclude(JsonInclude.Include.ALWAYS) String deptName,
+    @JsonInclude(JsonInclude.Include.ALWAYS) String departmentPath,
     Set<String> roleCodes
 ) {
 }
-

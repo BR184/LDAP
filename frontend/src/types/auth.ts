@@ -23,6 +23,9 @@ export interface CurrentUser {
   intranetEmail: string | null
   mobile: string | null
   employeeNo: string | null
+  jobTitle: string | null
   deptCode: string | null
+  deptName: string | null
+  departmentPath: string | null
   roleCodes: string[]
 }

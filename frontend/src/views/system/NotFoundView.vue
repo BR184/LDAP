@@ -8,7 +8,7 @@ const router = useRouter()
   <div class="not-found">
     <el-result icon="warning" title="页面不存在" sub-title="当前访问的页面还没有配置或地址不正确。">
       <template #extra>
-        <el-button type="primary" @click="router.push('/dashboard')">返回首页</el-button>
+        <el-button type="primary" @click="router.push('/profile')">返回个人中心</el-button>
       </template>
     </el-result>
   </div>

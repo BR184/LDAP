@@ -18,7 +18,6 @@ public record CreateUserRequest(
     @NotBlank(message = "工号不能为空") String employeeNo,
     String deptCode,
     List<String> partTimeDeptCodes,
-    @NotBlank(message = "初始密码不能为空") String initialPassword,
     @NotEmpty(message = "角色不能为空") List<Long> roleIds
 ) {
 }

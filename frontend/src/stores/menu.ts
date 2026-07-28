@@ -56,9 +56,6 @@ export const useMenuStore = defineStore('menu', () => {
   }
 
   function canAccess(path: string) {
-    if (path === '/dashboard') {
-      return adminOverride.value
-    }
     if (adminOverride.value) {
       return true
     }

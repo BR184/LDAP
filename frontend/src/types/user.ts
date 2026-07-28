@@ -37,7 +37,6 @@ export interface CreateUserPayload {
   employeeNo: string
   deptCode: string
   partTimeDeptCodes: string[]
-  initialPassword: string
   roleIds: number[]
 }
 

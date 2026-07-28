@@ -20,12 +20,6 @@ const routes: RouteRecordRaw[] = [
     redirect: '/profile',
     children: [
       {
-        path: 'dashboard',
-        name: 'dashboard',
-        component: () => import('@/views/dashboard/DashboardView.vue'),
-        meta: { title: '首页' },
-      },
-      {
         path: 'users',
         name: 'users',
         component: () => import('@/views/user/UserListView.vue'),

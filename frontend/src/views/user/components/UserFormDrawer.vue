@@ -14,7 +14,6 @@ interface UserFormValue {
   employeeNo: string
   deptCode: string
   partTimeDeptCodes: string[]
-  initialPassword: string
   roleIds: number[]
 }
 
@@ -56,9 +55,6 @@ const rules = computed<FormRules<UserFormValue>>(() => ({
   ],
   employeeNo: [{ required: true, message: '工号不能为空', trigger: 'blur' }],
   userId: [{ required: true, message: '用户ID不能为空', trigger: 'blur' }],
-  initialPassword: isCreate.value
-    ? [{ required: true, message: '初始密码不能为空', trigger: 'blur' }]
-    : [],
   roleIds: isCreate.value
     ? [{ type: 'array', required: true, min: 1, message: '请至少选择一个角色', trigger: 'change' }]
     : [],
@@ -99,7 +95,6 @@ function buildDefaultForm(): UserFormValue {
     employeeNo: '',
     deptCode: '',
     partTimeDeptCodes: [],
-    initialPassword: '123456',
     roleIds: [],
   }
 }
@@ -139,7 +134,6 @@ async function handleSubmit() {
       employeeNo: form.employeeNo.trim(),
       deptCode: form.deptCode,
       partTimeDeptCodes,
-      initialPassword: '123456',
       roleIds: [...form.roleIds],
     })
     return
@@ -220,10 +214,6 @@ function closeDrawer() {
       </el-form-item>
 
       <template v-if="isCreate">
-        <el-form-item label="初始密码（固定为 123456）" prop="initialPassword">
-          <el-input :model-value="form.initialPassword" disabled show-password />
-        </el-form-item>
-
         <el-form-item label="角色" prop="roleIds">
           <el-select v-model="form.roleIds" clearable filterable multiple placeholder="请选择角色" style="width: 100%">
             <el-option

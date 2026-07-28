@@ -1,6 +1,7 @@
 package com.company.idm.application.sync.importplan;
 
 import com.company.idm.application.sync.LeaderRoleDerivationService;
+import com.company.idm.application.user.InitialPasswordPolicy;
 import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.department.Department;
@@ -34,6 +35,7 @@ public class ImportRollbackApplicationService {
     private final LdapGroupService ldapGroupService;
     private final LeaderRoleDerivationService leaderRoleDerivationService;
     private final ImportJsonService jsonService;
+    private final InitialPasswordPolicy initialPasswordPolicy;
 
     @Transactional
     public ImportBatch generateRollbackPlan(Long batchId) {
@@ -111,7 +113,7 @@ public class ImportRollbackApplicationService {
         if (item.getTargetType() == TargetType.USER) {
             User snapshot = jsonService.readUserSnapshot(item.getRestoreJson()).toUser();
             User saved = userRepository.save(snapshot);
-            ldapDirectoryService.createOrUpdateUser(saved, null);
+            ldapDirectoryService.createOrUpdateUser(saved, initialPasswordPolicy.resolve(saved.getMobile()));
             if (saved.getStatus() == UserStatus.ENABLED) {
                 ldapDirectoryService.enableUserIfExists(saved.getUserId());
             } else {
