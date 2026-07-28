@@ -1,19 +1,55 @@
 :root {
-  --idm-primary: #1677ff;
+  // 主色调 - 基于设计图的蓝色系
+  --idm-primary: #409eff;
   --idm-primary-light: #5b8ff9;
+  --idm-primary-lighter: #ecf5ff;
   --idm-accent: #7c4dff;
-  --idm-success: #52c41a;
-  --idm-warning: #faad14;
-  --idm-danger: #f5222d;
-  --idm-page-background: #f5f7fb;
-  --idm-sidebar-background: #141a2f;
+  --idm-success: #67c23a;
+  --idm-warning: #e6a23c;
+  --idm-danger: #f56c6c;
+  --idm-info: #909399;
+
+  // 背景色 - 浅蓝色渐变
+  --idm-page-background: linear-gradient(135deg, #f5f9ff 0%, #e8f4ff 100%);
+  --idm-page-background-solid: #f5f9ff;
+  --idm-sidebar-background: #ffffff;
+  --idm-sidebar-item-hover: #f0f7ff;
+  --idm-sidebar-item-active: #e6f4ff;
   --idm-card-background: #ffffff;
-  --idm-border-color: #e5e9f2;
-  --idm-text-primary: #1f2329;
-  --idm-text-secondary: #5b6475;
-  --idm-text-tertiary: #8a93a6;
-  --idm-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-  --idm-radius-lg: 18px;
-  --idm-radius-md: 14px;
-  --idm-radius-sm: 10px;
+  --idm-header-background: #ffffff;
+
+  // 边框和分割线
+  --idm-border-color: #e4e7ed;
+  --idm-border-color-light: #ebeef5;
+  --idm-border-color-lighter: #f2f6fc;
+
+  // 文字颜色
+  --idm-text-primary: #303133;
+  --idm-text-regular: #606266;
+  --idm-text-secondary: #909399;
+  --idm-text-placeholder: #c0c4cc;
+
+  // 阴影
+  --idm-shadow-base: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
+  --idm-shadow-light: 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+  --idm-shadow-card: 0 4px 16px 0 rgba(0, 0, 0, 0.06);
+
+  // 圆角
+  --idm-radius-base: 8px;
+  --idm-radius-lg: 12px;
+  --idm-radius-xl: 16px;
+  --idm-radius-sm: 6px;
+
+  // 侧边栏
+  --idm-sidebar-width: 240px;
+  --idm-sidebar-collapsed-width: 64px;
+
+  // 头部
+  --idm-header-height: 60px;
+
+  // 间距
+  --idm-padding-lg: 24px;
+  --idm-padding-md: 16px;
+  --idm-padding-sm: 12px;
+  --idm-padding-xs: 8px;
 }

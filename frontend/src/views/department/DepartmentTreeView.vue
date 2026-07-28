@@ -159,12 +159,12 @@ async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentP
   <PageContainer title="部门管理" description="统一维护部门树、组织层级与 LDAP 分组映射，支持 CRUD 和手工 LDAP 同步。">
     <template #extra>
       <el-space>
-        <el-button type="primary" :icon="FolderAdd" @click="openCreate">新增部门</el-button>
+        <el-button type="primary" :icon="FolderAdd" @click="openCreate" size="large">新增部门</el-button>
       </el-space>
     </template>
 
     <div class="department-layout">
-      <el-card class="idm-card department-layout__tree" shadow="never">
+      <el-card class="modern-card department-layout__tree" shadow="never">
         <template #header>
           <div class="view-toolbar">
             <strong>部门树</strong>
@@ -184,16 +184,16 @@ async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentP
         />
       </el-card>
 
-      <el-card class="idm-card" shadow="never">
+      <el-card class="modern-card detail-card" shadow="never">
         <template #header>
           <div class="view-toolbar">
             <strong>部门详情</strong>
             <div v-if="currentDepartment" class="view-toolbar__actions">
-              <el-button @click="openEdit">编辑</el-button>
-              <el-button type="success" :loading="syncLdapMutation.isPending.value" @click="handleSyncLdap">
+              <el-button @click="openEdit" size="large">编辑</el-button>
+              <el-button type="success" :loading="syncLdapMutation.isPending.value" @click="handleSyncLdap" size="large">
                 同步 LDAP
               </el-button>
-              <el-button type="danger" plain @click="handleDelete">删除</el-button>
+              <el-button type="danger" plain @click="handleDelete" size="large">删除</el-button>
             </div>
           </div>
         </template>
@@ -237,25 +237,78 @@ async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentP
 </template>
 
 <style scoped lang="scss">
+.modern-card {
+  border-radius: var(--idm-radius-xl);
+  box-shadow: var(--idm-shadow-card);
+  border: 1px solid var(--idm-border-color-lighter);
+
+  :deep(.el-card__header) {
+    border-bottom: 1px solid var(--idm-border-color-lighter);
+    padding: var(--idm-padding-lg);
+    background: var(--idm-page-background-solid);
+  }
+}
+
 .department-layout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 320px 1fr;
+  gap: var(--idm-padding-lg);
+  align-items: start;
 }
 
 .department-layout__tree {
-  min-height: 560px;
+  :deep(.el-tree) {
+    background: transparent;
+  }
+
+  :deep(.el-tree-node__content) {
+    padding: 8px;
+    border-radius: var(--idm-radius-sm);
+    transition: all 0.3s ease;
+
+    &:hover {
+      background: var(--idm-primary-lighter);
+    }
+  }
+
+  :deep(.el-tree-node.is-current > .el-tree-node__content) {
+    background: var(--idm-primary-lighter);
+    color: var(--idm-primary);
+    font-weight: 600;
+  }
+}
+
+.detail-card {
+  :deep(.el-descriptions) {
+    margin-top: var(--idm-padding-sm);
+  }
 }
 
 .view-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--idm-padding-md);
+
+  strong {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--idm-text-primary);
+  }
+
+  .idm-muted {
+    font-size: 13px;
+  }
 }
 
 .view-toolbar__actions {
   display: flex;
-  gap: 12px;
+  gap: var(--idm-padding-sm);
+}
+
+@media (max-width: 1024px) {
+  .department-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

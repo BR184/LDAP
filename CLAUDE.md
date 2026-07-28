@@ -5,6 +5,7 @@
 这是一个企业级 LDAP 统一身份管理平台 (corp-idm-platform)，用于管理企业内部用户、部门、角色、权限，并提供第三方系统（GitLab、Jenkins、Nexus、禅道）的 LDAP 统一认证接入能力。
 
 **核心功能：**
+
 - 用户管理（增删改查、角色分配、密码重置、LDAP/飞书同步）
 - 部门管理（树形结构、LDAP/飞书同步）
 - 角色与权限管理（RBAC 模型、菜单绑定、权限授权）
@@ -19,6 +20,7 @@
 ## 技术栈
 
 ### 后端
+
 - **Java 17** + **Spring Boot 3.3.0**
 - **MyBatis-Plus 3.5.7** (ORM)
 - **Spring Security** + **JWT** (认证授权)
@@ -29,6 +31,7 @@
 - **Spring Mail** (邮件通知)
 
 ### 前端
+
 - **Vue 3.5** + **TypeScript 6.0**
 - **Vite 8.0** (构建工具)
 - **Element Plus 2.13** (UI 组件库)
@@ -181,6 +184,7 @@ docker compose -f docker-compose-dev.yml up -d
 ```
 
 服务清单：
+
 - MySQL 8.0: 端口 `3307`，数据库 `corp_idm`，用户/密码 `root/root`
 - OpenLDAP: 端口 `389`，域 `corp.local`，管理员密码 `admin`
 - GitLab CE: 端口 `8929`（可选）
@@ -311,6 +315,7 @@ infrastructure (基础设施层)
 ### 数据库表
 
 核心表：
+
 - `sys_user` - 用户表
 - `sys_department` - 部门表
 - `sys_role` - 角色表
@@ -375,16 +380,16 @@ infrastructure (基础设施层)
 
 ### 必填环境变量（生产环境）
 
-| 变量 | 说明 | 示例 |
-|------|------|------|
-| `APP_JWT_SECRET` | JWT 密钥（>=32字符） | `your-256-bit-secret-key-here` |
-| `APP_LDAP_URL` | LDAP 地址 | `ldap://localhost:389` |
-| `APP_LDAP_BASE_DN` | LDAP 基础 DN | `dc=corp,dc=local` |
-| `APP_LDAP_ADMIN_DN` | LDAP 管理员 DN | `cn=admin,dc=corp,dc=local` |
-| `APP_LDAP_ADMIN_PASSWORD` | LDAP 管理员密码 | `admin` |
-| `SPRING_DATASOURCE_URL` | 数据库连接 | `jdbc:mysql://localhost:3306/corp_idm` |
-| `SPRING_DATASOURCE_USERNAME` | 数据库用户名 | `root` |
-| `SPRING_DATASOURCE_PASSWORD` | 数据库密码 | `root` |
+| 变量                           | 说明                 | 示例                                     |
+| ------------------------------ | -------------------- | ---------------------------------------- |
+| `APP_JWT_SECRET`             | JWT 密钥（>=32字符） | `your-256-bit-secret-key-here`         |
+| `APP_LDAP_URL`               | LDAP 地址            | `ldap://localhost:389`                 |
+| `APP_LDAP_BASE_DN`           | LDAP 基础 DN         | `dc=corp,dc=local`                     |
+| `APP_LDAP_ADMIN_DN`          | LDAP 管理员 DN       | `cn=admin,dc=corp,dc=local`            |
+| `APP_LDAP_ADMIN_PASSWORD`    | LDAP 管理员密码      | `admin`                                |
+| `SPRING_DATASOURCE_URL`      | 数据库连接           | `jdbc:mysql://localhost:3306/corp_idm` |
+| `SPRING_DATASOURCE_USERNAME` | 数据库用户名         | `root`                                 |
+| `SPRING_DATASOURCE_PASSWORD` | 数据库密码           | `root`                                 |
 
 ### Profile 说明
 
@@ -394,6 +399,14 @@ infrastructure (基础设施层)
 - `prod` - 生产环境
 
 ---
+
+
+## 文档管理规则
+
+- 项目设计文档**只维护 `docs`文档**。
+- 禁止在 `docs/` 下新增编号之外的设计文档或计划文档。需求分析、设计方案、重构计划等内容一律归入对应编号文档的合适章节。
+- `CLAUDE.md` 只记录通用共识和规则（技术决策、安全规则、代码规范、协作规则），不记录最新进度口径或其他 已有的信息。
+- 文档膨胀比文档缺失更危险：维护不过来的文档会全部腐烂成垃圾信息干扰项目开发。
 
 ## 文档索引
 
@@ -417,13 +430,17 @@ infrastructure (基础设施层)
 ## 常见问题
 
 ### Q: 后端启动失败，报数据库连接错误？
+
 A: 确保已启动 MySQL 容器（`docker compose -f docker-compose-dev.yml up -d`），或使用 `local` profile 启动（使用 H2 内存数据库）。
 
 ### Q: 前端 API 请求 401？
+
 A: 检查 token 是否过期，或重新登录。开发环境可以清除 localStorage 中的 `idm-access-token`。
 
 ### Q: LDAP 同步失败？
+
 A: 检查 LDAP 服务状态和配置，确保 `APP_LDAP_*` 环境变量正确。可使用 LDAP Admin 工具验证连接。
 
 ### Q: 飞书同步失败？
+
 A: 检查飞书开放平台配置，确保 App ID 和 Secret 正确，IP 白名单已配置。

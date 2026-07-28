@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Download, Hide, View } from '@element-plus/icons-vue'
+import { Download, Hide, View, Edit, User, StarFilled, Postcard, Avatar, Message, OfficeBuilding } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useMutation } from '@tanstack/vue-query'
@@ -174,21 +174,77 @@ async function downloadCredentialFile() {
 
 <template>
   <PageContainer title="个人中心" description="查看当前登录用户信息，并维护个人密码等基础账号设置。">
-    <el-card class="idm-card" shadow="never">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="数据库ID">{{ authStore.currentUser?.id || '--' }}</el-descriptions-item>
-        <el-descriptions-item label="用户ID">{{ authStore.currentUser?.userId || '--' }}</el-descriptions-item>
-        <el-descriptions-item label="姓名">{{ authStore.currentUser?.realName || '--' }}</el-descriptions-item>
-        <el-descriptions-item label="工作邮箱">{{ authStore.currentUser?.email || '--' }}</el-descriptions-item>
-        <el-descriptions-item label="部门">{{ authStore.currentUser?.deptCode || '--' }}</el-descriptions-item>
-      </el-descriptions>
+    <div class="profile-container">
+      <!-- 用户信息卡片 -->
+      <el-card class="profile-card" shadow="never">
+        <div class="profile-header">
+          <div class="profile-avatar">
+            <el-icon :size="48" color="#409eff"><User /></el-icon>
+          </div>
+          <div class="profile-title">
+            <h2 class="profile-name">
+              {{ authStore.currentUser?.realName || '--' }}
+              <el-tag v-if="authStore.isAdmin" type="primary" size="small" effect="plain">
+                <el-icon><StarFilled /></el-icon>
+                系统管理员
+              </el-tag>
+            </h2>
+            <p class="profile-subtitle">{{ authStore.currentUser?.email || '--' }}</p>
+          </div>
+          <div class="profile-actions-header">
+            <el-button type="primary" :icon="Edit" @click="openPasswordDialog">修改密码</el-button>
+          </div>
+        </div>
 
-      <div class="profile-actions">
-        <el-button type="primary" @click="openPasswordDialog">修改密码</el-button>
-      </div>
-    </el-card>
+        <el-divider />
 
-    <el-dialog v-model="passwordVisible" title="修改密码" width="520px">
+        <!-- 用户详细信息 - 横向布局 -->
+        <div class="profile-details">
+          <div class="detail-item">
+            <el-icon class="detail-icon"><Postcard /></el-icon>
+            <div class="detail-content">
+              <span class="detail-label">数据库ID</span>
+              <span class="detail-value">{{ authStore.currentUser?.id || '--' }}</span>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <el-icon class="detail-icon"><User /></el-icon>
+            <div class="detail-content">
+              <span class="detail-label">用户ID</span>
+              <span class="detail-value">{{ authStore.currentUser?.userId || '--' }}</span>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <el-icon class="detail-icon"><Avatar /></el-icon>
+            <div class="detail-content">
+              <span class="detail-label">姓名</span>
+              <span class="detail-value">{{ authStore.currentUser?.realName || '--' }}</span>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <el-icon class="detail-icon"><Message /></el-icon>
+            <div class="detail-content">
+              <span class="detail-label">工作邮箱</span>
+              <span class="detail-value">{{ authStore.currentUser?.email || '--' }}</span>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <el-icon class="detail-icon"><OfficeBuilding /></el-icon>
+            <div class="detail-content">
+              <span class="detail-label">部门</span>
+              <span class="detail-value">{{ authStore.currentUser?.deptCode || '--' }}</span>
+            </div>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 修改密码对话框 -->
+    <el-dialog v-model="passwordVisible" title="修改密码" width="520px" :close-on-click-modal="false">
       <el-alert
         title="此密码极为重要，请将密码记录在安全的地方，牢记此密码！"
         type="warning"
@@ -199,21 +255,21 @@ async function downloadCredentialFile() {
 
       <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-position="top">
         <el-form-item label="旧密码" prop="oldPassword">
-          <el-input v-model="passwordForm.oldPassword" :type="showOldPassword ? 'text' : 'password'">
+          <el-input v-model="passwordForm.oldPassword" :type="showOldPassword ? 'text' : 'password'" size="large">
             <template #suffix>
               <el-button text :icon="showOldPassword ? Hide : View" @click="showOldPassword = !showOldPassword" />
             </template>
           </el-input>
         </el-form-item>
         <el-form-item label="新密码" prop="newPassword">
-          <el-input v-model="passwordForm.newPassword" :type="showNewPassword ? 'text' : 'password'">
+          <el-input v-model="passwordForm.newPassword" :type="showNewPassword ? 'text' : 'password'" size="large">
             <template #suffix>
               <el-button text :icon="showNewPassword ? Hide : View" @click="showNewPassword = !showNewPassword" />
             </template>
           </el-input>
         </el-form-item>
         <el-form-item label="确认新密码" prop="confirmPassword">
-          <el-input v-model="passwordForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'">
+          <el-input v-model="passwordForm.confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" size="large">
             <template #suffix>
               <el-button text :icon="showConfirmPassword ? Hide : View" @click="showConfirmPassword = !showConfirmPassword" />
             </template>
@@ -232,7 +288,8 @@ async function downloadCredentialFile() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="passwordConfirmVisible" title="修改密码确认" width="460px" append-to-body>
+    <!-- 修改密码确认对话框 -->
+    <el-dialog v-model="passwordConfirmVisible" title="修改密码确认" width="460px" append-to-body :close-on-click-modal="false">
       <el-alert
         title="此密码极为重要，请将密码记录在安全的地方，牢记此密码！"
         type="warning"
@@ -254,19 +311,145 @@ async function downloadCredentialFile() {
 </template>
 
 <style scoped lang="scss">
-.profile-actions {
-  margin-top: 16px;
+.profile-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.profile-card {
+  border-radius: var(--idm-radius-xl);
+  box-shadow: var(--idm-shadow-card);
+  border: 1px solid var(--idm-border-color-lighter);
+
+  :deep(.el-card__body) {
+    padding: var(--idm-padding-lg);
+  }
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: var(--idm-padding-lg);
+}
+
+.profile-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e6f4ff 0%, #bae0ff 100%);
+  flex-shrink: 0;
+}
+
+.profile-title {
+  flex: 1;
+}
+
+.profile-name {
+  margin: 0 0 var(--idm-padding-xs);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--idm-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--idm-padding-sm);
+
+  .el-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
+.profile-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: var(--idm-text-secondary);
+}
+
+.profile-actions-header {
+  flex-shrink: 0;
+}
+
+.profile-details {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--idm-padding-lg);
+  margin-top: var(--idm-padding-lg);
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: var(--idm-padding-md);
+  padding: var(--idm-padding-lg);
+  border-radius: var(--idm-radius-base);
+  background: #ffffff;
+  border: 1px solid var(--idm-border-color-lighter);
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: var(--idm-primary-lighter);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.detail-icon {
+  font-size: 24px;
+  color: var(--idm-text-secondary);
+  flex-shrink: 0;
+}
+
+.detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-label {
+  font-size: 13px;
+  color: var(--idm-text-secondary);
+  font-weight: 500;
+}
+
+.detail-value {
+  font-size: 16px;
+  color: var(--idm-text-primary);
+  font-weight: 600;
+  word-break: break-all;
 }
 
 .password-tip {
-  margin-bottom: 16px;
+  margin-bottom: var(--idm-padding-md);
+  border-radius: var(--idm-radius-base);
 }
 
 .dialog-footer,
 .confirm-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--idm-padding-sm);
   flex-wrap: wrap;
+}
+
+:deep(.el-divider) {
+  margin: var(--idm-padding-lg) 0;
+}
+
+// 响应式
+@media (max-width: 768px) {
+  .profile-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .detail-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -19,7 +19,7 @@ spring:
 app:
   ldap:
     mode: spring
-    url: ${APP_LDAP_URL:ldap://127.0.0.1:3389}
+    url: ${APP_LDAP_URL:ldap://127.0.0.1:389}
     bind-dn: ${APP_LDAP_BIND_DN:cn=admin,dc=corp,dc=local}
     bind-password: ${APP_LDAP_BIND_PASSWORD:admin}
   startup-check:

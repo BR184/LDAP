@@ -27,33 +27,52 @@ defineProps<{
 .page-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--idm-padding-lg);
+  position: relative;
+  z-index: 1;
 }
 
 .page-container__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--idm-padding-md);
+  margin-bottom: var(--idm-padding-xs);
 }
 
 .page-container__title {
   margin: 0;
   color: var(--idm-text-primary);
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
 }
 
 .page-container__description {
-  margin: 8px 0 0;
+  margin: var(--idm-padding-xs) 0 0;
   color: var(--idm-text-secondary);
   font-size: 14px;
+  line-height: 1.6;
 }
 
 .page-container__body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--idm-padding-lg);
+}
+
+.page-container__extra {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .page-container__header {
+    flex-direction: column;
+  }
+
+  .page-container__title {
+    font-size: 24px;
+  }
 }
 </style>

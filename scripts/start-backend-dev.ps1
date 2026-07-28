@@ -1,19 +1,19 @@
-$ErrorActionPreference = 'Stop'
-
 param(
     [string]$ContainerName = 'corp-idm-backend-dev',
     [string]$PrimaryNetwork = 'deploy_default',
-    [string]$MailNetwork = 'crowncademail_verify_mail',
+    [string]$MailNetwork = '',
     [int]$HostPort = 8083,
     [string]$DbHost = 'corp-idm-mysql',
     [string]$DbName = 'corp_idm',
     [string]$DbUsername = 'corp_idm',
     [string]$DbPassword = 'corp_idm',
-    [string]$LdapHost = 'corp-idm-openldap-real',
+    [string]$LdapHost = 'corp-idm-openldap',
     [int]$LdapPort = 389,
     [string]$LdapBindDn = 'cn=admin,dc=corp,dc=local',
     [string]$LdapBindPassword = 'admin'
 )
+
+$ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $jarPath = Join-Path $projectRoot 'target\corp-idm-platform-0.1.0-SNAPSHOT.jar'
@@ -40,7 +40,7 @@ if ($existingContainerId) {
     docker rm -f $ContainerName | Out-Null
 }
 
-$datasourceUrl = "jdbc:mysql://$DbHost:3306/$DbName" `
+$datasourceUrl = "jdbc:mysql://$($DbHost):3306/$DbName" `
     + "?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai" `
     + "&allowPublicKeyRetrieval=true&useSSL=false"
 $ldapUrl = "ldap://$($LdapHost):$LdapPort"
