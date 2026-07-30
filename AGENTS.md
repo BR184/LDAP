@@ -10,9 +10,12 @@
 
 **每次执行后端编译打包命令时（`mvn clean package`），必须自动记录版本信息。**
 
+每次修改的内容涉及 API 时，必须保证原有的 API 对应的原有字段返回内容格式内容完全一致，以兼容其他接入 LDAP 的工具，如果必须修改，请先和用户提及与讨论。
+
 ### 执行时机
 
-当执行以下任一命令时触发：
+当执行以下任一命令时触发： 
+
 - `.tools\apache-maven-3.9.6\bin\mvn.cmd clean package -DskipTests`
 - `.tools\apache-maven-3.9.6\bin\mvn.cmd clean package`
 - `mvn clean package` (任何变体)
@@ -26,6 +29,7 @@
 ```
 
 **字段说明：**
+
 - **时间戳**：格式 `YYYY-MM-DD HH:MM:SS`
 - **commit**：当前 Git HEAD 的完整 SHA-1 哈希（40字符）
 - **jar**：生成的 JAR 包文件名（在 `target/` 目录下）

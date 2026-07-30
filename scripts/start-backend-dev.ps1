@@ -56,7 +56,7 @@ $dockerArgs = @(
 )
 
 if (Test-Path $feishuImportPath) {
-    $dockerArgs += @('-v', "$($feishuImportPath):/app/docs/feishu-import")
+    $dockerArgs += @('-v', "$($feishuImportPath):/docs/feishu-import")
 }
 
 $dockerArgs += @(

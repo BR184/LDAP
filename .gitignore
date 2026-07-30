@@ -7,3 +7,6 @@ __pycache__/
 scripts/pinyin-helper/node_modules/
 offline-images/
 ldap-offline-imagesv0.1/
+LDAP_incremental_update/
+部署打的压缩包/
+docs/feishu-import/
