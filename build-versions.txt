@@ -1,0 +1,4 @@
+# Build Versions History
+# Format: [timestamp] commit: <git-hash> | jar: <jar-filename> | db: <flyway-version>
+# Purpose: Track all build artifacts for production deployment traceability
+

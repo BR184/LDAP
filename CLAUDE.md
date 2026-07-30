@@ -242,6 +242,31 @@ npm run dev
 java -jar target/corp-idm-platform-0.1.0-SNAPSHOT.jar --spring.profiles.active=dev
 ```
 
+### 版本打包规则（重要）
+
+**每次执行打包操作时，必须记录版本信息到 `build-versions.txt`：**
+
+1. 记录当前 Git 提交哈希（完整 SHA）
+2. 记录生成的 JAR 包文件名
+3. 记录打包时间戳
+4. 记录数据库迁移版本（最新的 Flyway 脚本版本号）
+
+**推荐使用带版本追踪的打包脚本：**
+```powershell
+# 自动打包并记录版本信息
+.\scripts\build-with-version-tracking.ps1
+
+# 或带测试
+.\scripts\build-with-version-tracking.ps1 -SkipTests:$false
+```
+
+版本记录格式示例（位于 `build-versions.txt`）：
+```
+[2026-07-30 16:30:45] commit: 343c934a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V36
+```
+
+这样可以追溯内网部署的任何 JAR 包对应的代码版本和数据库版本。
+
 ### 前端
 
 ```powershell
