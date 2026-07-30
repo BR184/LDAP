@@ -27,6 +27,8 @@ export interface ImportBatch {
   rollbackBy?: string | null
   rollbackAt?: string | null
   expiredAt?: string | null
+  cancelledBy?: string | null
+  cancelledAt?: string | null
   remark?: string | null
 }
 
@@ -36,11 +38,10 @@ export interface ImportChangeItem {
   targetType: string
   targetKey: string
   changeType: string
-  fieldName?: string | null
+  fieldKey?: string | null
+  fieldLabel?: string | null
   beforeValue?: string | null
   afterValue?: string | null
-  beforeJson?: string | null
-  afterJson?: string | null
   objectVersion?: number | null
   defaultEnabled: boolean
   enabled: boolean
@@ -48,10 +49,15 @@ export interface ImportChangeItem {
   confirmed: boolean
   riskLevel: string
   blockReason?: string | null
+  conflictCode?: string | null
+  resolutionOptions?: string[]
   status: string
   errorMessage?: string | null
   retryCount: number
   executedAt?: string | null
+  resolutionAction?: string | null
+  resolvedBy?: string | null
+  resolvedAt?: string | null
 }
 
 export interface ImportRollbackItem {
@@ -94,7 +100,8 @@ export interface ImportReviewStatistics {
 
 export interface FieldChange {
   itemId: number
-  fieldName?: string | null
+  fieldKey?: string | null
+  fieldLabel?: string | null
   beforeValue?: string | null
   afterValue?: string | null
   riskLevel: string
@@ -109,11 +116,11 @@ export interface UserReviewRow {
   targetKey: string
   realName?: string | null
   employeeNo?: string | null
-  deptCode?: string | null
+  departmentName?: string | null
+  departmentPath?: string | null
   jobTitle?: string | null
   leaderRef?: string | null
   directLeaderRaw?: string | null
-  status?: string | null
   employmentStatus?: string | null
   changeType: string
   changeSummary: string
@@ -128,7 +135,8 @@ export interface UserReviewRow {
 export interface DepartmentReviewRow {
   targetKey: string
   deptName?: string | null
-  parentDeptCode?: string | null
+  parentDepartmentName?: string | null
+  departmentPath?: string | null
   status?: string | null
   changeType: string
   changeSummary: string
@@ -144,8 +152,17 @@ export interface ConflictReviewRow {
   itemId: number
   targetType: string
   targetKey: string
+  candidateRealName?: string | null
+  employeeNo?: string | null
+  existingUserId?: string | null
+  existingRealName?: string | null
   blockReason?: string | null
+  conflictCode?: string | null
+  resolutionOptions?: string[]
   riskLevel: string
   status: string
   errorMessage?: string | null
+  resolutionAction?: string | null
+  resolvedBy?: string | null
+  resolvedAt?: string | null
 }

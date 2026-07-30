@@ -3,7 +3,6 @@ package com.company.idm.application.user;
 import com.company.idm.application.rbac.PolicyRefreshService;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
-import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.audit.AuditLog;
 import com.company.idm.domain.audit.AuditLogRepository;
@@ -16,6 +15,7 @@ import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserAccessPolicy;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.AppLdapProperties;
 import com.company.idm.infrastructure.ldap.LdapDnHelper;
@@ -53,12 +53,13 @@ public class UserApplicationService {
     private final AppLdapProperties ldapProperties;
     private final PasswordVerificationTokenService passwordVerificationTokenService;
     private final InitialPasswordPolicy initialPasswordPolicy;
+    private final UserAccessPolicy userAccessPolicy;
 
-    public List<User> listUsers(String keyword, String departmentKeyword, Integer statusCode) {
+    public List<User> listUsers(String keyword, String departmentKeyword, Boolean accessAllowed) {
         String normalizedKeyword = normalize(keyword);
         String normalizedDepartmentKeyword = normalize(departmentKeyword);
         Map<String, Department> departmentByCode = loadDepartmentMap();
-        return userRepository.findByConditions(normalizedKeyword, null, statusCode).stream()
+        return userRepository.findByConditions(normalizedKeyword, null, accessAllowed).stream()
             .map(user -> enrichDepartment(user, departmentByCode))
             .filter(user -> matchesDepartmentKeyword(user, normalizedDepartmentKeyword))
             .sorted((left, right) -> compareUsersForList(left, right, departmentByCode))
@@ -99,7 +100,7 @@ public class UserApplicationService {
             .employeeNo(command.employeeNo())
             .deptCode(departmentAssignment.mainDepartmentCode())
             .partTimeDeptCodes(departmentAssignment.partTimeDeptCodes())
-            .status(UserStatus.ENABLED)
+            .accessAllowed(command.accessAllowed())
             .employmentStatus(EmploymentStatus.ACTIVE)
             .accountStatus("正常")
             .sourceType(SourceType.MANUAL)
@@ -109,6 +110,7 @@ public class UserApplicationService {
         passwordPolicyValidator.validate(initialPassword);
         String ldapDn = ldapDirectoryService.createUser(saved, initialPassword);
         saved = userRepository.save(saved.toBuilder().ldapDn(ldapDn).build());
+        syncLdapAccessState(saved);
         syncUserDepartmentGroups(saved);
         userRepository.assignRoles(saved.getId(), command.roleIds());
         saved = saved.toBuilder()
@@ -160,23 +162,24 @@ public class UserApplicationService {
     }
 
     @Transactional
-    public void updateStatus(UpdateUserStatusCommand command) {
+    public void updateAccess(UpdateUserAccessCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
         int nextTokenVersion = nextTokenVersion(user);
-        userRepository.updateStatus(command.userId(), command.statusCode(), nextTokenVersion);
-        if (command.statusCode() == UserStatus.ENABLED.getCode()) {
-            ldapDirectoryService.enableUser(user.getUserId());
-        } else {
-            ldapDirectoryService.disableUser(user.getUserId());
-        }
+        User updated = user.toBuilder()
+            .accessAllowed(command.accessAllowed())
+            .tokenVersion(nextTokenVersion)
+            .build();
+        userRepository.updateAccessAllowed(command.userId(), command.accessAllowed(), nextTokenVersion, command.operator());
+        syncLdapAccessState(updated);
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
-            .operationType("USER_STATUS_CHANGE")
+            .operationType("USER_ACCESS_CHANGE")
             .bizType("USER")
             .bizId(String.valueOf(command.userId()))
-            .afterJson(String.valueOf(command.statusCode()))
+            .beforeJson(String.valueOf(user.isAccessAllowed()))
+            .afterJson(String.valueOf(command.accessAllowed()))
             .result("SUCCESS")
             .build());
     }
@@ -185,6 +188,7 @@ public class UserApplicationService {
     public void deleteUser(DeleteUserCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        ensureDeletableSource(user);
         ensureNotSuperAdmin(user);
         permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
         deleteUserInternal(user, command.operator());
@@ -206,13 +210,14 @@ public class UserApplicationService {
                     .orElseThrow(() -> new BizException("USER_NOT_FOUND", "存在待删除用户不存在")))
                 .toList();
         } else {
-            users = listUsers(command.userIdKeyword(), command.deptNameKeyword(), command.statusCode());
+            users = listUsers(command.userIdKeyword(), command.deptNameKeyword(), command.accessAllowed());
         }
         if (users.isEmpty()) {
             throw new BizException("USER_BATCH_DELETE_EMPTY", "待删除用户不能为空");
         }
 
         for (User user : users) {
+            ensureDeletableSource(user);
             ensureNotSuperAdmin(user);
             if (command.operator().equals(user.getUserId())) {
                 throw new BizException("USER_BATCH_DELETE_SELF_FORBIDDEN", "不允许批量删除当前登录用户");
@@ -299,11 +304,7 @@ public class UserApplicationService {
             passwordPolicyValidator.validate(initialPassword);
             ldapDn = ldapDirectoryService.createUser(user, initialPassword);
         }
-        if (user.getStatus() == UserStatus.ENABLED) {
-            ldapDirectoryService.enableUser(user.getUserId());
-        } else {
-            ldapDirectoryService.disableUser(user.getUserId());
-        }
+        syncLdapAccessState(user);
         syncUserDepartmentGroups(user);
         User synced = user;
         if (!ldapDn.equals(user.getLdapDn())) {
@@ -341,9 +342,9 @@ public class UserApplicationService {
         Department department = user.getDeptCode() == null ? null : departmentByCode.get(user.getDeptCode());
         List<String> partTimeDeptCodes = normalizePartTimeDeptCodes(user.getDeptCode(), user.getPartTimeDeptCodes());
         return user.toBuilder()
-            .deptName(resolveDisplayDepartmentName(department, departmentByCode))
+            .deptName(department == null ? null : department.getDeptName())
+            .departmentPath(resolveDepartmentPath(department, departmentByCode))
             .partTimeDeptCodes(partTimeDeptCodes)
-            .partTimeDeptNames(resolveDepartmentNames(partTimeDeptCodes, departmentByCode))
             .permissionLevel(resolvePermissionLevel(user.getRoleCodes()))
             .build();
     }
@@ -371,12 +372,12 @@ public class UserApplicationService {
     }
 
     private int compareAdminUsers(User left, User right) {
-        int byStatus = compareNullable(
-            left.getStatus() == null ? null : left.getStatus().getCode(),
-            right.getStatus() == null ? null : right.getStatus().getCode()
+        int byAccess = compareNullable(
+            left.isAccessAllowed() ? 0 : 1,
+            right.isAccessAllowed() ? 0 : 1
         );
-        if (byStatus != 0) {
-            return byStatus;
+        if (byAccess != 0) {
+            return byAccess;
         }
         int byRealName = compareNullable(safe(left.getRealName()), safe(right.getRealName()));
         if (byRealName != 0) {
@@ -533,19 +534,7 @@ public class UserApplicationService {
         return List.copyOf(normalizedCodes);
     }
 
-    private List<String> resolveDepartmentNames(List<String> deptCodes, Map<String, Department> departmentByCode) {
-        if (deptCodes == null || deptCodes.isEmpty()) {
-            return List.of();
-        }
-        List<String> departmentNames = new ArrayList<>();
-        for (String deptCode : deptCodes) {
-            Department department = departmentByCode.get(deptCode);
-            departmentNames.add(department == null ? deptCode : department.getDeptName());
-        }
-        return List.copyOf(departmentNames);
-    }
-
-    private String resolveDisplayDepartmentName(Department department, Map<String, Department> departmentByCode) {
+    private String resolveDepartmentPath(Department department, Map<String, Department> departmentByCode) {
         if (department == null) {
             return null;
         }
@@ -553,10 +542,7 @@ public class UserApplicationService {
         if (departmentNames.isEmpty()) {
             return department.getDeptName();
         }
-        if (departmentNames.size() == 1) {
-            return departmentNames.get(0);
-        }
-        return departmentNames.get(departmentNames.size() - 2) + "/" + departmentNames.get(departmentNames.size() - 1);
+        return String.join(" / ", departmentNames);
     }
 
     private List<String> resolveDepartmentPathNames(Department department, Map<String, Department> departmentByCode) {
@@ -651,6 +637,20 @@ public class UserApplicationService {
     private void ensureNotSuperAdmin(User user) {
         if (user != null && user.getRoleCodes() != null && user.getRoleCodes().contains(SUPER_ADMIN_ROLE_CODE)) {
             throw new BizException("USER_DELETE_SUPER_ADMIN_FORBIDDEN", "不允许删除超级管理员");
+        }
+    }
+
+    private void syncLdapAccessState(User user) {
+        if (userAccessPolicy.canAuthenticate(user)) {
+            ldapDirectoryService.enableUser(user.getUserId());
+            return;
+        }
+        ldapDirectoryService.disableUser(user.getUserId());
+    }
+
+    private void ensureDeletableSource(User user) {
+        if (user != null && user.getSourceType() == SourceType.FEISHU) {
+            throw new BizException("USER_FILE_MANAGED_DELETE_FORBIDDEN", "文件管理用户不能删除，请关闭允许使用");
         }
     }
 

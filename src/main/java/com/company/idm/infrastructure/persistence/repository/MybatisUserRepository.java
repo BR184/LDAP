@@ -3,22 +3,26 @@ package com.company.idm.infrastructure.persistence.repository;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
-import com.company.idm.common.enums.UserStatus;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.domain.user.UserRoleBinding;
+import com.company.idm.infrastructure.persistence.dataobject.UserPartTimeDepartmentDO;
 import com.company.idm.infrastructure.persistence.dataobject.UserDO;
 import com.company.idm.infrastructure.persistence.dataobject.UserRoleDO;
+import com.company.idm.infrastructure.persistence.mapper.UserPartTimeDepartmentMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserRoleMapper;
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 基于 MyBatis-Plus 实现用户仓储与角色绑定维护。
@@ -29,13 +33,14 @@ public class MybatisUserRepository implements UserRepository {
 
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
+    private final UserPartTimeDepartmentMapper userPartTimeDepartmentMapper;
 
     @Override
     public Optional<User> findById(Long id) {
         UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getId, id)
             .eq(UserDO::getDeleted, 0));
-        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())));
+        return Optional.ofNullable(dataObject).map(this::toDomain);
     }
 
     @Override
@@ -43,7 +48,7 @@ public class MybatisUserRepository implements UserRepository {
         UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getUserId, userId)
             .eq(UserDO::getDeleted, 0));
-        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())));
+        return Optional.ofNullable(dataObject).map(this::toDomain);
     }
 
     @Override
@@ -54,7 +59,7 @@ public class MybatisUserRepository implements UserRepository {
         UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getEmployeeNo, employeeNo)
             .eq(UserDO::getDeleted, 0));
-        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())));
+        return Optional.ofNullable(dataObject).map(this::toDomain);
     }
 
     @Override
@@ -65,33 +70,26 @@ public class MybatisUserRepository implements UserRepository {
         UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getIntranetEmail, intranetEmail)
             .eq(UserDO::getDeleted, 0));
-        return Optional.ofNullable(dataObject).map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())));
+        return Optional.ofNullable(dataObject).map(this::toDomain);
     }
 
     @Override
     public List<User> findAll() {
-        return userMapper.selectList(new LambdaQueryWrapper<UserDO>()
-                .eq(UserDO::getDeleted, 0)
-                .orderByAsc(UserDO::getId))
-            .stream()
-            .map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())))
-            .toList();
+        return toDomains(userMapper.selectList(new LambdaQueryWrapper<UserDO>()
+            .eq(UserDO::getDeleted, 0)
+            .orderByAsc(UserDO::getId)));
     }
 
     @Override
-    public List<User> findActiveUsers() {
-        return userMapper.selectList(new LambdaQueryWrapper<UserDO>()
-                .eq(UserDO::getDeleted, 0)
-                .eq(UserDO::getStatus, UserStatus.ENABLED.getCode())
-                .ne(UserDO::getEmploymentStatus, EmploymentStatus.RESIGNED.name())
-                .orderByAsc(UserDO::getId))
-            .stream()
-            .map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())))
-            .toList();
+    public List<User> findActiveEmployees() {
+        return toDomains(userMapper.selectList(new LambdaQueryWrapper<UserDO>()
+            .eq(UserDO::getDeleted, 0)
+            .eq(UserDO::getEmploymentStatus, EmploymentStatus.ACTIVE.name())
+            .orderByAsc(UserDO::getId)));
     }
 
     @Override
-    public List<User> findByConditions(String keyword, String deptCode, Integer statusCode) {
+    public List<User> findByConditions(String keyword, String deptCode, Boolean accessAllowed) {
         LambdaQueryWrapper<UserDO> queryWrapper = new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getDeleted, 0)
             .orderByAsc(UserDO::getId);
@@ -107,16 +105,15 @@ public class MybatisUserRepository implements UserRepository {
         if (deptCode != null && !deptCode.isBlank()) {
             queryWrapper.eq(UserDO::getDeptCode, deptCode);
         }
-        if (statusCode != null) {
-            queryWrapper.eq(UserDO::getStatus, statusCode);
+        if (accessAllowed != null) {
+            queryWrapper.eq(UserDO::getAccessAllowed, accessAllowed);
         }
 
-        return userMapper.selectList(queryWrapper).stream()
-            .map(data -> toDomain(data, findRoleCodesByUserId(data.getUserId())))
-            .toList();
+        return toDomains(userMapper.selectList(queryWrapper));
     }
 
     @Override
+    @Transactional
     public User save(User user) {
         UserDO dataObject = toDataObject(user);
         if (dataObject.getId() == null) {
@@ -128,10 +125,12 @@ public class MybatisUserRepository implements UserRepository {
             dataObject.setGmtModified(LocalDateTime.now());
             userMapper.updateById(dataObject);
         }
-        return toDomain(dataObject, findRoleCodesByUserId(dataObject.getUserId()));
+        replacePartTimeDepartments(dataObject.getId(), user.getDeptCode(), user.getPartTimeDeptCodes());
+        return toDomain(dataObject, normalizePartTimeDeptCodes(user.getDeptCode(), user.getPartTimeDeptCodes()));
     }
 
     @Override
+    @Transactional
     public void updateProfile(User user) {
         userMapper.update(
             null,
@@ -147,21 +146,20 @@ public class MybatisUserRepository implements UserRepository {
                 .set(UserDO::getDirectLeaderRaw, user.getDirectLeaderRaw())
                 .set(UserDO::getLeaderRef, user.getLeaderRef())
                 .set(UserDO::getAccountStatus, user.getAccountStatus())
-                .set(UserDO::getPartTimeDeptCodes, joinDeptCodes(user.getPartTimeDeptCodes()))
                 .set(UserDO::getEmploymentStatus, user.getEmploymentStatus() == null ? null : user.getEmploymentStatus().name())
                 .set(UserDO::getModifier, "system")
                 .set(UserDO::getGmtModified, LocalDateTime.now())
         );
+        replacePartTimeDepartments(user.getId(), user.getDeptCode(), user.getPartTimeDeptCodes());
     }
 
     @Override
-    public void updateStatus(Long id, Integer statusCode, Integer tokenVersion) {
+    public void updateAccessAllowed(Long id, boolean accessAllowed, Integer tokenVersion, String operator) {
         UserDO dataObject = new UserDO();
         dataObject.setId(id);
-        dataObject.setStatus(statusCode);
-        dataObject.setAccountStatus(statusCode != null && statusCode == UserStatus.ENABLED.getCode() ? "正常" : "冻结");
+        dataObject.setAccessAllowed(accessAllowed);
         dataObject.setTokenVersion(tokenVersion);
-        dataObject.setModifier("system");
+        dataObject.setModifier(operator);
         dataObject.setGmtModified(LocalDateTime.now());
         userMapper.updateById(dataObject);
     }
@@ -175,13 +173,14 @@ public class MybatisUserRepository implements UserRepository {
                 .set(UserDO::getUserId, recycledUsername)
                 .set(UserDO::getEmployeeNo, null)
                 .set(UserDO::getIntranetEmail, null)
-                .set(UserDO::getPartTimeDeptCodes, null)
                 .set(UserDO::getDeleted, 1)
-                .set(UserDO::getStatus, UserStatus.DISABLED.getCode())
+                .set(UserDO::getAccessAllowed, false)
                 .set(UserDO::getTokenVersion, tokenVersion)
                 .set(UserDO::getModifier, "system")
                 .set(UserDO::getGmtModified, LocalDateTime.now())
         );
+        userPartTimeDepartmentMapper.delete(new LambdaQueryWrapper<UserPartTimeDepartmentDO>()
+            .eq(UserPartTimeDepartmentDO::getUserId, id));
     }
 
     @Override
@@ -261,16 +260,22 @@ public class MybatisUserRepository implements UserRepository {
         if (deptCode == null || deptCode.isBlank()) {
             return false;
         }
-        return userMapper.selectCount(new LambdaQueryWrapper<UserDO>()
+        boolean mainDepartmentBound = userMapper.selectCount(new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getDeleted, 0)
             .ne(UserDO::getEmploymentStatus, EmploymentStatus.RESIGNED.name())
-            .and(wrapper -> wrapper
-                .eq(UserDO::getDeptCode, deptCode)
-                .or()
-                .like(UserDO::getPartTimeDeptCodes, deptCode))) > 0;
+            .eq(UserDO::getDeptCode, deptCode)) > 0;
+        if (mainDepartmentBound) {
+            return true;
+        }
+        return userPartTimeDepartmentMapper.selectCount(new LambdaQueryWrapper<UserPartTimeDepartmentDO>()
+            .eq(UserPartTimeDepartmentDO::getDeptCode, deptCode)) > 0;
     }
 
-    private User toDomain(UserDO dataObject, Set<String> roleCodes) {
+    private User toDomain(UserDO dataObject) {
+        return toDomain(dataObject, loadPartTimeDeptCodes(dataObject.getId()));
+    }
+
+    private User toDomain(UserDO dataObject, List<String> partTimeDeptCodes) {
         return User.builder()
             .id(dataObject.getId())
             .userId(dataObject.getUserId())
@@ -284,13 +289,13 @@ public class MybatisUserRepository implements UserRepository {
             .directLeaderRaw(dataObject.getDirectLeaderRaw())
             .leaderRef(dataObject.getLeaderRef())
             .accountStatus(dataObject.getAccountStatus())
-            .partTimeDeptCodes(parseDeptCodes(dataObject.getPartTimeDeptCodes()))
-            .status(UserStatus.fromCode(dataObject.getStatus()))
+            .partTimeDeptCodes(partTimeDeptCodes == null ? List.of() : List.copyOf(partTimeDeptCodes))
+            .accessAllowed(Boolean.TRUE.equals(dataObject.getAccessAllowed()))
             .employmentStatus(EmploymentStatus.fromCode(dataObject.getEmploymentStatus()))
             .sourceType(SourceType.valueOf(dataObject.getSourceType()))
             .ldapDn(dataObject.getLdapDn())
             .tokenVersion(dataObject.getTokenVersion())
-            .roleCodes(roleCodes)
+            .roleCodes(findRoleCodesByUserId(dataObject.getUserId()))
             .build();
     }
 
@@ -308,9 +313,8 @@ public class MybatisUserRepository implements UserRepository {
         dataObject.setDirectLeaderRaw(user.getDirectLeaderRaw());
         dataObject.setLeaderRef(user.getLeaderRef());
         dataObject.setAccountStatus(user.getAccountStatus());
-        dataObject.setPartTimeDeptCodes(joinDeptCodes(user.getPartTimeDeptCodes()));
         dataObject.setEmploymentStatus(user.getEmploymentStatus() == null ? null : user.getEmploymentStatus().name());
-        dataObject.setStatus(user.getStatus().getCode());
+        dataObject.setAccessAllowed(user.isAccessAllowed());
         dataObject.setSourceType(user.getSourceType().name());
         dataObject.setLdapDn(user.getLdapDn());
         dataObject.setTokenVersion(user.getTokenVersion());
@@ -320,25 +324,66 @@ public class MybatisUserRepository implements UserRepository {
         return dataObject;
     }
 
-    private List<String> parseDeptCodes(String rawValue) {
-        if (rawValue == null || rawValue.isBlank()) {
+    private List<User> toDomains(List<UserDO> dataObjects) {
+        if (dataObjects == null || dataObjects.isEmpty()) {
             return List.of();
         }
-        return java.util.Arrays.stream(rawValue.split(","))
-            .map(String::trim)
-            .filter(item -> !item.isBlank())
-            .distinct()
+        Map<Long, List<String>> partTimeDepartmentsByUser = loadPartTimeDeptCodes(
+            dataObjects.stream().map(UserDO::getId).toList()
+        );
+        return dataObjects.stream()
+            .map(data -> toDomain(data, partTimeDepartmentsByUser.getOrDefault(data.getId(), List.of())))
             .toList();
     }
 
-    private String joinDeptCodes(List<String> deptCodes) {
+    private List<String> loadPartTimeDeptCodes(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
+        return loadPartTimeDeptCodes(List.of(userId)).getOrDefault(userId, List.of());
+    }
+
+    private Map<Long, List<String>> loadPartTimeDeptCodes(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<String>> mutable = new LinkedHashMap<>();
+        for (UserPartTimeDepartmentDO relation : userPartTimeDepartmentMapper.selectByUserIds(userIds)) {
+            mutable.computeIfAbsent(relation.getUserId(), ignored -> new java.util.ArrayList<>())
+                .add(relation.getDeptCode());
+        }
+        Map<Long, List<String>> result = new LinkedHashMap<>();
+        mutable.forEach((userId, codes) -> result.put(userId, List.copyOf(codes)));
+        return Map.copyOf(result);
+    }
+
+    private void replacePartTimeDepartments(Long userId, String mainDeptCode, List<String> deptCodes) {
+        if (userId == null) {
+            return;
+        }
+        userPartTimeDepartmentMapper.delete(new LambdaQueryWrapper<UserPartTimeDepartmentDO>()
+            .eq(UserPartTimeDepartmentDO::getUserId, userId));
+        List<String> normalizedCodes = normalizePartTimeDeptCodes(mainDeptCode, deptCodes);
+        for (int index = 0; index < normalizedCodes.size(); index++) {
+            UserPartTimeDepartmentDO relation = new UserPartTimeDepartmentDO();
+            relation.setUserId(userId);
+            relation.setDeptCode(normalizedCodes.get(index));
+            relation.setSortNo(index + 1);
+            relation.setGmtCreate(LocalDateTime.now());
+            userPartTimeDepartmentMapper.insert(relation);
+        }
+    }
+
+    private List<String> normalizePartTimeDeptCodes(String mainDeptCode, List<String> deptCodes) {
         if (deptCodes == null || deptCodes.isEmpty()) {
-            return null;
+            return List.of();
         }
         return deptCodes.stream()
+            .filter(java.util.Objects::nonNull)
             .map(String::trim)
-            .filter(item -> !item.isBlank())
+            .filter(code -> !code.isBlank())
+            .filter(code -> !code.equals(mainDeptCode))
             .distinct()
-            .collect(java.util.stream.Collectors.joining(","));
+            .toList();
     }
 }

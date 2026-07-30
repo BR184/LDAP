@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Comparator;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -23,10 +24,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.ss.util.NumberToTextConverter;
 import org.springframework.boot.system.ApplicationHome;
 import org.springframework.stereotype.Component;
 
@@ -109,9 +113,80 @@ public class FeishuImportDocumentResolver {
 
     public FeishuFullImportDocument resolveFullImportDocument(String documentPath) {
         Path resolvedPath = resolveDocumentPath(documentPath);
+        return readFullImportDocument(resolvedPath);
+    }
+
+    public FeishuFullImportDocument resolveFullImportDocumentByHash(String fileHash) {
+        if (fileHash == null || !fileHash.matches("(?i)[0-9a-f]{64}")) {
+            throw new BizException("IMPORT_BATCH_SOURCE_HASH_INVALID", "导入批次源文件哈希格式不正确");
+        }
+        List<Path> candidates = listRecoverableDocuments();
+        for (Path candidate : candidates) {
+            if (fileHash.equalsIgnoreCase(sha256(candidate))) {
+                return readFullImportDocument(candidate);
+            }
+        }
+        throw new BizException("IMPORT_BATCH_SOURCE_FILE_NOT_FOUND", "无法在导入目录中找到批次源文件");
+    }
+
+    private FeishuFullImportDocument readFullImportDocument(Path resolvedPath) {
         return isWorkbookDocument(resolvedPath)
             ? readRosterWorkbookDocument(resolvedPath)
             : readJsonBundleDocument(resolvedPath);
+    }
+
+    private List<Path> listRecoverableDocuments() {
+        int maxRecoveryFiles = properties.getMaxRecoveryFiles();
+        if (maxRecoveryFiles <= 0) {
+            throw new BizException("FEISHU_FILE_IMPORT_CONFIG_INVALID", "导入源文件恢复数量上限必须大于零");
+        }
+        List<Path> candidates = new ArrayList<>();
+        for (Path rootPath : resolveAllowedRootPaths()) {
+            if (!Files.isDirectory(rootPath)) {
+                continue;
+            }
+            try (java.util.stream.Stream<Path> paths = Files.list(rootPath)) {
+                paths.filter(Files::isRegularFile)
+                    .filter(this::isSupportedDocument)
+                    .forEach(candidates::add);
+            } catch (IOException exception) {
+                throw new BizException("FEISHU_FILE_IMPORT_READ_FAILED", "读取飞书导入目录失败");
+            }
+        }
+        List<Path> distinctCandidates = candidates.stream()
+            .map(path -> path.toAbsolutePath().normalize())
+            .distinct()
+            .sorted(Comparator.comparing(Path::toString))
+            .toList();
+        if (distinctCandidates.size() > maxRecoveryFiles) {
+            throw new BizException("IMPORT_SOURCE_DIRECTORY_LIMIT_EXCEEDED", "导入目录文件数量超过恢复扫描上限");
+        }
+        return distinctCandidates;
+    }
+
+    private boolean isSupportedDocument(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return name.endsWith(".json") || name.endsWith(".xlsx");
+    }
+
+    private String sha256(Path path) {
+        try (InputStream inputStream = Files.newInputStream(path)) {
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) >= 0) {
+                if (bytesRead > 0) {
+                    messageDigest.update(buffer, 0, bytesRead);
+                }
+            }
+            StringBuilder result = new StringBuilder();
+            for (byte item : messageDigest.digest()) {
+                result.append(String.format("%02x", item));
+            }
+            return result.toString();
+        } catch (IOException | NoSuchAlgorithmException exception) {
+            throw new BizException("IMPORT_FILE_HASH_FAILED", "导入文件哈希计算失败");
+        }
     }
 
     private FeishuFullImportDocument readJsonBundleDocument(Path resolvedPath) {
@@ -176,14 +251,21 @@ public class FeishuImportDocumentResolver {
                 resolvedUserId,
                 realName,
                 normalizeEmail(readOptionalCell(row, headerIndex, formatter, HEADER_WORK_EMAIL)),
-                normalizeMobile(readOptionalCell(row, headerIndex, formatter, HEADER_MOBILE, HEADER_CONTACT_MOBILE, HEADER_MOBILE_NUMBER)),
+                normalizeMobile(readOptionalIdentifierCell(
+                    row,
+                    headerIndex,
+                    formatter,
+                    HEADER_MOBILE,
+                    HEADER_CONTACT_MOBILE,
+                    HEADER_MOBILE_NUMBER
+                )),
                 employeeNo,
                 readOptionalCell(row, headerIndex, formatter, HEADER_JOB_TITLE),
                 readOptionalCell(row, headerIndex, formatter, HEADER_DIRECT_LEADER),
                 readOptionalCell(row, headerIndex, formatter, HEADER_ACCOUNT_STATUS),
                 departmentExternalIds.get(0),
                 departmentExternalIds.size() > 1 ? List.copyOf(departmentExternalIds.subList(1, departmentExternalIds.size())) : List.of(),
-                resolveUserStatus(firstNonBlank(
+                resolveEmploymentIndicator(firstNonBlank(
                     readOptionalCell(row, headerIndex, formatter, HEADER_STATUS),
                     readOptionalCell(row, headerIndex, formatter, HEADER_ACCOUNT_STATUS)
                 )),
@@ -327,7 +409,7 @@ public class FeishuImportDocumentResolver {
         if (rawValue == null || rawValue.isBlank()) {
             return List.of();
         }
-        return java.util.Arrays.stream(rawValue.split("[,\uFF0C\r\n]+"))
+        return java.util.Arrays.stream(rawValue.split("[,\uFF0C;\uFF1B\r\n]+"))
             .map(String::trim)
             .filter(item -> !item.isBlank())
             .toList();
@@ -359,7 +441,7 @@ public class FeishuImportDocumentResolver {
         return email == null || email.isBlank() ? null : email.trim().toLowerCase(Locale.ROOT);
     }
 
-    private Integer resolveUserStatus(String statusText) {
+    private Integer resolveEmploymentIndicator(String statusText) {
         if (statusText == null || statusText.isBlank()) {
             return 1;
         }
@@ -421,20 +503,47 @@ public class FeishuImportDocumentResolver {
     }
 
     private String readOptionalCell(Row row, Map<String, Integer> headerIndex, DataFormatter formatter, String primaryHeader, String... aliases) {
-        Integer index = headerIndex.get(normalizeHeader(primaryHeader));
-        if (index == null) {
-            for (String alias : aliases) {
-                index = headerIndex.get(normalizeHeader(alias));
-                if (index != null) {
-                    break;
-                }
-            }
-        }
+        Integer index = resolveColumnIndex(headerIndex, primaryHeader, aliases);
         if (index == null || row.getCell(index) == null) {
             return null;
         }
         String value = formatter.formatCellValue(row.getCell(index));
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String readOptionalIdentifierCell(
+        Row row,
+        Map<String, Integer> headerIndex,
+        DataFormatter formatter,
+        String primaryHeader,
+        String... aliases
+    ) {
+        Integer index = resolveColumnIndex(headerIndex, primaryHeader, aliases);
+        if (index == null || row.getCell(index) == null) {
+            return null;
+        }
+        Cell cell = row.getCell(index);
+        CellType valueType = cell.getCellType() == CellType.FORMULA
+            ? cell.getCachedFormulaResultType()
+            : cell.getCellType();
+        String value = valueType == CellType.NUMERIC
+            ? NumberToTextConverter.toText(cell.getNumericCellValue())
+            : formatter.formatCellValue(cell);
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private Integer resolveColumnIndex(Map<String, Integer> headerIndex, String primaryHeader, String... aliases) {
+        Integer index = headerIndex.get(normalizeHeader(primaryHeader));
+        if (index != null) {
+            return index;
+        }
+        for (String alias : aliases) {
+            index = headerIndex.get(normalizeHeader(alias));
+            if (index != null) {
+                return index;
+            }
+        }
+        return null;
     }
 
     private JsonNode readJsonNode(Path resolvedPath) {

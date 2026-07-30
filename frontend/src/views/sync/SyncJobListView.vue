@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { executeSyncReconcile, fetchSyncBatchDetail, fetchSyncJobs, previewSyncReconcile, retrySyncJob } from '@/api/modules/sync'
 import type { SyncBatchDetail, SyncJob } from '@/types/sync'
+import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
 
 const queryClient = useQueryClient()
 
@@ -157,7 +158,8 @@ async function handleRetry(job: SyncJob) {
     </template>
 
     <el-card class="idm-card" shadow="never">
-      <el-table v-loading="jobsQuery.isLoading.value || jobsQuery.isFetching.value" :data="pagedRows" border>
+      <PersistentTableScrollFrame>
+        <el-table v-loading="jobsQuery.isLoading.value || jobsQuery.isFetching.value" :data="pagedRows" border>
         <el-table-column prop="batchNo" label="批次号" min-width="260" />
         <el-table-column prop="jobType" label="任务类型" min-width="220" />
         <el-table-column label="任务开始时间" min-width="180">
@@ -184,7 +186,8 @@ async function handleRetry(job: SyncJob) {
             </el-space>
           </template>
         </el-table-column>
-      </el-table>
+        </el-table>
+      </PersistentTableScrollFrame>
 
       <div class="table-footer">
         <el-pagination
@@ -216,7 +219,8 @@ async function handleRetry(job: SyncJob) {
 
         <el-divider>任务列表</el-divider>
 
-        <el-table :data="currentBatchDetail.jobs" border>
+        <PersistentTableScrollFrame>
+          <el-table :data="currentBatchDetail.jobs" border>
           <el-table-column prop="jobType" label="任务类型" min-width="220" />
           <el-table-column prop="targetType" label="目标类型" min-width="140" />
           <el-table-column label="开始时间" min-width="180">
@@ -231,11 +235,13 @@ async function handleRetry(job: SyncJob) {
           </el-table-column>
           <el-table-column prop="operator" label="操作人" min-width="140" />
           <el-table-column prop="errorMessage" label="错误原因" min-width="260" show-overflow-tooltip />
-        </el-table>
+          </el-table>
+        </PersistentTableScrollFrame>
 
         <el-divider>差异列表</el-divider>
 
-        <el-table :data="currentBatchDetail.diffs" border>
+        <PersistentTableScrollFrame>
+          <el-table :data="currentBatchDetail.diffs" border>
           <el-table-column prop="targetType" label="目标类型" min-width="140" />
           <el-table-column prop="targetKey" label="目标标识" min-width="220" />
           <el-table-column prop="diffType" label="差异类型" min-width="180" />
@@ -244,7 +250,8 @@ async function handleRetry(job: SyncJob) {
               <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-        </el-table>
+          </el-table>
+        </PersistentTableScrollFrame>
       </template>
 
       <el-empty v-else description="暂无批次详情" />

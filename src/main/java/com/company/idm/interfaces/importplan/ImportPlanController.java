@@ -87,6 +87,39 @@ public class ImportPlanController {
         ));
     }
 
+    @PostMapping("/plan/{batchId}/conflicts/{itemId}/skip")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/conflicts/' + #itemId + '/skip', 'POST')")
+    public ApiResponse<ImportBatchDetailResponse> resolveConflictBySkipping(
+        @PathVariable Long batchId,
+        @PathVariable Long itemId,
+        @AuthenticationPrincipal(expression = "userId") String username
+    ) {
+        return ApiResponse.success(assembler.toDetailResponse(
+            importPlanService.resolveConflictBySkipping(batchId, itemId, username)
+        ));
+    }
+
+    @PostMapping("/plan/{batchId}/conflicts/{itemId}/merge-by-employee-no")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/conflicts/' + #itemId + '/merge-by-employee-no', 'POST')")
+    public ApiResponse<ImportBatchDetailResponse> resolveConflictByMergingEmployeeNumber(
+        @PathVariable Long batchId,
+        @PathVariable Long itemId,
+        @AuthenticationPrincipal(expression = "userId") String username
+    ) {
+        return ApiResponse.success(assembler.toDetailResponse(
+            importPlanService.resolveConflictByMergingEmployeeNumber(batchId, itemId, username)
+        ));
+    }
+
+    @PostMapping("/plan/{batchId}/cancel")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/cancel', 'POST')")
+    public ApiResponse<ImportBatchDetailResponse> cancelPlan(
+        @PathVariable Long batchId,
+        @AuthenticationPrincipal(expression = "userId") String username
+    ) {
+        return ApiResponse.success(assembler.toDetailResponse(importPlanService.cancelPlan(batchId, username)));
+    }
+
     @PostMapping("/plan/{batchId}/execute")
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/execute', 'POST')")
     public ApiResponse<ImportBatchDetailResponse> executePlan(

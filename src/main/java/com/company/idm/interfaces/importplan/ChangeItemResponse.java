@@ -8,11 +8,10 @@ public record ChangeItemResponse(
     String targetType,
     String targetKey,
     String changeType,
-    String fieldName,
+    String fieldKey,
+    String fieldLabel,
     String beforeValue,
     String afterValue,
-    String beforeJson,
-    String afterJson,
     Integer objectVersion,
     Boolean defaultEnabled,
     Boolean enabled,
@@ -20,9 +19,14 @@ public record ChangeItemResponse(
     Boolean confirmed,
     String riskLevel,
     String blockReason,
+    String conflictCode,
+    java.util.List<String> resolutionOptions,
     String status,
     String errorMessage,
     Integer retryCount,
-    LocalDateTime executedAt
+    LocalDateTime executedAt,
+    String resolutionAction,
+    String resolvedBy,
+    LocalDateTime resolvedAt
 ) {
 }

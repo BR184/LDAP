@@ -2,7 +2,8 @@ package com.company.idm.interfaces.importplan;
 
 public record FieldChangeResponse(
     Long itemId,
-    String fieldName,
+    String fieldKey,
+    String fieldLabel,
     String beforeValue,
     String afterValue,
     String riskLevel,

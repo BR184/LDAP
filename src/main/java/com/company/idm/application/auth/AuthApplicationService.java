@@ -1,6 +1,5 @@
 package com.company.idm.application.auth;
 
-import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.application.department.DepartmentDisplay;
 import com.company.idm.application.department.DepartmentPathService;
@@ -9,6 +8,7 @@ import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.domain.ldap.LdapDirectoryService;
 import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserAccessPolicy;
 import com.company.idm.domain.user.UserRepository;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +27,7 @@ public class AuthApplicationService {
     private final AuditLogRepository auditLogRepository;
     private final DepartmentRepository departmentRepository;
     private final DepartmentPathService departmentPathService;
+    private final UserAccessPolicy userAccessPolicy;
 
     /**
      * 执行后台登录流程。
@@ -35,7 +36,7 @@ public class AuthApplicationService {
     public LoginResult login(LoginCommand command) {
         User user = resolveLoginUser(command.loginId())
             .orElseThrow(() -> failure("AUTH_INVALID", "用户名或密码错误", command.loginId()));
-        if (user.getStatus() != UserStatus.ENABLED) {
+        if (!userAccessPolicy.canAuthenticate(user)) {
             throw failure("AUTH_DISABLED", "用户已被禁用", command.loginId());
         }
         if (!ldapDirectoryService.authenticate(user.getUserId(), command.password())) {

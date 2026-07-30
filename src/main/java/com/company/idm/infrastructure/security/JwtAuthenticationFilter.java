@@ -2,8 +2,8 @@ package com.company.idm.infrastructure.security;
 
 import com.company.idm.application.auth.ParsedToken;
 import com.company.idm.application.auth.TokenService;
-import com.company.idm.common.enums.UserStatus;
 import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserAccessPolicy;
 import com.company.idm.domain.user.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -29,6 +29,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final TokenService tokenService;
     private final UserRepository userRepository;
+    private final UserAccessPolicy userAccessPolicy;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -44,8 +45,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (user != null
                 && user.getId() != null
                 && user.getId().equals(parsedToken.id())
-                && user.getStatus() == UserStatus.ENABLED
-                && user.getTokenVersion().equals(parsedToken.tokenVersion())) {
+                && userAccessPolicy.canAuthenticate(user)
+                && java.util.Objects.equals(user.getTokenVersion(), parsedToken.tokenVersion())) {
                 AuthenticatedUser principal = new AuthenticatedUser(
                     user.getId(),
                     user.getUserId(),

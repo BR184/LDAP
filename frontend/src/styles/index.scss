@@ -23,6 +23,12 @@ body {
   min-width: 1280px;
 }
 
+body.persistent-table-scroll--dragging,
+body.persistent-table-scroll--dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -77,33 +83,33 @@ a {
 }
 
 // Element Plus 全局样式覆盖
-:deep(.el-card) {
+.el-card {
   border-radius: var(--idm-radius-lg);
   box-shadow: var(--idm-shadow-card);
 }
 
-:deep(.el-button) {
+.el-button {
   border-radius: var(--idm-radius-sm);
   font-weight: 500;
 }
 
-:deep(.el-input__wrapper) {
+.el-input__wrapper {
   border-radius: var(--idm-radius-sm);
 }
 
-:deep(.el-dialog) {
+.el-dialog {
   border-radius: var(--idm-radius-lg);
 }
 
-:deep(.el-table) {
+.el-table {
   border-radius: var(--idm-radius-base);
 }
 
-:deep(.el-descriptions__label) {
+.el-descriptions__label {
   font-weight: 500;
   color: var(--idm-text-regular);
 }
 
-:deep(.el-descriptions__content) {
+.el-descriptions__content {
   color: var(--idm-text-primary);
 }

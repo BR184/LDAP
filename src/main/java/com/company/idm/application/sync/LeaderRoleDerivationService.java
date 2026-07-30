@@ -29,7 +29,7 @@ public class LeaderRoleDerivationService {
 
     @Transactional
     public void syncDerivedRoles() {
-        List<User> activeUsers = userRepository.findActiveUsers();
+        List<User> activeUsers = userRepository.findActiveEmployees();
         Map<String, User> usersByUserId = new HashMap<>();
         for (User user : activeUsers) {
             usersByUserId.put(user.getUserId(), user);

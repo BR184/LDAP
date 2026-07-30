@@ -21,6 +21,8 @@ public record ImportBatchResponse(
     String rollbackBy,
     LocalDateTime rollbackAt,
     LocalDateTime expiredAt,
+    String cancelledBy,
+    LocalDateTime cancelledAt,
     String remark
 ) {
 }

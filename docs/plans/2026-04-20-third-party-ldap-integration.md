@@ -13,6 +13,7 @@
 ### Task 1: 将通用接入框架写回主设计文档
 
 **Files:**
+
 - Modify: `docs/project-design.md`
 - Reference: `docs/plans/2026-04-20-third-party-ldap-integration-design.md`
 
@@ -82,6 +83,7 @@ Expected: 只提交主设计文档更新。
 ### Task 2: 新增通用 LDAP 契约模板
 
 **Files:**
+
 - Create: `docs/templates/ldap-common-contract.md`
 - Create: `docs/templates/README.md`
 
@@ -147,6 +149,7 @@ Expected: 只提交模板目录初始化和通用契约文档。
 ### Task 3: 新增 GitLab、Jenkins、Nexus、禅道模板
 
 **Files:**
+
 - Create: `docs/templates/gitlab-ldap-template.md`
 - Create: `docs/templates/jenkins-ldap-template.md`
 - Create: `docs/templates/nexus-ldap-template.md`
@@ -244,6 +247,7 @@ Expected: 只提交四份应用模板。
 ### Task 4: 新增联调预检和验收清单
 
 **Files:**
+
 - Create: `docs/checklists/ldap-precheck.md`
 - Create: `docs/checklists/ldap-acceptance.md`
 - Reference: `docs/templates/ldap-common-contract.md`
@@ -314,6 +318,7 @@ Expected: 只提交 checklist 文档。
 ### Task 5: 新增回滚手册
 
 **Files:**
+
 - Create: `docs/runbooks/third-party-ldap-rollback.md`
 - Reference: `docs/checklists/ldap-acceptance.md`
 
@@ -374,6 +379,7 @@ Expected: 只提交回滚文档。
 ### Task 6: 做一轮全量文档自检并收尾
 
 **Files:**
+
 - Modify: `docs/project-design.md`
 - Verify: `docs/templates/README.md`
 - Verify: `docs/templates/*.md`

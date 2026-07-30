@@ -9,10 +9,10 @@ import com.company.idm.common.enums.SyncDiffType;
 import com.company.idm.common.enums.SyncJobType;
 import com.company.idm.common.enums.SyncRunStatus;
 import com.company.idm.common.enums.SyncTargetType;
-import com.company.idm.common.enums.UserStatus;
 import com.company.idm.domain.ldap.LdapDirectoryService;
 import com.company.idm.domain.ldap.LdapUserSnapshot;
 import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserAccessPolicy;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.AppLdapProperties;
 import com.company.idm.infrastructure.ldap.LdapDnHelper;
@@ -31,17 +31,20 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
     private final LdapDirectoryService ldapDirectoryService;
     private final AppLdapProperties ldapProperties;
     private final InitialPasswordPolicy initialPasswordPolicy;
+    private final UserAccessPolicy userAccessPolicy;
 
     public LdapReconcileUserHandler(
         UserRepository userRepository,
         LdapDirectoryService ldapDirectoryService,
         AppLdapProperties ldapProperties,
-        InitialPasswordPolicy initialPasswordPolicy
+        InitialPasswordPolicy initialPasswordPolicy,
+        UserAccessPolicy userAccessPolicy
     ) {
         this.userRepository = userRepository;
         this.ldapDirectoryService = ldapDirectoryService;
         this.ldapProperties = ldapProperties;
         this.initialPasswordPolicy = initialPasswordPolicy;
+        this.userAccessPolicy = userAccessPolicy;
     }
 
     @Override
@@ -69,11 +72,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
             if (!ldapExists) {
                 if (autoRepair) {
                     String ldapDn = ldapDirectoryService.createUser(user, initialPasswordPolicy.resolve(user.getMobile()));
-                    if (user.getStatus() == UserStatus.ENABLED) {
-                        ldapDirectoryService.enableUser(user.getUserId());
-                    } else {
-                        ldapDirectoryService.disableUser(user.getUserId());
-                    }
+                    syncLdapAccessState(user);
                     userRepository.save(user.toBuilder().ldapDn(ldapDn).build());
                     continue;
                 }
@@ -93,7 +92,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
             }
             String expectedDn = buildExpectedDn(user.getUserId());
             boolean dnMismatch = !safe(user.getLdapDn()).equals(safe(expectedDn));
-            boolean statusMismatch = !expectedStatus(user.getStatus()).equals(safe(snapshot.getStatus()));
+            boolean statusMismatch = !expectedStatus(user).equals(safe(snapshot.getStatus()));
             boolean fieldMismatch = !safe(user.getRealName()).equals(safe(snapshot.getRealName()))
                 || !safe(resolveLdapMail(user)).equals(safe(snapshot.getEmail()))
                 || !safe(user.getMobile()).equals(safe(snapshot.getMobile()))
@@ -102,11 +101,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
             if (dnMismatch || statusMismatch || fieldMismatch) {
                 if (autoRepair) {
                     ldapDirectoryService.updateUser(user);
-                    if (user.getStatus() == UserStatus.ENABLED) {
-                        ldapDirectoryService.enableUser(user.getUserId());
-                    } else {
-                        ldapDirectoryService.disableUser(user.getUserId());
-                    }
+                    syncLdapAccessState(user);
                     userRepository.save(user.toBuilder().ldapDn(expectedDn).build());
                     continue;
                 }
@@ -146,8 +141,16 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
         return LdapDnHelper.buildUserDn(ldapProperties, userId);
     }
 
-    private String expectedStatus(UserStatus status) {
-        return status == UserStatus.ENABLED ? "ENABLED" : "DISABLED";
+    private String expectedStatus(User user) {
+        return userAccessPolicy.canAuthenticate(user) ? "ENABLED" : "DISABLED";
+    }
+
+    private void syncLdapAccessState(User user) {
+        if (userAccessPolicy.canAuthenticate(user)) {
+            ldapDirectoryService.enableUser(user.getUserId());
+            return;
+        }
+        ldapDirectoryService.disableUser(user.getUserId());
     }
 
     private String snapshotUser(User user) {
@@ -160,7 +163,7 @@ public class LdapReconcileUserHandler implements SyncJobHandler {
             safe(user.getMobile()),
             safe(user.getEmployeeNo()),
             safe(user.getDeptCode()),
-            expectedStatus(user.getStatus()),
+            expectedStatus(user),
             safe(user.getLdapDn())
         );
     }

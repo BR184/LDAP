@@ -14,6 +14,7 @@ public record CreateUserCommand(
     String employeeNo,
     String deptCode,
     List<String> partTimeDeptCodes,
+    boolean accessAllowed,
     List<Long> roleIds,
     String operator
 ) {

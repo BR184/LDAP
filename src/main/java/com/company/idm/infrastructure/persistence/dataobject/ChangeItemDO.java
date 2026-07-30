@@ -14,7 +14,7 @@ public class ChangeItemDO {
     private String targetType;
     private String targetKey;
     private String changeType;
-    private String fieldName;
+    private String fieldKey;
     private String beforeValue;
     private String afterValue;
     private String beforeJson;
@@ -26,10 +26,14 @@ public class ChangeItemDO {
     private Boolean confirmed;
     private String riskLevel;
     private String blockReason;
+    private String conflictCode;
     private String status;
     private String errorMessage;
     private Integer retryCount;
     private LocalDateTime executedAt;
+    private String resolutionAction;
+    private String resolvedBy;
+    private LocalDateTime resolvedAt;
 
     public Long getId() {
         return id;
@@ -71,12 +75,12 @@ public class ChangeItemDO {
         this.changeType = changeType;
     }
 
-    public String getFieldName() {
-        return fieldName;
+    public String getFieldKey() {
+        return fieldKey;
     }
 
-    public void setFieldName(String fieldName) {
-        this.fieldName = fieldName;
+    public void setFieldKey(String fieldKey) {
+        this.fieldKey = fieldKey;
     }
 
     public String getBeforeValue() {
@@ -163,6 +167,14 @@ public class ChangeItemDO {
         return blockReason;
     }
 
+    public String getConflictCode() {
+        return conflictCode;
+    }
+
+    public void setConflictCode(String conflictCode) {
+        this.conflictCode = conflictCode;
+    }
+
     public void setBlockReason(String blockReason) {
         this.blockReason = blockReason;
     }
@@ -197,5 +209,29 @@ public class ChangeItemDO {
 
     public void setExecutedAt(LocalDateTime executedAt) {
         this.executedAt = executedAt;
+    }
+
+    public String getResolutionAction() {
+        return resolutionAction;
+    }
+
+    public void setResolutionAction(String resolutionAction) {
+        this.resolutionAction = resolutionAction;
+    }
+
+    public String getResolvedBy() {
+        return resolvedBy;
+    }
+
+    public void setResolvedBy(String resolvedBy) {
+        this.resolvedBy = resolvedBy;
+    }
+
+    public LocalDateTime getResolvedAt() {
+        return resolvedAt;
+    }
+
+    public void setResolvedAt(LocalDateTime resolvedAt) {
+        this.resolvedAt = resolvedAt;
     }
 }

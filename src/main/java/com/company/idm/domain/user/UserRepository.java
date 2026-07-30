@@ -19,15 +19,15 @@ public interface UserRepository {
 
     List<User> findAll();
 
-    List<User> findActiveUsers();
+    List<User> findActiveEmployees();
 
-    List<User> findByConditions(String keyword, String deptCode, Integer statusCode);
+    List<User> findByConditions(String keyword, String deptCode, Boolean accessAllowed);
 
     User save(User user);
 
     void updateProfile(User user);
 
-    void updateStatus(Long id, Integer statusCode, Integer tokenVersion);
+    void updateAccessAllowed(Long id, boolean accessAllowed, Integer tokenVersion, String operator);
 
     void logicalDelete(Long id, String recycledUsername, Integer tokenVersion);
 

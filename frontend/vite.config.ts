@@ -37,5 +37,8 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      target: ['chrome80', 'edge80', 'firefox78', 'safari13.1'],
+    },
   }
 })

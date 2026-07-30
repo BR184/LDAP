@@ -4,9 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.company.idm.domain.sync.ChangeItem;
 import com.company.idm.domain.sync.ChangeItemStatus;
 import com.company.idm.domain.sync.ChangeType;
+import com.company.idm.domain.sync.ConflictResolutionAction;
 import com.company.idm.domain.sync.ImportBatch;
 import com.company.idm.domain.sync.ImportBatchRepository;
 import com.company.idm.domain.sync.ImportBatchStatus;
+import com.company.idm.domain.sync.ImportConflictCode;
+import com.company.idm.domain.sync.ImportFieldKey;
 import com.company.idm.domain.sync.ImportSourceType;
 import com.company.idm.domain.sync.RiskLevel;
 import com.company.idm.domain.sync.RollbackAction;
@@ -163,6 +166,8 @@ public class MybatisImportBatchRepository implements ImportBatchRepository {
             .rollbackBy(dataObject.getRollbackBy())
             .rollbackAt(dataObject.getRollbackAt())
             .expiredAt(dataObject.getExpiredAt())
+            .cancelledBy(dataObject.getCancelledBy())
+            .cancelledAt(dataObject.getCancelledAt())
             .remark(dataObject.getRemark())
             .build();
     }
@@ -187,6 +192,8 @@ public class MybatisImportBatchRepository implements ImportBatchRepository {
         dataObject.setRollbackBy(batch.getRollbackBy());
         dataObject.setRollbackAt(batch.getRollbackAt());
         dataObject.setExpiredAt(batch.getExpiredAt());
+        dataObject.setCancelledBy(batch.getCancelledBy());
+        dataObject.setCancelledAt(batch.getCancelledAt());
         dataObject.setRemark(batch.getRemark());
         return dataObject;
     }
@@ -198,7 +205,7 @@ public class MybatisImportBatchRepository implements ImportBatchRepository {
             .targetType(TargetType.valueOf(dataObject.getTargetType()))
             .targetKey(dataObject.getTargetKey())
             .changeType(ChangeType.valueOf(dataObject.getChangeType()))
-            .fieldName(dataObject.getFieldName())
+            .fieldKey(ImportFieldKey.fromStorage(dataObject.getFieldKey()))
             .beforeValue(dataObject.getBeforeValue())
             .afterValue(dataObject.getAfterValue())
             .beforeJson(dataObject.getBeforeJson())
@@ -210,10 +217,18 @@ public class MybatisImportBatchRepository implements ImportBatchRepository {
             .confirmed(Boolean.TRUE.equals(dataObject.getConfirmed()))
             .riskLevel(RiskLevel.valueOf(dataObject.getRiskLevel()))
             .blockReason(dataObject.getBlockReason())
+            .conflictCode(dataObject.getConflictCode() == null
+                ? null
+                : ImportConflictCode.valueOf(dataObject.getConflictCode()))
             .status(ChangeItemStatus.valueOf(dataObject.getStatus()))
             .errorMessage(dataObject.getErrorMessage())
             .retryCount(nullToZero(dataObject.getRetryCount()))
             .executedAt(dataObject.getExecutedAt())
+            .resolutionAction(dataObject.getResolutionAction() == null
+                ? null
+                : ConflictResolutionAction.valueOf(dataObject.getResolutionAction()))
+            .resolvedBy(dataObject.getResolvedBy())
+            .resolvedAt(dataObject.getResolvedAt())
             .build();
     }
 
@@ -224,7 +239,7 @@ public class MybatisImportBatchRepository implements ImportBatchRepository {
         dataObject.setTargetType(item.getTargetType().name());
         dataObject.setTargetKey(item.getTargetKey());
         dataObject.setChangeType(item.getChangeType().name());
-        dataObject.setFieldName(item.getFieldName());
+        dataObject.setFieldKey(item.getFieldKey() == null ? null : item.getFieldKey().name());
         dataObject.setBeforeValue(item.getBeforeValue());
         dataObject.setAfterValue(item.getAfterValue());
         dataObject.setBeforeJson(item.getBeforeJson());
@@ -236,10 +251,14 @@ public class MybatisImportBatchRepository implements ImportBatchRepository {
         dataObject.setConfirmed(item.isConfirmed());
         dataObject.setRiskLevel(item.getRiskLevel().name());
         dataObject.setBlockReason(item.getBlockReason());
+        dataObject.setConflictCode(item.getConflictCode() == null ? null : item.getConflictCode().name());
         dataObject.setStatus(item.getStatus().name());
         dataObject.setErrorMessage(item.getErrorMessage());
         dataObject.setRetryCount(item.getRetryCount());
         dataObject.setExecutedAt(item.getExecutedAt());
+        dataObject.setResolutionAction(item.getResolutionAction() == null ? null : item.getResolutionAction().name());
+        dataObject.setResolvedBy(item.getResolvedBy());
+        dataObject.setResolvedAt(item.getResolvedAt());
         return dataObject;
     }
 

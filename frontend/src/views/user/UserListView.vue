@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, MoreFilled, Plus, Search } from '@element-plus/icons-vue'
+import { Check, Close, Delete, MoreFilled, Plus, Search } from '@element-plus/icons-vue'
 import {
   assignUserRoles,
   batchDeleteUsers,
@@ -13,7 +13,7 @@ import {
   resetUserPassword,
   syncUserToLdap,
   updateUser,
-  updateUserStatus,
+  updateUserAccess,
 } from '@/api/modules/user'
 import { fetchDepartmentTree } from '@/api/modules/department'
 import { fetchRoles } from '@/api/modules/role'
@@ -21,6 +21,7 @@ import { useAuthStore } from '@/stores/auth'
 import UserDetailDrawer from '@/views/user/components/UserDetailDrawer.vue'
 import UserFormDrawer from '@/views/user/components/UserFormDrawer.vue'
 import UserRoleDrawer from '@/views/user/components/UserRoleDrawer.vue'
+import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
 import type { DepartmentTreeNode, DepartmentTreeOption } from '@/types/department'
 import type { CreateUserPayload, UpdateUserPayload, UserItem, UserListQuery } from '@/types/user'
 
@@ -33,13 +34,13 @@ const tableRef = ref<{ clearSelection?: () => void } | null>(null)
 const searchForm = reactive({
   userId: '',
   deptName: '',
-  status: undefined as number | undefined,
+  accessAllowed: undefined as boolean | undefined,
 })
 
 const appliedQuery = reactive<UserListQuery>({
   userId: '',
   deptName: '',
-  status: undefined,
+  accessAllowed: undefined,
 })
 
 const pagination = reactive({
@@ -59,12 +60,12 @@ const selectedRoleIds = ref<number[]>([])
 const selectedUsers = ref<UserItem[]>([])
 
 const usersQuery = useQuery({
-  queryKey: computed(() => ['users', appliedQuery.userId || '', appliedQuery.deptName || '', appliedQuery.status ?? 'all']),
+  queryKey: computed(() => ['users', appliedQuery.userId || '', appliedQuery.deptName || '', appliedQuery.accessAllowed ?? 'all']),
   queryFn: () =>
     fetchUsers({
       userId: appliedQuery.userId || undefined,
       deptName: appliedQuery.deptName || undefined,
-      status: appliedQuery.status,
+      accessAllowed: appliedQuery.accessAllowed,
     }),
 })
 
@@ -106,7 +107,7 @@ const currentOperatorPermissionLevel = computed(() => {
 const isCurrentUserSuperAdmin = computed(() => authStore.currentUser?.roleCodes.includes(SUPER_ADMIN_ROLE_CODE) ?? false)
 const canBatchDelete = computed(() =>
   selectedUsers.value.length > 0
-  || !!(appliedQuery.userId || appliedQuery.deptName || typeof appliedQuery.status === 'number'),
+  || !!(appliedQuery.userId || appliedQuery.deptName || typeof appliedQuery.accessAllowed === 'boolean'),
 )
 const selectedDeletableUsers = computed(() => selectedUsers.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
 const deletableUsersByQuery = computed(() => users.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
@@ -138,10 +139,10 @@ const assignRolesMutation = useMutation({
   },
 })
 
-const updateStatusMutation = useMutation({
-  mutationFn: ({ userId, statusCode }: { userId: number; statusCode: number }) => updateUserStatus(userId, statusCode),
+const updateAccessMutation = useMutation({
+  mutationFn: ({ userId, accessAllowed }: { userId: number; accessAllowed: boolean }) => updateUserAccess(userId, accessAllowed),
   onSuccess: async (_, variables) => {
-    ElMessage.success(variables.statusCode === 1 ? '用户已启用' : '用户已禁用')
+    ElMessage.success(variables.accessAllowed ? '已允许用户使用平台' : '已关闭用户平台使用权限')
     await refreshUsers()
   },
 })
@@ -217,14 +218,14 @@ function isSuperAdminUser(user: UserItem) {
 function applySearch() {
   appliedQuery.userId = normalizeText(searchForm.userId)
   appliedQuery.deptName = normalizeText(searchForm.deptName)
-  appliedQuery.status = typeof searchForm.status === 'number' ? searchForm.status : undefined
+  appliedQuery.accessAllowed = typeof searchForm.accessAllowed === 'boolean' ? searchForm.accessAllowed : undefined
   pagination.page = 1
 }
 
 function resetSearch() {
   searchForm.userId = ''
   searchForm.deptName = ''
-  searchForm.status = undefined
+  searchForm.accessAllowed = undefined
   applySearch()
 }
 
@@ -295,21 +296,21 @@ async function handleRoleSubmit(roleIds: number[]) {
   })
 }
 
-async function handleToggleStatus(user: UserItem) {
-  const nextStatus = user.status === 1 ? 0 : 1
-  const actionText = nextStatus === 1 ? '启用' : '禁用'
+async function confirmAccessChange(user: UserItem, nextAccessAllowed: boolean) {
+  const actionText = nextAccessAllowed ? '允许使用' : '关闭使用权限'
   try {
-    await ElMessageBox.confirm(`确认${actionText}用户 ${user.realName}（${user.userId}）吗？`, `${actionText}用户`, {
+    await ElMessageBox.confirm(`确认${actionText} ${user.realName}（${user.userId}）吗？文件导入不会改变该管理员设置。`, actionText, {
       type: 'warning',
       confirmButtonText: '确认',
       cancelButtonText: '取消',
     })
-    await updateStatusMutation.mutateAsync({
+    await updateAccessMutation.mutateAsync({
       userId: user.id,
-      statusCode: nextStatus,
+      accessAllowed: nextAccessAllowed,
     })
+    return true
   } catch {
-    // 用户取消时不处理。
+    return false
   }
 }
 
@@ -336,7 +337,7 @@ async function handleDelete(user: UserItem) {
 
 async function handleBatchDelete() {
   const hasSelectedRows = selectedUsers.value.length > 0
-  const hasSearchQuery = !!(appliedQuery.userId || appliedQuery.deptName || typeof appliedQuery.status === 'number')
+  const hasSearchQuery = !!(appliedQuery.userId || appliedQuery.deptName || typeof appliedQuery.accessAllowed === 'boolean')
   if (!hasSelectedRows && !hasSearchQuery) {
     return
   }
@@ -365,7 +366,7 @@ async function handleBatchDelete() {
     userIds: targetUsers.map((user) => user.id),
     userIdKeyword: hasSelectedRows ? undefined : appliedQuery.userId || undefined,
     deptNameKeyword: hasSelectedRows ? undefined : appliedQuery.deptName || undefined,
-    statusCode: hasSelectedRows ? undefined : appliedQuery.status,
+    accessAllowed: hasSelectedRows ? undefined : appliedQuery.accessAllowed,
   })
 }
 
@@ -397,19 +398,12 @@ async function handleSyncLdap(user: UserItem) {
   await syncLdapMutation.mutateAsync(user.id)
 }
 
-function statusText(status: number) {
-  return status === 1 ? '启用' : '禁用'
-}
-
-function statusTagType(status: number) {
-  return status === 1 ? 'success' : 'danger'
-}
 </script>
 
 <template>
   <PageContainer
     title="用户管理"
-    description="统一维护平台用户、LDAP 状态与角色绑定，支持查询、创建、编辑、角色分配和同步操作。"
+    description="统一维护用户资料、管理员准入、LDAP 同步与角色绑定。管理员关闭的准入设置不会被文件导入覆盖。"
   >
     <el-card class="idm-card" shadow="never">
       <el-form :inline="true" :model="searchForm">
@@ -419,10 +413,10 @@ function statusTagType(status: number) {
         <el-form-item label="部门名称">
           <el-input v-model="searchForm.deptName" clearable placeholder="请输入部门名称" />
         </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="searchForm.status" clearable placeholder="全部状态" style="width: 160px">
-            <el-option label="启用" :value="1" />
-            <el-option label="禁用" :value="0" />
+        <el-form-item label="允许使用">
+          <el-select v-model="searchForm.accessAllowed" clearable placeholder="全部账号" style="width: 160px">
+            <el-option label="允许使用" :value="true" />
+            <el-option label="已关闭" :value="false" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -456,13 +450,14 @@ function statusTagType(status: number) {
         </div>
       </template>
 
-      <el-table
-        ref="tableRef"
-        v-loading="usersQuery.isLoading.value || usersQuery.isFetching.value"
-        :data="pagedUsers"
-        border
-        @selection-change="handleSelectionChange"
-      >
+      <PersistentTableScrollFrame>
+        <el-table
+          ref="tableRef"
+          v-loading="usersQuery.isLoading.value || usersQuery.isFetching.value"
+          :data="pagedUsers"
+          border
+          @selection-change="handleSelectionChange"
+        >
         <el-table-column type="selection" width="52" :selectable="selectableUser" />
         <el-table-column prop="id" label="数据库ID" min-width="100" show-overflow-tooltip />
         <el-table-column prop="userId" label="用户ID" min-width="180" show-overflow-tooltip />
@@ -483,19 +478,18 @@ function statusTagType(status: number) {
             {{ row.leaderRef || '--' }}
           </template>
         </el-table-column>
-        <el-table-column prop="deptName" label="部门名称" min-width="180" show-overflow-tooltip>
+        <el-table-column prop="departmentPath" label="主部门" min-width="240">
           <template #default="{ row }">
-            {{ row.deptName || '--' }}
+            {{ row.departmentPath || row.deptName || '--' }}
           </template>
         </el-table-column>
-        <el-table-column prop="deptCode" label="部门编码" min-width="140" show-overflow-tooltip>
+        <el-table-column label="兼职部门" min-width="280">
           <template #default="{ row }">
-            {{ row.deptCode || '--' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="兼职部门" min-width="220" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span v-if="row.partTimeDeptNames.length">{{ row.partTimeDeptNames.join('、') }}</span>
+            <div v-if="row.partTimeDepartments.length" class="department-path-list">
+              <span v-for="department in row.partTimeDepartments" :key="department.deptCode">
+                {{ department.departmentPath || department.deptName || '--' }}
+              </span>
+            </div>
             <span v-else>--</span>
           </template>
         </el-table-column>
@@ -518,9 +512,17 @@ function statusTagType(status: number) {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100" align="center">
+        <el-table-column label="允许使用" width="84" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
+            <el-switch
+              :model-value="row.accessAllowed"
+              inline-prompt
+              :active-icon="Check"
+              :inactive-icon="Close"
+              aria-label="切换用户平台使用权限"
+              :loading="updateAccessMutation.isPending.value"
+              :before-change="() => confirmAccessChange(row, !row.accessAllowed)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="角色" min-width="180">
@@ -552,9 +554,6 @@ function statusTagType(status: number) {
 
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item @click="handleToggleStatus(row)">
-                      {{ row.status === 1 ? '禁用用户' : '启用用户' }}
-                    </el-dropdown-item>
                     <el-tooltip
                       :disabled="row.canResetPassword"
                       content="无权重置此用户密码"
@@ -579,7 +578,8 @@ function statusTagType(status: number) {
             </el-space>
           </template>
         </el-table-column>
-      </el-table>
+        </el-table>
+      </PersistentTableScrollFrame>
 
       <div class="table-footer">
         <el-pagination
@@ -643,5 +643,12 @@ function statusTagType(status: number) {
 
 .dropdown-tooltip-wrap {
   display: block;
+}
+
+.department-path-list {
+  display: grid;
+  gap: 4px;
+  white-space: normal;
+  line-height: 1.45;
 }
 </style>

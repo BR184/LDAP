@@ -2,7 +2,6 @@ package com.company.idm.domain.user;
 
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
-import com.company.idm.common.enums.UserStatus;
 import java.util.List;
 import java.util.Set;
 import lombok.AllArgsConstructor;
@@ -34,8 +33,7 @@ public class User {
     private String leaderRef;
     private String accountStatus;
     private List<String> partTimeDeptCodes;
-    private List<String> partTimeDeptNames;
-    private UserStatus status;
+    private boolean accessAllowed;
     private EmploymentStatus employmentStatus;
     private SourceType sourceType;
     private String ldapDn;

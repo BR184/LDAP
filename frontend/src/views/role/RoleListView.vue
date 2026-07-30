@@ -20,6 +20,7 @@ import {
 import RoleFormDrawer from '@/views/role/components/RoleFormDrawer.vue'
 import RoleMenuDrawer from '@/views/role/components/RoleMenuDrawer.vue'
 import RolePermissionDrawer from '@/views/role/components/RolePermissionDrawer.vue'
+import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
 import type { MenuTreeNode } from '@/types/menu'
 import type { PermissionTreeNode } from '@/types/permission'
 import type { CreateRolePayload, RoleItem, UpdateRolePayload } from '@/types/role'
@@ -396,13 +397,14 @@ function statusTagType(status: number) {
         </div>
       </template>
 
-      <el-table
-        ref="tableRef"
-        v-loading="rolesQuery.isLoading.value || rolesQuery.isFetching.value"
-        :data="pagedRoles"
-        border
-        @selection-change="handleSelectionChange"
-      >
+      <PersistentTableScrollFrame>
+        <el-table
+          ref="tableRef"
+          v-loading="rolesQuery.isLoading.value || rolesQuery.isFetching.value"
+          :data="pagedRoles"
+          border
+          @selection-change="handleSelectionChange"
+        >
         <el-table-column type="selection" width="52" :selectable="selectableRole" />
         <el-table-column prop="roleCode" label="角色编码" min-width="160" />
         <el-table-column prop="roleName" label="角色名称" min-width="160" />
@@ -433,7 +435,8 @@ function statusTagType(status: number) {
             </el-space>
           </template>
         </el-table-column>
-      </el-table>
+        </el-table>
+      </PersistentTableScrollFrame>
 
       <div class="table-footer">
         <el-pagination

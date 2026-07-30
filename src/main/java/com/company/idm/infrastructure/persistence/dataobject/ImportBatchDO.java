@@ -27,6 +27,8 @@ public class ImportBatchDO {
     private String rollbackBy;
     private LocalDateTime rollbackAt;
     private LocalDateTime expiredAt;
+    private String cancelledBy;
+    private LocalDateTime cancelledAt;
     private String remark;
 
     public Long getId() {
@@ -171,6 +173,22 @@ public class ImportBatchDO {
 
     public void setExpiredAt(LocalDateTime expiredAt) {
         this.expiredAt = expiredAt;
+    }
+
+    public String getCancelledBy() {
+        return cancelledBy;
+    }
+
+    public void setCancelledBy(String cancelledBy) {
+        this.cancelledBy = cancelledBy;
+    }
+
+    public LocalDateTime getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public void setCancelledAt(LocalDateTime cancelledAt) {
+        this.cancelledAt = cancelledAt;
     }
 
     public String getRemark() {

@@ -8,14 +8,14 @@ export interface UserItem {
   employeeNo: string | null
   deptName: string | null
   deptCode: string | null
+  departmentPath: string | null
   jobTitle: string | null
   directLeaderRaw: string | null
   leaderRef: string | null
   accountStatus: string | null
-  partTimeDeptCodes: string[]
-  partTimeDeptNames: string[]
+  partTimeDepartments: DepartmentReference[]
   permissionLevel: number
-  status: number
+  accessAllowed: boolean
   employmentStatus: string | null
   ldapDn: string | null
   roleCodes: string[]
@@ -25,7 +25,13 @@ export interface UserItem {
 export interface UserListQuery {
   userId?: string
   deptName?: string
-  status?: number
+  accessAllowed?: boolean
+}
+
+export interface DepartmentReference {
+  deptCode: string
+  deptName: string | null
+  departmentPath: string | null
 }
 
 export interface CreateUserPayload {
@@ -37,6 +43,7 @@ export interface CreateUserPayload {
   employeeNo: string
   deptCode: string
   partTimeDeptCodes: string[]
+  accessAllowed: boolean
   roleIds: number[]
 }
 
@@ -73,7 +80,7 @@ export interface BatchDeleteUsersPayload {
   userIds: number[]
   userIdKeyword?: string
   deptNameKeyword?: string
-  statusCode?: number
+  accessAllowed?: boolean
 }
 
 export interface BatchDeleteUsersResult {

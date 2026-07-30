@@ -3,8 +3,9 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { CheckboxValueType, FormRules } from 'element-plus'
-import { Check, RefreshRight, UploadFilled, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
+import { Check, CircleClose, RefreshRight, UploadFilled, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
 import {
+  cancelImportPlan,
   confirmImportPlan,
   executeImportPlan,
   fetchImportPlanDetail,
@@ -13,8 +14,10 @@ import {
   generateFeishuImportPlan,
   generateFeishuImportPlanByUpload,
   generateImportRollbackPlan,
+  mergeImportConflictByEmployeeNumber,
   retryImportLdapFailures,
   rollbackImportPlan,
+  skipImportConflict,
 } from '@/api/modules/system-import'
 import type {
   DepartmentReviewRow,
@@ -23,6 +26,7 @@ import type {
   ImportBatchDetail,
   UserReviewRow,
 } from '@/types/system-import'
+import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
 
 type ReviewObjectType = 'USER' | 'DEPARTMENT' | 'CONFLICT'
 
@@ -32,7 +36,8 @@ interface ReviewRow {
   targetKey: string
   displayName: string
   employeeNo?: string | null
-  deptCode?: string | null
+  departmentName?: string | null
+  departmentPath?: string | null
   jobTitle?: string | null
   leaderText?: string | null
   status?: string | null
@@ -46,6 +51,13 @@ interface ReviewRow {
   fieldChanges: FieldChange[]
   blockReason?: string | null
   errorMessage?: string | null
+  conflictCode?: string | null
+  resolutionOptions: string[]
+  existingUserId?: string | null
+  existingRealName?: string | null
+  resolutionAction?: string | null
+  resolvedBy?: string | null
+  resolvedAt?: string | null
 }
 
 const queryClient = useQueryClient()
@@ -100,17 +112,28 @@ const reviewRows = computed<ReviewRow[]>(() => {
     rowKey: `CONFLICT:${row.itemId}`,
     objectType: 'CONFLICT' as const,
     targetKey: row.targetKey,
-    displayName: `${targetText(row.targetType)} / ${row.targetKey}`,
+    displayName: row.candidateRealName || `${targetText(row.targetType)} / ${row.targetKey}`,
+    employeeNo: row.employeeNo,
     changeType: 'CONFLICT',
-    changeSummary: row.blockReason || row.errorMessage || '阻断冲突',
+    changeSummary: row.existingUserId
+      ? `将更新 ${row.existingRealName || row.existingUserId} / ${row.existingUserId}`
+      : row.blockReason || row.errorMessage || '阻断冲突',
     riskLevel: row.riskLevel,
+    status: row.status,
     enabled: false,
     requiresConfirmation: true,
-    confirmed: false,
+    confirmed: row.status === 'SKIPPED',
     itemIds: [row.itemId],
     fieldChanges: [],
     blockReason: row.blockReason,
     errorMessage: row.errorMessage,
+    conflictCode: row.conflictCode,
+    resolutionOptions: row.resolutionOptions || [],
+    existingUserId: row.existingUserId,
+    existingRealName: row.existingRealName,
+    resolutionAction: row.resolutionAction,
+    resolvedBy: row.resolvedBy,
+    resolvedAt: row.resolvedAt,
   }))
   return [...userRows, ...departmentRows, ...conflictRows]
 })
@@ -134,7 +157,8 @@ const filteredRows = computed(() => {
       row.targetKey,
       row.displayName,
       row.employeeNo,
-      row.deptCode,
+      row.departmentName,
+      row.departmentPath,
       row.jobTitle,
       row.leaderText,
       row.changeSummary,
@@ -159,7 +183,9 @@ const summary = computed(() => {
   }
 })
 
-const hasBlocker = computed(() => reviewRows.value.some((row) => row.riskLevel === 'BLOCKER'))
+const hasBlocker = computed(() =>
+  reviewRows.value.some((row) => row.riskLevel === 'BLOCKER' && row.status === 'PENDING'),
+)
 const selectedCount = computed(() => selectedItemIds.value.size)
 const hasUnconfirmedEnabledRows = computed(() =>
   reviewRows.value.some((row) => isRowSelected(row) && row.requiresConfirmation && !isRowConfirmed(row)),
@@ -168,6 +194,7 @@ const canConfirm = computed(() =>
   currentBatch.value?.status === 'DRAFT' && !hasBlocker.value && selectedCount.value > 0 && !hasUnconfirmedEnabledRows.value,
 )
 const canExecute = computed(() => currentBatch.value?.status === 'CONFIRMED')
+const canCancel = computed(() => currentBatch.value?.status === 'DRAFT')
 const canRollback = computed(() => currentBatch.value?.status === 'COMPLETED')
 const canRetryLdap = computed(() => currentBatch.value?.status === 'FAILED' && changeItems.value.some((item) => item.status === 'LDAP_FAILED'))
 
@@ -195,6 +222,31 @@ const confirmPlanMutation = useMutation({
     }),
   onSuccess: async (nextDetail) => {
     ElMessage.success('导入计划已确认')
+    await afterPlanChanged(nextDetail)
+  },
+})
+
+const skipConflictMutation = useMutation({
+  mutationFn: ({ batchId, itemId }: { batchId: number; itemId: number }) => skipImportConflict(batchId, itemId),
+  onSuccess: async (nextDetail) => {
+    ElMessage.success('冲突对象已从本批次排除')
+    await afterPlanChanged(nextDetail)
+  },
+})
+
+const mergeConflictMutation = useMutation({
+  mutationFn: ({ batchId, itemId }: { batchId: number; itemId: number }) =>
+    mergeImportConflictByEmployeeNumber(batchId, itemId),
+  onSuccess: async (nextDetail) => {
+    ElMessage.success('已按工号认定为同一员工，更新项已加入计划')
+    await afterPlanChanged(nextDetail)
+  },
+})
+
+const cancelPlanMutation = useMutation({
+  mutationFn: cancelImportPlan,
+  onSuccess: async (nextDetail) => {
+    ElMessage.success('草稿计划已取消，可以重新上传文件')
     await afterPlanChanged(nextDetail)
   },
 })
@@ -239,6 +291,9 @@ const actionLoading = computed(() =>
   generatePlanMutation.isPending.value
   || generateUploadPlanMutation.isPending.value
   || confirmPlanMutation.isPending.value
+  || skipConflictMutation.isPending.value
+  || mergeConflictMutation.isPending.value
+  || cancelPlanMutation.isPending.value
   || executePlanMutation.isPending.value
   || rollbackPlanMutation.isPending.value
   || rollbackPreviewMutation.isPending.value
@@ -363,6 +418,63 @@ async function handleExecutePlan() {
   await executePlanMutation.mutateAsync(currentBatch.value.id)
 }
 
+async function handleSkipConflict(row: ReviewRow) {
+  if (!currentBatch.value || row.objectType !== 'CONFLICT' || row.itemIds.length !== 1) {
+    return
+  }
+  await ElMessageBox.confirm(
+    '排除后，该冲突及其关联的新增、修改或离职变更都不会在本批次执行，其他正常变更仍可继续。确认排除吗？',
+    '排除冲突对象',
+    {
+      type: 'warning',
+      confirmButtonText: '确认排除',
+      cancelButtonText: '取消',
+    },
+  )
+  await skipConflictMutation.mutateAsync({
+    batchId: currentBatch.value.id,
+    itemId: row.itemIds[0] as number,
+  })
+}
+
+async function handleMergeConflict(row: ReviewRow) {
+  if (!currentBatch.value || row.objectType !== 'CONFLICT' || row.itemIds.length !== 1) {
+    return
+  }
+  const existingAccount = row.existingUserId
+    ? `${row.existingRealName || row.existingUserId}（${row.existingUserId}）`
+    : '工号对应的现有账号'
+  await ElMessageBox.confirm(
+    `确认将“${row.displayName}”认定为同一员工并更新 ${existingAccount} 吗？现有登录账号、LDAP UID、密码、内网邮箱和角色不会改变。`,
+    '按工号确认更新',
+    {
+      type: 'warning',
+      confirmButtonText: '确认更新',
+      cancelButtonText: '返回',
+    },
+  )
+  await mergeConflictMutation.mutateAsync({
+    batchId: currentBatch.value.id,
+    itemId: row.itemIds[0] as number,
+  })
+}
+
+async function handleCancelPlan() {
+  if (!currentBatch.value) {
+    return
+  }
+  await ElMessageBox.confirm(
+    '取消后不会执行当前计划，计划与冲突记录仍会保留。你可以修正源文件后立即重新生成计划。',
+    '取消草稿计划',
+    {
+      type: 'warning',
+      confirmButtonText: '确认取消',
+      cancelButtonText: '返回',
+    },
+  )
+  await cancelPlanMutation.mutateAsync(currentBatch.value.id)
+}
+
 async function handleRollbackPreview() {
   if (!currentBatch.value) {
     return
@@ -415,10 +527,11 @@ function userReviewRow(row: UserReviewRow): ReviewRow {
     targetKey: row.targetKey,
     displayName: row.realName || row.targetKey,
     employeeNo: row.employeeNo,
-    deptCode: row.deptCode,
+    departmentName: row.departmentName,
+    departmentPath: row.departmentPath,
     jobTitle: row.jobTitle,
     leaderText: row.directLeaderRaw || row.leaderRef,
-    status: row.employmentStatus || row.status,
+    status: row.employmentStatus,
     changeType: row.changeType,
     changeSummary: row.changeSummary,
     riskLevel: row.riskLevel,
@@ -427,6 +540,7 @@ function userReviewRow(row: UserReviewRow): ReviewRow {
     confirmed: row.confirmed,
     itemIds: row.itemIds,
     fieldChanges: row.fieldChanges,
+    resolutionOptions: [],
   }
 }
 
@@ -436,8 +550,9 @@ function departmentReviewRow(row: DepartmentReviewRow): ReviewRow {
     objectType: 'DEPARTMENT',
     targetKey: row.targetKey,
     displayName: row.deptName || row.targetKey,
-    deptCode: row.targetKey,
-    leaderText: row.parentDeptCode,
+    departmentName: row.deptName,
+    departmentPath: row.departmentPath,
+    leaderText: row.parentDepartmentName,
     status: row.status,
     changeType: row.changeType,
     changeSummary: row.changeSummary,
@@ -447,6 +562,7 @@ function departmentReviewRow(row: DepartmentReviewRow): ReviewRow {
     confirmed: row.confirmed,
     itemIds: row.itemIds,
     fieldChanges: row.fieldChanges,
+    resolutionOptions: [],
   }
 }
 
@@ -488,6 +604,10 @@ function changeTagType(changeType: string) {
 
 function targetText(type: string) {
   return type === 'USER' ? '用户' : type === 'DEPARTMENT' ? '部门' : type
+}
+
+function objectCaption(row: ReviewRow) {
+  return row.objectType === 'USER' ? `用户 / ${row.targetKey}` : targetText(row.objectType)
 }
 </script>
 
@@ -551,14 +671,15 @@ function targetText(type: string) {
             </div>
           </template>
 
-          <el-table
-            v-loading="plansQuery.isLoading.value || plansQuery.isFetching.value"
-            :data="plans"
-            border
-            height="356"
-            highlight-current-row
-            @row-click="selectBatch"
-          >
+          <PersistentTableScrollFrame>
+            <el-table
+              v-loading="plansQuery.isLoading.value || plansQuery.isFetching.value"
+              :data="plans"
+              border
+              height="356"
+              highlight-current-row
+              @row-click="selectBatch"
+            >
             <el-table-column prop="batchCode" label="计划编号" min-width="210" show-overflow-tooltip />
             <el-table-column prop="fileName" label="文件" min-width="160" show-overflow-tooltip />
             <el-table-column label="状态" width="110" align="center">
@@ -567,7 +688,8 @@ function targetText(type: string) {
               </template>
             </el-table-column>
             <el-table-column prop="totalItems" label="变更" width="80" align="right" />
-          </el-table>
+            </el-table>
+          </PersistentTableScrollFrame>
         </el-card>
       </div>
 
@@ -585,6 +707,9 @@ function targetText(type: string) {
               </el-button>
               <el-button type="primary" :icon="VideoPlay" :disabled="!canExecute" :loading="executePlanMutation.isPending.value" @click="handleExecutePlan">
                 执行计划
+              </el-button>
+              <el-button v-if="canCancel" type="danger" plain :icon="CircleClose" :loading="cancelPlanMutation.isPending.value" @click="handleCancelPlan">
+                取消计划
               </el-button>
               <el-button v-if="canRetryLdap" type="warning" :loading="retryLdapMutation.isPending.value" @click="handleRetryLdapFailures">
                 重试 LDAP
@@ -625,7 +750,7 @@ function targetText(type: string) {
             :closable="false"
             show-icon
             type="error"
-            title="存在阻断级冲突，必须处理后才能确认计划。"
+            title="存在未处理的阻断冲突。请在冲突行选择确认更新或排除；无法安全确认的冲突需要修正源文件。"
           />
 
           <div class="review-toolbar">
@@ -642,30 +767,37 @@ function targetText(type: string) {
             <el-input v-model="keyword" class="review-search" clearable placeholder="搜索姓名、工号、部门、岗位、上级" />
           </div>
 
-          <el-table
-            v-loading="reviewQuery.isLoading.value || reviewQuery.isFetching.value"
-            :data="pagedRows"
-            border
-            height="600"
-            row-key="rowKey"
-            class="review-table"
-          >
+          <PersistentTableScrollFrame>
+            <el-table
+              v-loading="reviewQuery.isLoading.value || reviewQuery.isFetching.value"
+              :data="pagedRows"
+              border
+              height="600"
+              row-key="rowKey"
+              class="review-table"
+            >
             <el-table-column type="expand">
               <template #default="{ row }">
                 <div v-if="row.fieldChanges.length > 0" class="field-change-panel">
-                  <el-table :data="row.fieldChanges" border size="small">
-                    <el-table-column prop="fieldName" label="字段" min-width="140">
-                      <template #default="{ row: field }">{{ field.fieldName || row.changeType }}</template>
+                  <PersistentTableScrollFrame>
+                    <el-table :data="row.fieldChanges" border size="small">
+                    <el-table-column prop="fieldLabel" label="字段" min-width="140">
+                      <template #default="{ row: field }">{{ field.fieldLabel || row.changeType }}</template>
                     </el-table-column>
-                    <el-table-column prop="beforeValue" label="原值" min-width="180" show-overflow-tooltip />
-                    <el-table-column prop="afterValue" label="新值" min-width="180" show-overflow-tooltip />
+                    <el-table-column prop="beforeValue" label="原值" min-width="180">
+                      <template #default="{ row: field }"><span class="multiline-value">{{ field.beforeValue || '--' }}</span></template>
+                    </el-table-column>
+                    <el-table-column prop="afterValue" label="新值" min-width="180">
+                      <template #default="{ row: field }"><span class="multiline-value">{{ field.afterValue || '--' }}</span></template>
+                    </el-table-column>
                     <el-table-column label="风险" width="100" align="center">
                       <template #default="{ row: field }"><el-tag :type="riskTagType(field.riskLevel)">{{ field.riskLevel }}</el-tag></template>
                     </el-table-column>
                     <el-table-column label="状态" width="120" align="center">
                       <template #default="{ row: field }"><el-tag :type="statusTagType(field.status)">{{ field.status }}</el-tag></template>
                     </el-table-column>
-                  </el-table>
+                    </el-table>
+                  </PersistentTableScrollFrame>
                 </div>
                 <div v-else class="field-change-panel">
                   <el-alert :closable="false" type="error" :title="row.blockReason || row.errorMessage || '暂无字段明细'" />
@@ -685,12 +817,14 @@ function targetText(type: string) {
               <template #default="{ row }">
                 <div class="object-cell">
                   <strong>{{ row.displayName }}</strong>
-                  <span>{{ targetText(row.objectType) }} / {{ row.targetKey }}</span>
+                  <span>{{ objectCaption(row) }}</span>
                 </div>
               </template>
             </el-table-column>
             <el-table-column prop="employeeNo" label="工号" width="120" show-overflow-tooltip />
-            <el-table-column prop="deptCode" label="部门" width="140" show-overflow-tooltip />
+            <el-table-column label="部门" min-width="240">
+              <template #default="{ row }">{{ row.departmentPath || row.departmentName || '--' }}</template>
+            </el-table-column>
             <el-table-column prop="jobTitle" label="岗位" width="150" show-overflow-tooltip />
             <el-table-column prop="leaderText" label="直属上级" width="150" show-overflow-tooltip />
             <el-table-column label="变更" width="110" align="center">
@@ -709,6 +843,41 @@ function targetText(type: string) {
                 />
               </template>
             </el-table-column>
+            <el-table-column label="处理" width="196" align="center">
+              <template #default="{ row }">
+                <div
+                  v-if="row.objectType === 'CONFLICT' && row.status === 'PENDING' && currentBatch?.status === 'DRAFT'"
+                  class="conflict-actions"
+                >
+                  <el-button
+                    v-if="row.resolutionOptions.includes('MERGE_BY_EMPLOYEE_NO')"
+                    type="primary"
+                    text
+                    :icon="Check"
+                    :loading="mergeConflictMutation.isPending.value"
+                    @click="handleMergeConflict(row)"
+                  >
+                    确认更新
+                  </el-button>
+                  <el-button
+                    v-if="row.resolutionOptions.includes('SKIP_RELATED_CHANGES')"
+                    type="warning"
+                    text
+                    :loading="skipConflictMutation.isPending.value"
+                    @click="handleSkipConflict(row)"
+                  >
+                    排除
+                  </el-button>
+                </div>
+                <el-tag
+                  v-else-if="row.objectType === 'CONFLICT' && row.status === 'SKIPPED'"
+                  :type="row.resolutionAction === 'MERGE_BY_EMPLOYEE_NO' ? 'success' : 'info'"
+                >
+                  {{ row.resolutionAction === 'MERGE_BY_EMPLOYEE_NO' ? '已转为更新' : '已排除' }}
+                </el-tag>
+                <span v-else>--</span>
+              </template>
+            </el-table-column>
             <el-table-column label="说明" min-width="160" show-overflow-tooltip>
               <template #default="{ row }">
                 <span v-if="row.blockReason"><el-icon><WarningFilled /></el-icon> {{ row.blockReason }}</span>
@@ -716,7 +885,8 @@ function targetText(type: string) {
                 <span v-else>--</span>
               </template>
             </el-table-column>
-          </el-table>
+            </el-table>
+          </PersistentTableScrollFrame>
 
           <div class="pagination-row">
             <span class="idm-muted">共 {{ filteredRows.length }} 个对象</span>
@@ -811,6 +981,11 @@ function targetText(type: string) {
   background: var(--el-fill-color-light);
 }
 
+.multiline-value {
+  white-space: pre-line;
+  word-break: break-word;
+}
+
 .object-cell {
   display: flex;
   flex-direction: column;
@@ -819,6 +994,18 @@ function targetText(type: string) {
   span {
     color: var(--el-text-color-secondary);
     font-size: 12px;
+  }
+}
+
+.conflict-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+
+  :deep(.el-button + .el-button) {
+    margin-left: 0;
   }
 }
 

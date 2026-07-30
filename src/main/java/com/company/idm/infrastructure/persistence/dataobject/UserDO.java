@@ -24,9 +24,8 @@ public class UserDO {
     private String directLeaderRaw;
     private String leaderRef;
     private String accountStatus;
-    private String partTimeDeptCodes;
     private String employmentStatus;
-    private Integer status;
+    private Boolean accessAllowed;
     private String sourceType;
     private String ldapDn;
     private Integer tokenVersion;
@@ -132,14 +131,6 @@ public class UserDO {
         this.accountStatus = accountStatus;
     }
 
-    public String getPartTimeDeptCodes() {
-        return partTimeDeptCodes;
-    }
-
-    public void setPartTimeDeptCodes(String partTimeDeptCodes) {
-        this.partTimeDeptCodes = partTimeDeptCodes;
-    }
-
     public String getEmploymentStatus() {
         return employmentStatus;
     }
@@ -148,12 +139,12 @@ public class UserDO {
         this.employmentStatus = employmentStatus;
     }
 
-    public Integer getStatus() {
-        return status;
+    public Boolean getAccessAllowed() {
+        return accessAllowed;
     }
 
-    public void setStatus(Integer status) {
-        this.status = status;
+    public void setAccessAllowed(Boolean accessAllowed) {
+        this.accessAllowed = accessAllowed;
     }
 
     public String getSourceType() {

@@ -35,23 +35,22 @@ const emit = defineEmits<{
         <el-descriptions-item label="职务">{{ user.jobTitle || '--' }}</el-descriptions-item>
         <el-descriptions-item label="直属上级">{{ user.directLeaderRaw || '--' }}</el-descriptions-item>
         <el-descriptions-item label="上级ID">{{ user.leaderRef || '--' }}</el-descriptions-item>
-        <el-descriptions-item label="主部门编码">{{ user.deptCode || '--' }}</el-descriptions-item>
-        <el-descriptions-item label="主部门名称">{{ user.deptName || '--' }}</el-descriptions-item>
+        <el-descriptions-item label="主部门">{{ user.departmentPath || user.deptName || '--' }}</el-descriptions-item>
         <el-descriptions-item label="兼职部门">
-          <el-space v-if="user.partTimeDeptNames.length" wrap>
+          <el-space v-if="user.partTimeDepartments.length" wrap>
             <el-tag
-              v-for="(deptName, index) in user.partTimeDeptNames"
-              :key="`${deptName}-${user.partTimeDeptCodes[index] || index}`"
+              v-for="department in user.partTimeDepartments"
+              :key="department.deptCode"
               type="info"
             >
-              {{ deptName }}
+              {{ department.departmentPath || department.deptName || '--' }}
             </el-tag>
           </el-space>
           <span v-else>--</span>
         </el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="user.status === 1 ? 'success' : 'danger'">
-            {{ user.status === 1 ? '启用' : '禁用' }}
+        <el-descriptions-item label="允许使用">
+          <el-tag :type="user.accessAllowed ? 'success' : 'danger'">
+            {{ user.accessAllowed ? '允许' : '关闭' }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="在职状态">{{ user.employmentStatus === 'RESIGNED' ? '离职' : '在职' }}</el-descriptions-item>

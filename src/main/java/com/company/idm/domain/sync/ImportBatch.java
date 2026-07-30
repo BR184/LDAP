@@ -3,7 +3,9 @@ package com.company.idm.domain.sync;
 import com.company.idm.common.exception.BizException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -35,6 +37,8 @@ public class ImportBatch {
     private String rollbackBy;
     private LocalDateTime rollbackAt;
     private LocalDateTime expiredAt;
+    private String cancelledBy;
+    private LocalDateTime cancelledAt;
     private String remark;
 
     public void addChangeItem(ChangeItem item) {
@@ -76,6 +80,61 @@ public class ImportBatch {
         this.status = ImportBatchStatus.CONFIRMED;
         this.confirmedBy = confirmedBy;
         this.confirmedAt = LocalDateTime.now();
+    }
+
+    public void resolveConflictBySkipping(Long conflictItemId, List<Long> relatedItemIds, String resolvedBy) {
+        if (status != ImportBatchStatus.DRAFT) {
+            throw new BizException("IMPORT_BATCH_NOT_DRAFT", "只有草稿状态的导入计划可以处理冲突");
+        }
+        ChangeItem conflict = changeItems.stream()
+            .filter(item -> conflictItemId != null && conflictItemId.equals(item.getId()))
+            .findFirst()
+            .orElseThrow(() -> new BizException("IMPORT_CONFLICT_NOT_FOUND", "阻断冲突不存在"));
+        Set<Long> relatedIds = relatedItemIds == null ? Set.of() : new HashSet<>(relatedItemIds);
+        for (ChangeItem item : changeItems) {
+            if (item.getId() != null && relatedIds.contains(item.getId())) {
+                item.skipDueToConflict();
+            }
+        }
+        conflict.resolveBySkipping(resolvedBy);
+        recalculateStatistics();
+    }
+
+    public void resolveConflictByMerging(
+        Long conflictItemId,
+        List<Long> relatedItemIds,
+        List<ChangeItem> replacementItems,
+        String resolvedBy
+    ) {
+        if (status != ImportBatchStatus.DRAFT) {
+            throw new BizException("IMPORT_BATCH_NOT_DRAFT", "只有草稿状态的导入计划可以处理冲突");
+        }
+        ChangeItem conflict = changeItems.stream()
+            .filter(item -> conflictItemId != null && conflictItemId.equals(item.getId()))
+            .findFirst()
+            .orElseThrow(() -> new BizException("IMPORT_CONFLICT_NOT_FOUND", "阻断冲突不存在"));
+        Set<Long> relatedIds = relatedItemIds == null ? Set.of() : new HashSet<>(relatedItemIds);
+        for (ChangeItem item : changeItems) {
+            if (item.getId() != null && relatedIds.contains(item.getId())) {
+                item.skipDueToConflict();
+            }
+        }
+        conflict.resolveByMerging(resolvedBy);
+        if (replacementItems != null && !replacementItems.isEmpty()) {
+            List<ChangeItem> mergedItems = new ArrayList<>(changeItems);
+            mergedItems.addAll(replacementItems);
+            this.changeItems = mergedItems;
+        }
+        recalculateStatistics();
+    }
+
+    public void cancel(String cancelledBy) {
+        if (status != ImportBatchStatus.DRAFT) {
+            throw new BizException("IMPORT_BATCH_CANNOT_CANCEL", "只有草稿状态的导入计划可以取消");
+        }
+        this.status = ImportBatchStatus.CANCELLED;
+        this.cancelledBy = cancelledBy;
+        this.cancelledAt = LocalDateTime.now();
     }
 
     public void execute(String executedBy) {
@@ -148,7 +207,7 @@ public class ImportBatch {
     }
 
     private boolean hasBlockerConflicts() {
-        return changeItems.stream().anyMatch(item -> item.getRiskLevel() == RiskLevel.BLOCKER);
+        return changeItems.stream().anyMatch(ChangeItem::isPendingBlocker);
     }
 
     private boolean hasUnconfirmedItems() {
@@ -164,7 +223,7 @@ public class ImportBatch {
         this.totalItems = changeItems.size();
         this.enabledItems = (int) changeItems.stream().filter(ChangeItem::isEnabled).count();
         this.conflictItems = (int) changeItems.stream()
-            .filter(item -> item.getChangeType() == ChangeType.CONFLICT || item.getRiskLevel() == RiskLevel.BLOCKER)
+            .filter(ChangeItem::isPendingBlocker)
             .count();
     }
 }

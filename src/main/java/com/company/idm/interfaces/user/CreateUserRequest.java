@@ -3,6 +3,7 @@ package com.company.idm.interfaces.user;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.util.List;
 
@@ -18,6 +19,7 @@ public record CreateUserRequest(
     @NotBlank(message = "工号不能为空") String employeeNo,
     String deptCode,
     List<String> partTimeDeptCodes,
+    @NotNull(message = "允许使用不能为空") Boolean accessAllowed,
     @NotEmpty(message = "角色不能为空") List<Long> roleIds
 ) {
 }

@@ -11,6 +11,7 @@ public class FeishuFileImportProperties {
     private boolean enabled = true;
     private String rootDir = "docs/feishu-import";
     private long maxFileSizeBytes = 2 * 1024 * 1024;
+    private int maxRecoveryFiles = 1000;
 
     public boolean isEnabled() {
         return enabled;
@@ -34,5 +35,13 @@ public class FeishuFileImportProperties {
 
     public void setMaxFileSizeBytes(long maxFileSizeBytes) {
         this.maxFileSizeBytes = maxFileSizeBytes;
+    }
+
+    public int getMaxRecoveryFiles() {
+        return maxRecoveryFiles;
+    }
+
+    public void setMaxRecoveryFiles(int maxRecoveryFiles) {
+        this.maxRecoveryFiles = maxRecoveryFiles;
     }
 }

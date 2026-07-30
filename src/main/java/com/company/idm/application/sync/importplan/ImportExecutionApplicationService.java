@@ -3,8 +3,8 @@ package com.company.idm.application.sync.importplan;
 import com.company.idm.application.rbac.PolicyRefreshService;
 import com.company.idm.application.sync.LeaderRoleDerivationService;
 import com.company.idm.application.user.InitialPasswordPolicy;
+import com.company.idm.application.user.IntranetEmailGenerationService;
 import com.company.idm.common.enums.EmploymentStatus;
-import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
@@ -18,6 +18,7 @@ import com.company.idm.domain.sync.ImportBatch;
 import com.company.idm.domain.sync.ImportBatchRepository;
 import com.company.idm.domain.sync.TargetType;
 import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserAccessPolicy;
 import com.company.idm.domain.user.UserRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,8 @@ public class ImportExecutionApplicationService {
     private final LeaderRoleDerivationService leaderRoleDerivationService;
     private final ImportJsonService jsonService;
     private final InitialPasswordPolicy initialPasswordPolicy;
+    private final UserAccessPolicy userAccessPolicy;
+    private final IntranetEmailGenerationService intranetEmailGenerationService;
 
     @Transactional
     public ImportBatch executePlan(Long batchId, String executedBy) {
@@ -81,9 +84,6 @@ public class ImportExecutionApplicationService {
             executeResign(item);
             return;
         }
-        if (item.getChangeType() == ChangeType.DISABLE) {
-            executeDisable(item);
-        }
     }
 
     private void executeDepartment(ChangeItem item) {
@@ -100,7 +100,21 @@ public class ImportExecutionApplicationService {
     }
 
     private void executeUser(ChangeItem item) {
-        User target = jsonService.readUserSnapshot(item.getAfterJson()).toUser();
+        UserImportSnapshot snapshot = jsonService.readUserSnapshot(item.getAfterJson());
+        if (snapshot == null) {
+            throw new BizException("IMPORT_USER_SNAPSHOT_MISSING", "用户导入快照不存在");
+        }
+        User existing = userRepository.findByUserId(snapshot.userId()).orElse(null);
+        String intranetEmail = existing == null
+            ? intranetEmailGenerationService.generate(snapshot.userId(), null)
+            : existing.getIntranetEmail();
+        if (intranetEmail == null || intranetEmail.isBlank()) {
+            intranetEmail = intranetEmailGenerationService.generate(
+                existing == null ? snapshot.userId() : existing.getUserId(),
+                existing == null ? null : existing.getId()
+            );
+        }
+        User target = snapshot.applyTo(existing, intranetEmail);
         User saved = userRepository.save(target);
         try {
             String ldapDn = ldapDirectoryService.createOrUpdateUser(saved, initialPasswordPolicy.resolve(saved.getMobile()));
@@ -116,26 +130,11 @@ public class ImportExecutionApplicationService {
     private void syncBaselineNormalUserRole() {
         Role role = roleRepository.findByCode(NORMAL_USER_ROLE_CODE)
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "普通用户角色不存在"));
-        java.util.Set<Long> activeUserIds = userRepository.findActiveUsers().stream()
+        java.util.Set<Long> activeUserIds = userRepository.findActiveEmployees().stream()
             .map(User::getId)
             .filter(java.util.Objects::nonNull)
             .collect(java.util.stream.Collectors.toSet());
         userRepository.syncRoleBindings(role.getId(), activeUserIds);
-    }
-
-    private void executeDisable(ChangeItem item) {
-        if (item.getTargetType() == TargetType.USER) {
-            User user = userRepository.findByUserId(item.getTargetKey())
-                .orElseThrow(() -> new BizException("IMPORT_TARGET_NOT_FOUND", "用户不存在"));
-            User disabled = user.toBuilder().status(UserStatus.DISABLED).build();
-            userRepository.save(disabled);
-            try {
-                ldapDirectoryService.disableUserIfExists(user.getUserId());
-                ldapGroupService.removeUserFromAllGroupsIfExists(user.getUserId());
-            } catch (RuntimeException exception) {
-                throw new LdapImportException(resolveMessage(exception));
-            }
-        }
     }
 
     private void executeResign(ChangeItem item) {
@@ -145,7 +144,6 @@ public class ImportExecutionApplicationService {
         User user = userRepository.findByUserId(item.getTargetKey())
             .orElseThrow(() -> new BizException("IMPORT_TARGET_NOT_FOUND", "用户不存在"));
         User resigned = user.toBuilder()
-            .status(UserStatus.DISABLED)
             .employmentStatus(EmploymentStatus.RESIGNED)
             .accountStatus("离职")
             .build();
@@ -159,7 +157,7 @@ public class ImportExecutionApplicationService {
     }
 
     private void syncUserLdapState(User user) {
-        if (user.getStatus() == UserStatus.ENABLED) {
+        if (userAccessPolicy.canAuthenticate(user)) {
             ldapDirectoryService.enableUserIfExists(user.getUserId());
         } else {
             ldapDirectoryService.disableUserIfExists(user.getUserId());

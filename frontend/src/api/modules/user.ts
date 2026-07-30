@@ -28,8 +28,8 @@ export function updateUser(userId: number, payload: UpdateUserPayload) {
   return request.put<never, UserItem>(`/v1/users/${userId}`, payload)
 }
 
-export function updateUserStatus(userId: number, statusCode: number) {
-  return request.put<never, void>(`/v1/users/${userId}/status`, { statusCode })
+export function updateUserAccess(userId: number, accessAllowed: boolean) {
+  return request.put<never, void>(`/v1/users/${userId}/access`, { accessAllowed })
 }
 
 export function deleteUser(userId: number) {

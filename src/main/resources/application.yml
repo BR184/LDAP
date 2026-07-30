@@ -96,6 +96,7 @@ app:
         enabled: ${APP_SYNC_FEISHU_FILE_IMPORT_ENABLED:true}
         root-dir: ${APP_SYNC_FEISHU_FILE_IMPORT_ROOT_DIR:docs/feishu-import}
         max-file-size-bytes: ${APP_SYNC_FEISHU_FILE_IMPORT_MAX_SIZE:2097152}
+        max-recovery-files: ${APP_SYNC_FEISHU_FILE_IMPORT_MAX_RECOVERY_FILES:1000}
     schedule:
       # 同步定时任务默认关闭，避免在原型环境或首次部署时误触发。
       feishu:

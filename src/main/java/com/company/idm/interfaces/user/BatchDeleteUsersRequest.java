@@ -11,6 +11,6 @@ public record BatchDeleteUsersRequest(
     List<@NotNull(message = "用户ID不能为空") Long> userIds,
     String userIdKeyword,
     String deptNameKeyword,
-    Integer statusCode
+    Boolean accessAllowed
 ) {
 }

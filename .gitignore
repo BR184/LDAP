@@ -3,6 +3,7 @@ target/
 .vscode/
 .tools/
 *.log
+__pycache__/
 scripts/pinyin-helper/node_modules/
 offline-images/
 ldap-offline-imagesv0.1/

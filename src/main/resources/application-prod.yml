@@ -35,3 +35,9 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
+
+management:
+  health:
+    # 邮件服务是可选能力；未配置 SMTP 时不得影响平台整体健康状态。
+    mail:
+      enabled: false

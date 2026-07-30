@@ -35,6 +35,18 @@ export function confirmImportPlan(batchId: number, payload: ConfirmImportPlanPay
   return request.post<never, ImportBatchDetail>(`/v1/import/plan/${batchId}/confirm`, payload)
 }
 
+export function skipImportConflict(batchId: number, itemId: number) {
+  return request.post<never, ImportBatchDetail>(`/v1/import/plan/${batchId}/conflicts/${itemId}/skip`)
+}
+
+export function mergeImportConflictByEmployeeNumber(batchId: number, itemId: number) {
+  return request.post<never, ImportBatchDetail>(`/v1/import/plan/${batchId}/conflicts/${itemId}/merge-by-employee-no`)
+}
+
+export function cancelImportPlan(batchId: number) {
+  return request.post<never, ImportBatchDetail>(`/v1/import/plan/${batchId}/cancel`)
+}
+
 export function executeImportPlan(batchId: number) {
   return request.post<never, ImportBatchDetail>(`/v1/import/plan/${batchId}/execute`, {}, {
     timeout: 180000,

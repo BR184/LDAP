@@ -5,7 +5,8 @@ import java.util.List;
 public record DepartmentReviewRowResponse(
     String targetKey,
     String deptName,
-    String parentDeptCode,
+    String parentDepartmentName,
+    String departmentPath,
     String status,
     String changeType,
     String changeSummary,

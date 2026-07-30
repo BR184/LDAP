@@ -2,7 +2,7 @@ package com.company.idm.application.sync.importplan;
 
 import com.company.idm.application.sync.LeaderRoleDerivationService;
 import com.company.idm.application.user.InitialPasswordPolicy;
-import com.company.idm.common.enums.UserStatus;
+import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
@@ -17,6 +17,7 @@ import com.company.idm.domain.sync.RollbackItem;
 import com.company.idm.domain.sync.RollbackItemStatus;
 import com.company.idm.domain.sync.TargetType;
 import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserAccessPolicy;
 import com.company.idm.domain.user.UserRepository;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +37,7 @@ public class ImportRollbackApplicationService {
     private final LeaderRoleDerivationService leaderRoleDerivationService;
     private final ImportJsonService jsonService;
     private final InitialPasswordPolicy initialPasswordPolicy;
+    private final UserAccessPolicy userAccessPolicy;
 
     @Transactional
     public ImportBatch generateRollbackPlan(Long batchId) {
@@ -111,10 +113,15 @@ public class ImportRollbackApplicationService {
 
     private void restoreFields(RollbackItem item) {
         if (item.getTargetType() == TargetType.USER) {
-            User snapshot = jsonService.readUserSnapshot(item.getRestoreJson()).toUser();
-            User saved = userRepository.save(snapshot);
+            UserImportSnapshot snapshot = jsonService.readUserSnapshot(item.getRestoreJson());
+            if (snapshot == null) {
+                throw new BizException("IMPORT_USER_SNAPSHOT_MISSING", "用户导入快照不存在");
+            }
+            User current = userRepository.findByUserId(item.getTargetKey())
+                .orElseThrow(() -> new BizException("IMPORT_TARGET_NOT_FOUND", "用户不存在"));
+            User saved = userRepository.save(snapshot.applyTo(current, current.getIntranetEmail()));
             ldapDirectoryService.createOrUpdateUser(saved, initialPasswordPolicy.resolve(saved.getMobile()));
-            if (saved.getStatus() == UserStatus.ENABLED) {
+            if (userAccessPolicy.canAuthenticate(saved)) {
                 ldapDirectoryService.enableUserIfExists(saved.getUserId());
             } else {
                 ldapDirectoryService.disableUserIfExists(saved.getUserId());
@@ -131,7 +138,11 @@ public class ImportRollbackApplicationService {
     private void disableCreatedUser(String userId) {
         User user = userRepository.findByUserId(userId)
             .orElseThrow(() -> new BizException("IMPORT_TARGET_NOT_FOUND", "用户不存在"));
-        userRepository.save(user.toBuilder().status(UserStatus.DISABLED).build());
+        User resigned = user.toBuilder()
+            .employmentStatus(EmploymentStatus.RESIGNED)
+            .accountStatus("已撤回")
+            .build();
+        userRepository.save(resigned);
         ldapDirectoryService.disableUserIfExists(userId);
         ldapGroupService.removeUserFromAllGroupsIfExists(userId);
     }

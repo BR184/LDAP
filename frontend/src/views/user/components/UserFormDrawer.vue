@@ -77,7 +77,7 @@ watch(
       form.mobile = props.user.mobile || ''
       form.employeeNo = props.user.employeeNo || ''
       form.deptCode = props.user.deptCode || ''
-      form.partTimeDeptCodes = [...(props.user.partTimeDeptCodes || [])]
+      form.partTimeDeptCodes = props.user.partTimeDepartments.map((department) => department.deptCode)
     }
 
     nextTick(() => formRef.value?.clearValidate())
@@ -134,6 +134,7 @@ async function handleSubmit() {
       employeeNo: form.employeeNo.trim(),
       deptCode: form.deptCode,
       partTimeDeptCodes,
+      accessAllowed: true,
       roleIds: [...form.roleIds],
     })
     return

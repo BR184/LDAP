@@ -2,6 +2,7 @@ package com.company.idm.interfaces.importplan;
 
 import com.company.idm.application.sync.importplan.DepartmentImportSnapshot;
 import com.company.idm.application.sync.importplan.ImportJsonService;
+import com.company.idm.application.sync.importplan.ImportReviewDisplayService;
 import com.company.idm.application.sync.importplan.UserImportSnapshot;
 import com.company.idm.domain.sync.ChangeItem;
 import com.company.idm.domain.sync.ChangeItemStatus;
@@ -22,31 +23,26 @@ import org.springframework.stereotype.Component;
 public class ImportPlanResponseAssembler {
 
     private final ImportJsonService jsonService;
+    private final ImportReviewDisplayService importReviewDisplayService;
 
     public ImportBatchDetailResponse toDetailResponse(ImportBatch batch) {
+        ImportReviewDisplayService.ReviewDirectory directory = importReviewDisplayService.buildDirectory(batch);
         return new ImportBatchDetailResponse(
             toBatchResponse(batch),
-            batch.getChangeItems().stream().map(this::toChangeItemResponse).toList(),
+            batch.getChangeItems().stream().map(item -> toChangeItemResponse(item, directory)).toList(),
             batch.getRollbackItems().stream().map(this::toRollbackItemResponse).toList()
         );
     }
 
     public ImportPlanReviewResponse toReviewResponse(ImportBatch batch) {
+        ImportReviewDisplayService.ReviewDirectory directory = importReviewDisplayService.buildDirectory(batch);
         List<ChangeItem> conflicts = batch.getChangeItems().stream()
             .filter(item -> item.getChangeType() == ChangeType.CONFLICT)
             .toList();
-        List<UserReviewRowResponse> userRows = buildUserRows(batch);
-        List<DepartmentReviewRowResponse> departmentRows = buildDepartmentRows(batch);
+        List<UserReviewRowResponse> userRows = buildUserRows(batch, directory);
+        List<DepartmentReviewRowResponse> departmentRows = buildDepartmentRows(batch, directory);
         List<ConflictReviewRowResponse> conflictRows = conflicts.stream()
-            .map(item -> new ConflictReviewRowResponse(
-                item.getId(),
-                item.getTargetType().name(),
-                item.getTargetKey(),
-                item.getBlockReason(),
-                item.getRiskLevel().name(),
-                item.getStatus().name(),
-                item.getErrorMessage()
-            ))
+            .map(this::toConflictReviewRow)
             .toList();
         ImportReviewStatistics statistics = new ImportReviewStatistics(
             userRows.size(),
@@ -81,22 +77,24 @@ public class ImportPlanResponseAssembler {
             batch.getRollbackBy(),
             batch.getRollbackAt(),
             batch.getExpiredAt(),
+            batch.getCancelledBy(),
+            batch.getCancelledAt(),
             batch.getRemark()
         );
     }
 
-    private ChangeItemResponse toChangeItemResponse(ChangeItem item) {
+    private ChangeItemResponse toChangeItemResponse(ChangeItem item, ImportReviewDisplayService.ReviewDirectory directory) {
+        ImportReviewDisplayService.FormattedField display = importReviewDisplayService.formatField(item, directory);
         return new ChangeItemResponse(
             item.getId(),
             item.getBatchId(),
             item.getTargetType().name(),
             item.getTargetKey(),
             item.getChangeType().name(),
-            item.getFieldName(),
-            item.getBeforeValue(),
-            item.getAfterValue(),
-            item.getBeforeJson(),
-            item.getAfterJson(),
+            display.fieldKey() == null ? null : display.fieldKey().name(),
+            display.fieldLabel(),
+            display.beforeValue(),
+            display.afterValue(),
             item.getObjectVersion(),
             item.isDefaultEnabled(),
             item.isEnabled(),
@@ -104,11 +102,48 @@ public class ImportPlanResponseAssembler {
             item.isConfirmed(),
             item.getRiskLevel().name(),
             item.getBlockReason(),
+            item.getConflictCode() == null ? null : item.getConflictCode().name(),
+            item.availableResolutionActions().stream().map(Enum::name).toList(),
             item.getStatus().name(),
             item.getErrorMessage(),
             item.getRetryCount(),
-            item.getExecutedAt()
+            item.getExecutedAt(),
+            item.getResolutionAction() == null ? null : item.getResolutionAction().name(),
+            item.getResolvedBy(),
+            item.getResolvedAt()
         );
+    }
+
+    private ConflictReviewRowResponse toConflictReviewRow(ChangeItem item) {
+        UserImportSnapshot before = conflictUserSnapshot(item.getTargetType(), item.getBeforeJson());
+        UserImportSnapshot after = conflictUserSnapshot(item.getTargetType(), item.getAfterJson());
+        return new ConflictReviewRowResponse(
+            item.getId(),
+            item.getTargetType().name(),
+            item.getTargetKey(),
+            after == null ? null : after.realName(),
+            after == null ? (before == null ? null : before.employeeNo()) : after.employeeNo(),
+            before == null ? null : before.userId(),
+            before == null ? null : before.realName(),
+            item.getBlockReason(),
+            item.getConflictCode() == null ? null : item.getConflictCode().name(),
+            item.availableResolutionActions().stream().map(Enum::name).toList(),
+            item.getRiskLevel().name(),
+            item.getStatus().name(),
+            item.getErrorMessage(),
+            item.getResolutionAction() == null ? null : item.getResolutionAction().name(),
+            item.getResolvedBy(),
+            item.getResolvedAt()
+        );
+    }
+
+    private UserImportSnapshot conflictUserSnapshot(TargetType targetType, String json) {
+        if ((targetType != TargetType.USER && targetType != TargetType.LDAP_USER)
+            || json == null
+            || json.isBlank()) {
+            return null;
+        }
+        return jsonService.readUserSnapshot(json);
     }
 
     private RollbackItemResponse toRollbackItemResponse(RollbackItem item) {
@@ -126,21 +161,28 @@ public class ImportPlanResponseAssembler {
         );
     }
 
-    private List<UserReviewRowResponse> buildUserRows(ImportBatch batch) {
+    private List<UserReviewRowResponse> buildUserRows(
+        ImportBatch batch,
+        ImportReviewDisplayService.ReviewDirectory directory
+    ) {
         Map<String, List<ChangeItem>> grouped = groupItems(batch, TargetType.USER);
         List<UserReviewRowResponse> rows = new ArrayList<>();
         for (Map.Entry<String, List<ChangeItem>> entry : grouped.entrySet()) {
             List<ChangeItem> items = entry.getValue();
             UserImportSnapshot snapshot = userSnapshot(items);
+            ImportReviewDisplayService.DepartmentPresentation department = importReviewDisplayService.department(
+                snapshot == null ? null : snapshot.deptCode(),
+                directory
+            );
             rows.add(new UserReviewRowResponse(
                 entry.getKey(),
                 snapshot == null ? null : snapshot.realName(),
                 snapshot == null ? null : snapshot.employeeNo(),
-                snapshot == null ? null : snapshot.deptCode(),
+                department.departmentName(),
+                department.departmentPath(),
                 snapshot == null ? null : snapshot.jobTitle(),
                 snapshot == null ? null : snapshot.leaderRef(),
                 snapshot == null ? null : snapshot.directLeaderRaw(),
-                snapshot == null || snapshot.status() == null ? null : snapshot.status().name(),
                 snapshot == null || snapshot.employmentStatus() == null ? null : snapshot.employmentStatus().name(),
                 rowChangeType(items),
                 changeSummary(items),
@@ -149,22 +191,34 @@ public class ImportPlanResponseAssembler {
                 items.stream().anyMatch(ChangeItem::isRequiresConfirmation),
                 items.stream().allMatch(ChangeItem::isConfirmed),
                 items.stream().map(ChangeItem::getId).toList(),
-                items.stream().map(this::toFieldChange).toList()
+                items.stream().map(item -> toFieldChange(item, directory)).toList()
             ));
         }
         return rows;
     }
 
-    private List<DepartmentReviewRowResponse> buildDepartmentRows(ImportBatch batch) {
+    private List<DepartmentReviewRowResponse> buildDepartmentRows(
+        ImportBatch batch,
+        ImportReviewDisplayService.ReviewDirectory directory
+    ) {
         Map<String, List<ChangeItem>> grouped = groupItems(batch, TargetType.DEPARTMENT);
         List<DepartmentReviewRowResponse> rows = new ArrayList<>();
         for (Map.Entry<String, List<ChangeItem>> entry : grouped.entrySet()) {
             List<ChangeItem> items = entry.getValue();
             DepartmentImportSnapshot snapshot = departmentSnapshot(items);
+            ImportReviewDisplayService.DepartmentPresentation parentDepartment = importReviewDisplayService.department(
+                snapshot == null ? null : snapshot.parentDeptCode(),
+                directory
+            );
+            ImportReviewDisplayService.DepartmentPresentation department = importReviewDisplayService.department(
+                snapshot == null ? null : snapshot.deptCode(),
+                directory
+            );
             rows.add(new DepartmentReviewRowResponse(
                 entry.getKey(),
                 snapshot == null ? null : snapshot.deptName(),
-                snapshot == null ? null : snapshot.parentDeptCode(),
+                parentDepartment.departmentName(),
+                department.departmentPath(),
                 snapshot == null || snapshot.status() == null ? null : String.valueOf(snapshot.status()),
                 rowChangeType(items),
                 changeSummary(items),
@@ -173,7 +227,7 @@ public class ImportPlanResponseAssembler {
                 items.stream().anyMatch(ChangeItem::isRequiresConfirmation),
                 items.stream().allMatch(ChangeItem::isConfirmed),
                 items.stream().map(ChangeItem::getId).toList(),
-                items.stream().map(this::toFieldChange).toList()
+                items.stream().map(item -> toFieldChange(item, directory)).toList()
             ));
         }
         return rows;
@@ -189,12 +243,14 @@ public class ImportPlanResponseAssembler {
         return result;
     }
 
-    private FieldChangeResponse toFieldChange(ChangeItem item) {
+    private FieldChangeResponse toFieldChange(ChangeItem item, ImportReviewDisplayService.ReviewDirectory directory) {
+        ImportReviewDisplayService.FormattedField display = importReviewDisplayService.formatField(item, directory);
         return new FieldChangeResponse(
             item.getId(),
-            item.getFieldName(),
-            item.getBeforeValue(),
-            item.getAfterValue(),
+            display.fieldKey() == null ? null : display.fieldKey().name(),
+            display.fieldLabel(),
+            display.beforeValue(),
+            display.afterValue(),
             item.getRiskLevel().name(),
             item.isEnabled(),
             item.isRequiresConfirmation(),
@@ -260,8 +316,9 @@ public class ImportPlanResponseAssembler {
             };
         }
         return "修改 " + items.stream()
-            .map(ChangeItem::getFieldName)
-            .filter(field -> field != null && !field.isBlank())
+            .map(ChangeItem::getFieldKey)
+            .filter(java.util.Objects::nonNull)
+            .map(com.company.idm.domain.sync.ImportFieldKey::getLabel)
             .distinct()
             .toList();
     }

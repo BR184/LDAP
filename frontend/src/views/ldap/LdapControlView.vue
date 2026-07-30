@@ -6,6 +6,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { Promotion } from '@element-plus/icons-vue'
 import { executeLdapPrecheck, fetchLdapFramework } from '@/api/modules/ldap'
 import type { LdapPrecheckPayload, LdapPrecheckReport } from '@/types/ldap'
+import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
 
 const formRef = ref<FormInstance>()
 const precheckReport = ref<LdapPrecheckReport | null>(null)
@@ -153,7 +154,8 @@ function resetPrecheckForm() {
           <el-tag type="info" size="large">模式：{{ precheckReport.mode }}</el-tag>
         </div>
 
-        <el-table :data="precheckReport.items" border>
+        <PersistentTableScrollFrame>
+          <el-table :data="precheckReport.items" border>
           <el-table-column prop="name" label="检查项" min-width="220" />
           <el-table-column label="状态" width="120" align="center">
             <template #default="{ row }">
@@ -162,7 +164,8 @@ function resetPrecheckForm() {
           </el-table-column>
           <el-table-column prop="code" label="编码" min-width="220" />
           <el-table-column prop="detail" label="结果说明" min-width="420" show-overflow-tooltip />
-        </el-table>
+          </el-table>
+        </PersistentTableScrollFrame>
       </template>
 
       <el-empty v-else description="尚未执行 LDAP 预检" />

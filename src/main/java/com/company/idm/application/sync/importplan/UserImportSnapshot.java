@@ -1,8 +1,6 @@
 package com.company.idm.application.sync.importplan;
 
 import com.company.idm.common.enums.EmploymentStatus;
-import com.company.idm.common.enums.SourceType;
-import com.company.idm.common.enums.UserStatus;
 import com.company.idm.domain.user.User;
 import java.util.List;
 
@@ -11,7 +9,6 @@ public record UserImportSnapshot(
     String userId,
     String realName,
     String email,
-    String intranetEmail,
     String mobile,
     String employeeNo,
     String deptCode,
@@ -20,11 +17,7 @@ public record UserImportSnapshot(
     String leaderRef,
     String accountStatus,
     List<String> partTimeDeptCodes,
-    UserStatus status,
-    EmploymentStatus employmentStatus,
-    SourceType sourceType,
-    String ldapDn,
-    Integer tokenVersion
+    EmploymentStatus employmentStatus
 ) {
 
     public static UserImportSnapshot from(User user) {
@@ -36,7 +29,6 @@ public record UserImportSnapshot(
             user.getUserId(),
             user.getRealName(),
             user.getEmail(),
-            user.getIntranetEmail(),
             user.getMobile(),
             user.getEmployeeNo(),
             user.getDeptCode(),
@@ -45,21 +37,27 @@ public record UserImportSnapshot(
             user.getLeaderRef(),
             user.getAccountStatus(),
             user.getPartTimeDeptCodes(),
-            user.getStatus(),
-            user.getEmploymentStatus(),
-            user.getSourceType(),
-            user.getLdapDn(),
-            user.getTokenVersion()
+            user.getEmploymentStatus()
         );
     }
 
-    public User toUser() {
-        return User.builder()
-            .id(id)
-            .userId(userId)
+    /**
+     * Applies the fields owned by the personnel source to the current authoritative user.
+     * Local access, LDAP and token fields intentionally remain on the current user.
+     */
+    public User applyTo(User currentUser, String intranetEmail) {
+        User.UserBuilder builder = currentUser == null
+            ? User.builder()
+                .id(id)
+                .userId(userId)
+                .intranetEmail(intranetEmail)
+                .accessAllowed(true)
+                .sourceType(com.company.idm.common.enums.SourceType.FEISHU)
+                .tokenVersion(0)
+            : currentUser.toBuilder();
+        return builder
             .realName(realName)
             .email(email)
-            .intranetEmail(intranetEmail)
             .mobile(mobile)
             .employeeNo(employeeNo)
             .deptCode(deptCode)
@@ -68,11 +66,7 @@ public record UserImportSnapshot(
             .leaderRef(leaderRef)
             .accountStatus(accountStatus)
             .partTimeDeptCodes(partTimeDeptCodes == null ? List.of() : partTimeDeptCodes)
-            .status(status)
             .employmentStatus(employmentStatus)
-            .sourceType(sourceType)
-            .ldapDn(ldapDn)
-            .tokenVersion(tokenVersion)
             .build();
     }
 }

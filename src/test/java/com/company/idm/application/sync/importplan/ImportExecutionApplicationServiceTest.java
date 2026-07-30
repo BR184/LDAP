@@ -12,7 +12,6 @@ import com.company.idm.application.sync.LeaderRoleDerivationService;
 import com.company.idm.application.user.InitialPasswordPolicy;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
-import com.company.idm.common.enums.UserStatus;
 import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.domain.ldap.LdapDirectoryService;
 import com.company.idm.domain.ldap.LdapGroupService;
@@ -28,6 +27,7 @@ import com.company.idm.domain.sync.ImportSourceType;
 import com.company.idm.domain.sync.RiskLevel;
 import com.company.idm.domain.sync.TargetType;
 import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.UserAccessPolicy;
 import com.company.idm.domain.user.UserRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -75,7 +75,9 @@ class ImportExecutionApplicationServiceTest {
             policyRefreshService,
             leaderRoleDerivationService,
             jsonService,
-            new InitialPasswordPolicy()
+            new InitialPasswordPolicy(),
+            new UserAccessPolicy(),
+            new com.company.idm.application.user.IntranetEmailGenerationService(userRepository)
         );
     }
 
@@ -105,12 +107,13 @@ class ImportExecutionApplicationServiceTest {
         when(importBatchRepository.findById(1L)).thenReturn(Optional.of(batch));
         when(importBatchRepository.save(any(ImportBatch.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(jsonService.readUserSnapshot("user-json")).thenReturn(UserImportSnapshot.from(importedUser));
+        when(userRepository.findByUserId(importedUser.getUserId())).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(ldapDirectoryService.createOrUpdateUser(any(User.class), eq("123456"))).thenReturn(null);
         doThrow(new IllegalStateException("department group is missing"))
             .when(ldapGroupService)
             .syncUserGroupsToExactState(eq(importedUser.getUserId()), any());
-        when(userRepository.findActiveUsers()).thenReturn(List.of(importedUser, existingManager));
+        when(userRepository.findActiveEmployees()).thenReturn(List.of(importedUser, existingManager));
         when(roleRepository.findByCode("NORMAL_USER")).thenReturn(Optional.of(normalUserRole));
 
         ImportBatch result = service.executePlan(1L, "admin");
@@ -149,14 +152,61 @@ class ImportExecutionApplicationServiceTest {
         when(importBatchRepository.findById(1L)).thenReturn(Optional.of(batch));
         when(importBatchRepository.save(any(ImportBatch.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(jsonService.readUserSnapshot("user-json")).thenReturn(UserImportSnapshot.from(importedUser));
+        when(userRepository.findByUserId(importedUser.getUserId())).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(ldapDirectoryService.createOrUpdateUser(any(User.class), any())).thenReturn(null);
-        when(userRepository.findActiveUsers()).thenReturn(List.of(importedUser));
+        when(userRepository.findActiveEmployees()).thenReturn(List.of(importedUser));
         when(roleRepository.findByCode("NORMAL_USER")).thenReturn(Optional.of(normalUserRole));
 
         service.executePlan(1L, "admin");
 
         verify(ldapDirectoryService).createOrUpdateUser(any(User.class), eq("13800138000"));
+    }
+
+    @Test
+    void preservesAdministratorAccessDecisionWhenImportUpdatesAnExistingUser() {
+        User existingUser = activeUser(10L, "employee-a").toBuilder()
+            .accessAllowed(false)
+            .realName("导入前姓名")
+            .build();
+        User importedUser = activeUser(10L, "employee-a").toBuilder()
+            .realName("导入后姓名")
+            .build();
+        ChangeItem item = ChangeItem.builder()
+            .id(100L)
+            .targetType(TargetType.USER)
+            .targetKey(importedUser.getUserId())
+            .changeType(ChangeType.UPDATE)
+            .afterJson("user-json")
+            .enabled(true)
+            .riskLevel(RiskLevel.LOW)
+            .status(ChangeItemStatus.PENDING)
+            .build();
+        ImportBatch batch = ImportBatch.builder()
+            .id(1L)
+            .sourceType(ImportSourceType.MANUAL_FILE)
+            .status(ImportBatchStatus.CONFIRMED)
+            .changeItems(List.of(item))
+            .expiredAt(LocalDateTime.now().plusMinutes(10))
+            .build();
+        Role normalUserRole = Role.builder().id(2L).roleCode("NORMAL_USER").status(1).build();
+
+        when(importBatchRepository.findById(1L)).thenReturn(Optional.of(batch));
+        when(importBatchRepository.save(any(ImportBatch.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jsonService.readUserSnapshot("user-json")).thenReturn(UserImportSnapshot.from(importedUser));
+        when(userRepository.findByUserId(importedUser.getUserId())).thenReturn(Optional.of(existingUser));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(ldapDirectoryService.createOrUpdateUser(any(User.class), any())).thenReturn(null);
+        when(userRepository.findActiveEmployees()).thenReturn(List.of());
+        when(roleRepository.findByCode("NORMAL_USER")).thenReturn(Optional.of(normalUserRole));
+
+        service.executePlan(1L, "admin");
+
+        org.mockito.ArgumentCaptor<User> savedUser = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(savedUser.capture());
+        assertThat(savedUser.getValue().isAccessAllowed()).isFalse();
+        assertThat(savedUser.getValue().getRealName()).isEqualTo("导入后姓名");
+        verify(ldapDirectoryService).disableUserIfExists("employee-a");
     }
 
     private User activeUser(Long id, String userId) {
@@ -166,7 +216,7 @@ class ImportExecutionApplicationServiceTest {
             .realName(userId)
             .deptCode("D001")
             .partTimeDeptCodes(List.of())
-            .status(UserStatus.ENABLED)
+            .accessAllowed(true)
             .employmentStatus(EmploymentStatus.ACTIVE)
             .sourceType(SourceType.FEISHU)
             .tokenVersion(0)

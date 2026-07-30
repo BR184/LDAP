@@ -5,10 +5,8 @@ import com.company.idm.application.sync.feishu.FeishuFullImportDocument;
 import com.company.idm.application.sync.feishu.FeishuImportDocumentResolver;
 import com.company.idm.application.sync.feishu.FeishuImportUploadService;
 import com.company.idm.application.sync.feishu.FeishuUserPayload;
-import com.company.idm.application.user.IntranetEmailGenerationService;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
-import com.company.idm.common.enums.UserStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
@@ -18,6 +16,7 @@ import com.company.idm.domain.sync.ChangeType;
 import com.company.idm.domain.sync.ImportBatch;
 import com.company.idm.domain.sync.ImportBatchRepository;
 import com.company.idm.domain.sync.ImportBatchStatus;
+import com.company.idm.domain.sync.ImportConflictCode;
 import com.company.idm.domain.sync.ImportSourceType;
 import com.company.idm.domain.sync.RiskLevel;
 import com.company.idm.domain.sync.TargetType;
@@ -55,9 +54,11 @@ public class ImportPlanApplicationService {
     private final FeishuImportUploadService uploadService;
     private final DepartmentRepository departmentRepository;
     private final UserRepository userRepository;
-    private final IntranetEmailGenerationService intranetEmailGenerationService;
+    private final ImportUserTargetFactory userTargetFactory;
     private final ImportDiffPolicyService diffPolicyService;
     private final ImportConflictDetector conflictDetector;
+    private final ImportConflictImpactResolver conflictImpactResolver;
+    private final ImportEmployeeNumberMergeService employeeNumberMergeService;
     private final ImportJsonService jsonService;
 
     @Transactional
@@ -91,6 +92,43 @@ public class ImportPlanApplicationService {
         return importBatchRepository.save(batch);
     }
 
+    @Transactional
+    public ImportBatch resolveConflictBySkipping(Long batchId, Long conflictItemId, String resolvedBy) {
+        ImportBatch batch = findById(batchId);
+        ChangeItem conflict = batch.getChangeItems().stream()
+            .filter(item -> conflictItemId != null && conflictItemId.equals(item.getId()))
+            .findFirst()
+            .orElseThrow(() -> new BizException("IMPORT_CONFLICT_NOT_FOUND", "阻断冲突不存在"));
+        List<Long> relatedItemIds = conflictImpactResolver.resolveRelatedItemIds(conflict, batch.getChangeItems());
+        batch.resolveConflictBySkipping(conflictItemId, relatedItemIds, resolvedBy);
+        return importBatchRepository.save(batch);
+    }
+
+    @Transactional
+    public ImportBatch resolveConflictByMergingEmployeeNumber(Long batchId, Long conflictItemId, String resolvedBy) {
+        ImportBatch batch = findById(batchId);
+        ChangeItem conflict = findConflict(batch, conflictItemId);
+        ImportEmployeeNumberMergeService.MergePreparation preparation = employeeNumberMergeService.prepare(
+            batch,
+            conflict,
+            batch.getChangeItems()
+        );
+        batch.resolveConflictByMerging(
+            conflictItemId,
+            preparation.relatedItemIds(),
+            preparation.updateItems(),
+            resolvedBy
+        );
+        return importBatchRepository.save(batch);
+    }
+
+    @Transactional
+    public ImportBatch cancelPlan(Long batchId, String cancelledBy) {
+        ImportBatch batch = findById(batchId);
+        batch.cancel(cancelledBy);
+        return importBatchRepository.save(batch);
+    }
+
     private ImportBatch generatePlan(
         String documentPath,
         String fileName,
@@ -117,15 +155,23 @@ public class ImportPlanApplicationService {
             .build();
 
         List<ChangeItem> conflicts = new ArrayList<>();
-        conflictDetector.detectFileLevelConflicts(document.departments(), document.users(), conflicts);
+        ImportFileConflictIndex fileConflicts = conflictDetector.detectFileLevelConflicts(
+            document.departments(),
+            document.users(),
+            conflicts
+        );
         conflicts.forEach(batch::addChangeItem);
-        Map<String, Department> plannedDepartments = generateDepartmentItems(document.departments(), batch);
-        generateUserItems(document.users(), batch, plannedDepartments);
+        Map<String, Department> plannedDepartments = generateDepartmentItems(document.departments(), batch, fileConflicts);
+        generateUserItems(document.users(), batch, plannedDepartments, fileConflicts);
         generateResignItems(document.users()).forEach(batch::addChangeItem);
         return importBatchRepository.save(batch);
     }
 
-    private Map<String, Department> generateDepartmentItems(List<FeishuDepartmentPayload> payloads, ImportBatch batch) {
+    private Map<String, Department> generateDepartmentItems(
+        List<FeishuDepartmentPayload> payloads,
+        ImportBatch batch,
+        ImportFileConflictIndex fileConflicts
+    ) {
         Map<String, FeishuDepartmentPayload> payloadByExternalId = new LinkedHashMap<>();
         for (FeishuDepartmentPayload payload : payloads) {
             payloadByExternalId.put(payload.externalId(), payload);
@@ -142,11 +188,17 @@ public class ImportPlanApplicationService {
         LinkedHashSet<String> visiting = new LinkedHashSet<>();
         for (FeishuDepartmentPayload payload : payloads) {
             try {
+                if (fileConflicts.blocksDepartment(payload)) {
+                    continue;
+                }
                 Department existing = existingByExternalId.get(payload.externalId());
                 Department target = resolveDepartment(payload, payloadByExternalId, existingByExternalId, existingByCode, plannedByExternalId, visiting);
                 List<ChangeItem> conflicts = new ArrayList<>();
                 conflictDetector.detectDepartmentConflict(payload, existing, existingByCode.get(payload.departmentCode()), conflicts);
                 conflicts.forEach(batch::addChangeItem);
+                if (!conflicts.isEmpty()) {
+                    continue;
+                }
                 if (existing == null) {
                     batch.addChangeItem(createDepartmentCreateItem(target));
                 } else {
@@ -209,7 +261,12 @@ public class ImportPlanApplicationService {
         return target;
     }
 
-    private void generateUserItems(List<FeishuUserPayload> payloads, ImportBatch batch, Map<String, Department> plannedDepartments) {
+    private void generateUserItems(
+        List<FeishuUserPayload> payloads,
+        ImportBatch batch,
+        Map<String, Department> plannedDepartments,
+        ImportFileConflictIndex fileConflicts
+    ) {
         Map<String, Department> departmentByExternalId = new HashMap<>();
         for (Department department : departmentRepository.findAll()) {
             if (department.getExternalId() != null && !department.getExternalId().isBlank()) {
@@ -217,15 +274,31 @@ public class ImportPlanApplicationService {
             }
         }
         departmentByExternalId.putAll(plannedDepartments);
-        Map<LeaderMatchKey, String> leaderRefs = buildImportedLeaderRefs(payloads);
+        ImportUserTargetFactory.TargetContext userTargetContext = userTargetFactory.createContext(
+            departmentByExternalId,
+            payloads
+        );
         for (FeishuUserPayload payload : payloads) {
             try {
                 User existingByUserId = userRepository.findByUserId(require(payload.userId(), "飞书 user_id 不能为空")).orElse(null);
                 User existingByEmployeeNo = userRepository.findByEmployeeNo(payload.employeeNo()).orElse(null);
                 List<ChangeItem> conflicts = new ArrayList<>();
                 conflictDetector.detectUserConflict(payload, existingByUserId, existingByEmployeeNo, conflicts);
+                if (!fileConflicts.blocksUser(payload)
+                    && conflicts.size() == 1
+                    && conflicts.get(0).getConflictCode() == ImportConflictCode.EMPLOYEE_NO_OWNED_BY_ANOTHER_USER) {
+                    User mergeTarget = userTargetFactory.build(payload, existingByEmployeeNo, userTargetContext);
+                    ChangeItem mergeableConflict = conflicts.get(0).toBuilder()
+                        .beforeJson(jsonService.toJson(UserImportSnapshot.from(existingByEmployeeNo)))
+                        .afterJson(jsonService.toJson(UserImportSnapshot.from(mergeTarget)))
+                        .build();
+                    conflicts = List.of(mergeableConflict);
+                }
                 conflicts.forEach(batch::addChangeItem);
-                User target = buildUserTarget(payload, existingByUserId, departmentByExternalId, leaderRefs);
+                if (fileConflicts.blocksUser(payload) || !conflicts.isEmpty()) {
+                    continue;
+                }
+                User target = userTargetFactory.build(payload, existingByUserId, userTargetContext);
                 if (existingByUserId == null) {
                     batch.addChangeItem(createUserCreateItem(target));
                 } else {
@@ -238,50 +311,6 @@ public class ImportPlanApplicationService {
                 batch.addChangeItem(blocker(TargetType.USER, payload.userId(), exception.getMessage()));
             }
         }
-    }
-
-    private User buildUserTarget(
-        FeishuUserPayload payload,
-        User existing,
-        Map<String, Department> departmentByExternalId,
-        Map<LeaderMatchKey, String> leaderRefs
-    ) {
-        Department mainDepartment = departmentByExternalId.get(payload.mainDepartmentExternalId());
-        if (mainDepartment == null) {
-            throw new BizException("FEISHU_USER_DEPT_NOT_FOUND", "用户主部门无法匹配");
-        }
-        List<String> partTimeDeptCodes = new ArrayList<>();
-        if (payload.partTimeDepartmentExternalIds() != null) {
-            for (String externalId : payload.partTimeDepartmentExternalIds()) {
-                Department department = departmentByExternalId.get(externalId);
-                if (department == null) {
-                    throw new BizException("FEISHU_USER_DEPT_NOT_FOUND", "用户兼职部门无法匹配");
-                }
-                partTimeDeptCodes.add(department.getDeptCode());
-            }
-        }
-        String userId = existing == null ? payload.userId() : existing.getUserId();
-        return User.builder()
-            .id(existing == null ? null : existing.getId())
-            .userId(userId)
-            .realName(payload.realName())
-            .email(preserve(payload.email(), existing == null ? null : existing.getEmail()))
-            .intranetEmail(resolveIntranetEmail(payload, existing))
-            .mobile(preserve(payload.mobile(), existing == null ? null : existing.getMobile()))
-            .employeeNo(payload.employeeNo())
-            .deptCode(mainDepartment.getDeptCode())
-            .jobTitle(blankToNull(payload.jobTitle()))
-            .directLeaderRaw(blankToNull(payload.directLeaderRaw()))
-            .leaderRef(resolveLeaderRef(payload, existing, leaderRefs))
-            .accountStatus(blankToNull(payload.accountStatus()))
-            .partTimeDeptCodes(partTimeDeptCodes)
-            .status(UserStatus.fromCode(payload.status()))
-            .employmentStatus(UserStatus.fromCode(payload.status()) == UserStatus.DISABLED ? EmploymentStatus.RESIGNED : EmploymentStatus.ACTIVE)
-            .sourceType(SourceType.FEISHU)
-            .ldapDn(existing == null ? null : existing.getLdapDn())
-            .tokenVersion(existing == null ? 0 : existing.getTokenVersion())
-            .roleCodes(existing == null ? java.util.Set.of() : existing.getRoleCodes())
-            .build();
     }
 
     private ChangeItem createDepartmentCreateItem(Department target) {
@@ -300,8 +329,7 @@ public class ImportPlanApplicationService {
             .collect(Collectors.toSet());
         return userRepository.findAll().stream()
             .filter(user -> user.getSourceType() == SourceType.FEISHU)
-            .filter(user -> user.getStatus() == UserStatus.ENABLED)
-            .filter(user -> user.getEmploymentStatus() != EmploymentStatus.RESIGNED)
+            .filter(user -> user.getEmploymentStatus() == EmploymentStatus.ACTIVE)
             .filter(user -> !importedUserIds.contains(user.getUserId()))
             .map(this::createUserResignItem)
             .toList();
@@ -309,7 +337,6 @@ public class ImportPlanApplicationService {
 
     private ChangeItem createUserResignItem(User current) {
         User resigned = current.toBuilder()
-            .status(UserStatus.DISABLED)
             .employmentStatus(EmploymentStatus.RESIGNED)
             .accountStatus("离职")
             .build();
@@ -357,46 +384,18 @@ public class ImportPlanApplicationService {
             .requiresConfirmation(true)
             .confirmed(false)
             .riskLevel(RiskLevel.BLOCKER)
+            .conflictCode(ImportConflictCode.OBJECT_VALIDATION_FAILED)
             .blockReason(reason)
             .status(ChangeItemStatus.PENDING)
             .retryCount(0)
             .build();
     }
 
-    private Map<LeaderMatchKey, String> buildImportedLeaderRefs(List<FeishuUserPayload> users) {
-        Map<LeaderMatchKey, String> result = new HashMap<>();
-        for (FeishuUserPayload payload : users) {
-            result.put(new LeaderMatchKey(payload.realName(), payload.employeeNo()), payload.userId());
-        }
-        return result;
-    }
-
-    private String resolveLeaderRef(FeishuUserPayload payload, User existing, Map<LeaderMatchKey, String> leaderRefs) {
-        String raw = payload.directLeaderRaw();
-        if (raw == null || raw.isBlank()) {
-            return existing == null ? null : existing.getLeaderRef();
-        }
-        String imported = leaderRefs.entrySet().stream()
-            .filter(entry -> raw.trim().contains(entry.getKey().realName()))
-            .map(Map.Entry::getValue)
+    private ChangeItem findConflict(ImportBatch batch, Long conflictItemId) {
+        return batch.getChangeItems().stream()
+            .filter(item -> conflictItemId != null && conflictItemId.equals(item.getId()))
             .findFirst()
-            .orElse(null);
-        return imported == null && existing != null ? existing.getLeaderRef() : imported;
-    }
-
-    private String resolveIntranetEmail(FeishuUserPayload payload, User existing) {
-        if (existing != null && existing.getIntranetEmail() != null && !existing.getIntranetEmail().isBlank()) {
-            return existing.getIntranetEmail();
-        }
-        return intranetEmailGenerationService.generate(payload.userId(), existing == null ? null : existing.getId());
-    }
-
-    private String preserve(String incoming, String existing) {
-        return incoming == null || incoming.isBlank() ? existing : incoming;
-    }
-
-    private String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
+            .orElseThrow(() -> new BizException("IMPORT_CONFLICT_NOT_FOUND", "阻断冲突不存在"));
     }
 
     private String require(String value, String message) {
@@ -428,6 +427,4 @@ public class ImportPlanApplicationService {
         }
     }
 
-    private record LeaderMatchKey(String realName, String employeeNo) {
-    }
 }

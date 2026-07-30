@@ -2,6 +2,8 @@ package com.company.idm.interfaces.user;
 
 import com.company.idm.application.rbac.AssignUserRolesCommand;
 import com.company.idm.application.rbac.RbacApplicationService;
+import com.company.idm.application.department.DepartmentDisplay;
+import com.company.idm.application.department.DepartmentPathService;
 import com.company.idm.application.user.AdminResetPasswordCommand;
 import com.company.idm.application.user.BatchDeleteUsersCommand;
 import com.company.idm.application.user.BatchDeleteUsersResult;
@@ -11,12 +13,14 @@ import com.company.idm.application.user.DeleteUserCommand;
 import com.company.idm.application.user.PasswordResetApplicationService;
 import com.company.idm.application.user.PasswordResetAuthorizationService;
 import com.company.idm.application.user.UpdateUserCommand;
-import com.company.idm.application.user.UpdateUserStatusCommand;
+import com.company.idm.application.user.UpdateUserAccessCommand;
 import com.company.idm.application.user.UserApplicationService;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
+import com.company.idm.domain.department.Department;
+import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.infrastructure.util.ClientIpUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -45,6 +49,8 @@ public class UserController {
     private final PasswordResetAuthorizationService passwordResetAuthorizationService;
     private final UserRepository userRepository;
     private final RbacApplicationService rbacApplicationService;
+    private final DepartmentRepository departmentRepository;
+    private final DepartmentPathService departmentPathService;
 
     @GetMapping
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'GET')")
@@ -52,16 +58,21 @@ public class UserController {
         @RequestParam(required = false) String userId,
         @RequestParam(required = false) String deptName,
         @RequestParam(required = false) String deptCode,
-        @RequestParam(required = false) Integer status,
+        @RequestParam(required = false) Boolean accessAllowed,
         @AuthenticationPrincipal(expression = "userId") String username
     ) {
         String departmentKeyword = deptName != null && !deptName.isBlank() ? deptName : deptCode;
-        List<User> userList = userApplicationService.listUsers(userId, departmentKeyword, status);
+        List<User> userList = userApplicationService.listUsers(userId, departmentKeyword, accessAllowed);
         User operator = resolveOperator(username);
         List<User> organizationSnapshot = userRepositorySnapshot();
+        List<Department> departmentSnapshot = departmentRepository.findAll();
         Set<String> operatorPermissionCodes = passwordResetAuthorizationService.loadPermissionCodes(operator);
         List<UserResponse> users = userList.stream()
-            .map(user -> toResponse(user, canResetPassword(operator, user, organizationSnapshot, operatorPermissionCodes)))
+            .map(user -> toResponse(
+                user,
+                canResetPassword(operator, user, organizationSnapshot, operatorPermissionCodes),
+                departmentSnapshot
+            ))
             .toList();
         return ApiResponse.success(users);
     }
@@ -77,7 +88,8 @@ public class UserController {
         Set<String> operatorPermissionCodes = passwordResetAuthorizationService.loadPermissionCodes(operator);
         return ApiResponse.success(toResponse(
             user,
-            canResetPassword(operator, user, userRepositorySnapshot(), operatorPermissionCodes)
+            canResetPassword(operator, user, userRepositorySnapshot(), operatorPermissionCodes),
+            departmentRepository.findAll()
         ));
     }
 
@@ -96,10 +108,11 @@ public class UserController {
             request.employeeNo(),
             request.deptCode(),
             request.partTimeDeptCodes(),
+            request.accessAllowed(),
             request.roleIds(),
             username
         ));
-        return ApiResponse.success(toResponse(user));
+        return ApiResponse.success(toResponse(user, false, departmentRepository.findAll()));
     }
 
     @PutMapping("/{id}")
@@ -121,17 +134,17 @@ public class UserController {
             request.partTimeDeptCodes(),
             username
         ));
-        return ApiResponse.success(toResponse(user));
+        return ApiResponse.success(toResponse(user, false, departmentRepository.findAll()));
     }
 
-    @PutMapping("/{id}/status")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/status', 'PUT')")
-    public ApiResponse<Void> updateStatus(
+    @PutMapping("/{id}/access")
+    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/access', 'PUT')")
+    public ApiResponse<Void> updateAccess(
         @PathVariable Long id,
-        @Valid @RequestBody UpdateUserStatusRequest request,
+        @Valid @RequestBody UpdateUserAccessRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
     ) {
-        userApplicationService.updateStatus(new UpdateUserStatusCommand(id, request.statusCode(), username));
+        userApplicationService.updateAccess(new UpdateUserAccessCommand(id, request.accessAllowed(), username));
         return ApiResponse.success();
     }
 
@@ -155,7 +168,7 @@ public class UserController {
             request.userIds(),
             request.userIdKeyword(),
             request.deptNameKeyword(),
-            request.statusCode(),
+            request.accessAllowed(),
             username
         ));
         return ApiResponse.success(new BatchDeleteUsersResponse(result.totalCount(), result.deletedCount()));
@@ -215,14 +228,17 @@ public class UserController {
         @PathVariable Long id,
         @AuthenticationPrincipal(expression = "userId") String username
     ) {
-        return ApiResponse.success(toResponse(userApplicationService.syncUserToLdap(id, username)));
+        return ApiResponse.success(toResponse(userApplicationService.syncUserToLdap(id, username), false, departmentRepository.findAll()));
     }
 
-    private UserResponse toResponse(User user) {
-        return toResponse(user, false);
-    }
-
-    private UserResponse toResponse(User user, boolean canResetPassword) {
+    private UserResponse toResponse(User user, boolean canResetPassword, List<Department> departments) {
+        List<DepartmentReferenceResponse> partTimeDepartments = toDepartmentReferences(
+            user.getPartTimeDeptCodes(),
+            departments
+        );
+        List<String> partTimeDeptCodes = partTimeDepartments.stream()
+            .map(DepartmentReferenceResponse::deptCode)
+            .toList();
         return new UserResponse(
             user.getId(),
             user.getUserId(),
@@ -233,19 +249,41 @@ public class UserController {
             user.getEmployeeNo(),
             user.getDeptName(),
             user.getDeptCode(),
+            user.getDepartmentPath(),
             user.getJobTitle(),
             user.getDirectLeaderRaw(),
             user.getLeaderRef(),
             user.getAccountStatus(),
-            user.getPartTimeDeptCodes(),
-            user.getPartTimeDeptNames(),
+            partTimeDeptCodes,
+            partTimeDepartments.stream()
+                .map(department -> department.deptName() == null || department.deptName().isBlank()
+                    ? department.deptCode()
+                    : department.deptName())
+                .toList(),
+            partTimeDepartments,
             user.getPermissionLevel(),
-            user.getStatus().getCode(),
+            user.isAccessAllowed(),
             user.getEmploymentStatus() == null ? null : user.getEmploymentStatus().name(),
             user.getLdapDn(),
             user.getRoleCodes(),
             canResetPassword
         );
+    }
+
+    private List<DepartmentReferenceResponse> toDepartmentReferences(List<String> departmentCodes, List<Department> departments) {
+        if (departmentCodes == null || departmentCodes.isEmpty()) {
+            return List.of();
+        }
+        return departmentCodes.stream()
+            .filter(java.util.Objects::nonNull)
+            .map(String::trim)
+            .filter(code -> !code.isBlank())
+            .distinct()
+            .map(code -> {
+                DepartmentDisplay display = departmentPathService.resolve(code, departments);
+                return new DepartmentReferenceResponse(code, display.departmentName(), display.departmentPath());
+            })
+            .toList();
     }
 
     private User resolveOperator(String username) {

@@ -9,7 +9,7 @@ public record BatchDeleteUsersCommand(
     List<Long> userIds,
     String userIdKeyword,
     String deptNameKeyword,
-    Integer statusCode,
+    Boolean accessAllowed,
     String operator
 ) {
 
