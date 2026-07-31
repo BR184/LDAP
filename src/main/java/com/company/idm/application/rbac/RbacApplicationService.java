@@ -14,8 +14,10 @@ import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -70,7 +72,33 @@ public class RbacApplicationService {
 
     public List<Menu> listCurrentUserMenus(String userId) {
         Set<String> roleCodes = userRepository.findRoleCodesByUserId(userId);
-        return menuRepository.findByRoleCodes(roleCodes);
+        Set<String> permissionCodes = permissionRepository.findPermissionCodesByUserId(userId);
+        return includeAncestors(menuRepository.findByAccess(roleCodes, permissionCodes));
+    }
+
+    private List<Menu> includeAncestors(List<Menu> grantedMenus) {
+        if (grantedMenus == null || grantedMenus.isEmpty()) {
+            return List.of();
+        }
+        List<Menu> allEnabledMenus = menuRepository.findAllEnabled();
+        Map<Long, Menu> menusById = new HashMap<>();
+        for (Menu menu : allEnabledMenus) {
+            if (menu.getId() != null) {
+                menusById.put(menu.getId(), menu);
+            }
+        }
+
+        Set<Long> accessibleMenuIds = new LinkedHashSet<>();
+        for (Menu menu : grantedMenus) {
+            Menu current = menu;
+            while (current != null && current.getId() != null && accessibleMenuIds.add(current.getId())) {
+                Long parentId = current.getParentId();
+                current = parentId == null || parentId == 0 ? null : menusById.get(parentId);
+            }
+        }
+        return allEnabledMenus.stream()
+            .filter(menu -> menu.getId() != null && accessibleMenuIds.contains(menu.getId()))
+            .toList();
     }
 
     @Transactional

@@ -18,18 +18,41 @@ public interface MenuMapper extends BaseMapper<MenuDO> {
         <script>
         SELECT DISTINCT m.*
         FROM sys_menu m
-        INNER JOIN sys_role_menu rm ON m.id = rm.menu_id
-        INNER JOIN sys_role r ON rm.role_id = r.id
+        LEFT JOIN sys_role_menu rm ON m.id = rm.menu_id
+        LEFT JOIN sys_role r ON rm.role_id = r.id
+        LEFT JOIN sys_menu_permission mp ON m.id = mp.menu_id
+        LEFT JOIN sys_permission p ON mp.permission_id = p.id
         WHERE m.status = 1 AND m.visible = 1
-          AND r.status = 1
-          AND r.role_code IN
-          <foreach collection='roleCodes' item='roleCode' open='(' separator=',' close=')'>
-              #{roleCode}
-          </foreach>
+          AND (
+            <trim prefixOverrides="OR">
+              <if test="roleCodes != null and !roleCodes.isEmpty()">
+                (r.status = 1
+                  AND r.role_code IN
+                  <foreach collection='roleCodes' item='roleCode' open='(' separator=',' close=')'>
+                    #{roleCode}
+                  </foreach>
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM sys_menu_permission configured
+                    WHERE configured.menu_id = m.id
+                  ))
+              </if>
+              <if test="permissionCodes != null and !permissionCodes.isEmpty()">
+                OR (p.status = 1
+                  AND p.permission_code IN
+                  <foreach collection='permissionCodes' item='permissionCode' open='(' separator=',' close=')'>
+                    #{permissionCode}
+                  </foreach>)
+              </if>
+            </trim>
+          )
         ORDER BY m.sort_no ASC, m.id ASC
         </script>
         """)
-    List<MenuDO> selectByRoleCodes(@Param("roleCodes") Set<String> roleCodes);
+    List<MenuDO> selectByAccess(
+        @Param("roleCodes") Set<String> roleCodes,
+        @Param("permissionCodes") Set<String> permissionCodes
+    );
 
     @Select("""
         SELECT COUNT(1)

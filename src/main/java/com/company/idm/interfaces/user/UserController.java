@@ -15,12 +15,14 @@ import com.company.idm.application.user.PasswordResetAuthorizationService;
 import com.company.idm.application.user.UpdateUserCommand;
 import com.company.idm.application.user.UpdateUserAccessCommand;
 import com.company.idm.application.user.UserApplicationService;
+import com.company.idm.application.user.UserReadScopeService;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
+import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.infrastructure.util.ClientIpUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -47,7 +49,9 @@ public class UserController {
     private final UserApplicationService userApplicationService;
     private final PasswordResetApplicationService passwordResetApplicationService;
     private final PasswordResetAuthorizationService passwordResetAuthorizationService;
+    private final UserReadScopeService userReadScopeService;
     private final UserRepository userRepository;
+    private final PermissionRepository permissionRepository;
     private final RbacApplicationService rbacApplicationService;
     private final DepartmentRepository departmentRepository;
     private final DepartmentPathService departmentPathService;
@@ -62,11 +66,16 @@ public class UserController {
         @AuthenticationPrincipal(expression = "userId") String username
     ) {
         String departmentKeyword = deptName != null && !deptName.isBlank() ? deptName : deptCode;
-        List<User> userList = userApplicationService.listUsers(userId, departmentKeyword, accessAllowed);
         User operator = resolveOperator(username);
         List<User> organizationSnapshot = userRepositorySnapshot();
         List<Department> departmentSnapshot = departmentRepository.findAll();
-        Set<String> operatorPermissionCodes = passwordResetAuthorizationService.loadPermissionCodes(operator);
+        Set<String> operatorPermissionCodes = permissionRepository.findPermissionCodesByUserId(username);
+        List<User> userList = userReadScopeService.filterVisibleUsers(
+            operator,
+            userApplicationService.listUsers(userId, departmentKeyword, accessAllowed),
+            organizationSnapshot,
+            operatorPermissionCodes
+        );
         List<UserResponse> users = userList.stream()
             .map(user -> toResponse(
                 user,
@@ -85,10 +94,12 @@ public class UserController {
     ) {
         User user = userApplicationService.getUser(id);
         User operator = resolveOperator(username);
-        Set<String> operatorPermissionCodes = passwordResetAuthorizationService.loadPermissionCodes(operator);
+        List<User> organizationSnapshot = userRepositorySnapshot();
+        Set<String> operatorPermissionCodes = permissionRepository.findPermissionCodesByUserId(username);
+        userReadScopeService.checkCanReadUser(operator, user, organizationSnapshot, operatorPermissionCodes);
         return ApiResponse.success(toResponse(
             user,
-            canResetPassword(operator, user, userRepositorySnapshot(), operatorPermissionCodes),
+            canResetPassword(operator, user, organizationSnapshot, operatorPermissionCodes),
             departmentRepository.findAll()
         ));
     }

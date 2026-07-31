@@ -11,7 +11,7 @@ public interface MenuRepository {
 
     List<Menu> findAllEnabled();
 
-    List<Menu> findByRoleCodes(Set<String> roleCodes);
+    List<Menu> findByAccess(Set<String> roleCodes, Set<String> permissionCodes);
 
     List<Menu> findByIds(List<Long> menuIds);
 

@@ -38,11 +38,12 @@ public class MybatisMenuRepository implements MenuRepository {
     }
 
     @Override
-    public List<Menu> findByRoleCodes(Set<String> roleCodes) {
-        if (roleCodes == null || roleCodes.isEmpty()) {
+    public List<Menu> findByAccess(Set<String> roleCodes, Set<String> permissionCodes) {
+        if ((roleCodes == null || roleCodes.isEmpty())
+            && (permissionCodes == null || permissionCodes.isEmpty())) {
             return Collections.emptyList();
         }
-        return menuMapper.selectByRoleCodes(roleCodes).stream()
+        return menuMapper.selectByAccess(roleCodes, permissionCodes).stream()
             .map(this::toDomain)
             .toList();
     }

@@ -468,6 +468,7 @@ async function handleSyncLdap(user: UserItem) {
             {{ row.jobTitle || '--' }}
           </template>
         </el-table-column>
+        <el-table-column prop="mobile" label="手机号" min-width="140" />
         <el-table-column prop="directLeaderRaw" label="直属上级" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.directLeaderRaw || '--' }}
@@ -499,7 +500,6 @@ async function handleSyncLdap(user: UserItem) {
           </template>
         </el-table-column>
         <el-table-column prop="email" label="工作邮箱" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="mobile" label="手机号" min-width="140" />
         <el-table-column prop="accountStatus" label="账号状态" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.accountStatus || '--' }}

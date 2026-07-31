@@ -4,11 +4,7 @@ import com.company.idm.common.exception.BizException;
 import com.company.idm.common.exception.ErrorCodeConstants;
 import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.domain.user.User;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 
@@ -20,12 +16,15 @@ public class PasswordResetAuthorizationService {
     public static final String RESET_TREE = "USER_PASSWORD_RESET_TREE";
 
     private static final String SUPER_ADMIN = "SUPER_ADMIN";
-    private static final int MAX_TREE_DEPTH = 10;
-
     private final PermissionRepository permissionRepository;
+    private final ReportingHierarchyService reportingHierarchyService;
 
-    public PasswordResetAuthorizationService(PermissionRepository permissionRepository) {
+    public PasswordResetAuthorizationService(
+        PermissionRepository permissionRepository,
+        ReportingHierarchyService reportingHierarchyService
+    ) {
         this.permissionRepository = permissionRepository;
+        this.reportingHierarchyService = reportingHierarchyService;
     }
 
     public PasswordResetAuthorizationResult evaluate(User operator, User target, List<User> allUsers) {
@@ -50,10 +49,10 @@ public class PasswordResetAuthorizationService {
         if (roleCodes.contains(SUPER_ADMIN) || permissionCodes.contains(RESET_ALL)) {
             return PasswordResetAuthorizationResult.allowed(PasswordResetScope.ALL);
         }
-        if (permissionCodes.contains(RESET_DIRECT) && isDirectSubordinate(operator, target)) {
+        if (permissionCodes.contains(RESET_DIRECT) && reportingHierarchyService.isDirectSubordinate(operator, target)) {
             return PasswordResetAuthorizationResult.allowed(PasswordResetScope.DIRECT);
         }
-        if (permissionCodes.contains(RESET_TREE) && isTreeSubordinate(operator, target, allUsers)) {
+        if (permissionCodes.contains(RESET_TREE) && reportingHierarchyService.isDescendant(operator, target, allUsers)) {
             return PasswordResetAuthorizationResult.allowed(PasswordResetScope.TREE);
         }
         return PasswordResetAuthorizationResult.denied();
@@ -74,48 +73,4 @@ public class PasswordResetAuthorizationService {
         return permissionRepository.findPermissionCodesByUserId(operator.getUserId());
     }
 
-    private boolean isDirectSubordinate(User operator, User target) {
-        String operatorEmployeeNo = normalize(operator.getEmployeeNo());
-        String targetLeaderRef = normalize(target.getLeaderRef());
-        return !operatorEmployeeNo.isBlank() && operatorEmployeeNo.equals(targetLeaderRef);
-    }
-
-    private boolean isTreeSubordinate(User operator, User target, List<User> allUsers) {
-        String operatorEmployeeNo = normalize(operator.getEmployeeNo());
-        if (operatorEmployeeNo.isBlank() || allUsers == null || allUsers.isEmpty()) {
-            return false;
-        }
-
-        Map<String, User> usersByEmployeeNo = new HashMap<>();
-        for (User user : allUsers) {
-            String employeeNo = normalize(user.getEmployeeNo());
-            if (!employeeNo.isBlank()) {
-                usersByEmployeeNo.putIfAbsent(employeeNo, user);
-            }
-        }
-
-        String currentLeaderRef = normalize(target.getLeaderRef());
-        Set<String> visitedEmployeeNos = new HashSet<>();
-        for (int depth = 0; depth < MAX_TREE_DEPTH; depth++) {
-            if (currentLeaderRef.isBlank()) {
-                return false;
-            }
-            if (operatorEmployeeNo.equals(currentLeaderRef)) {
-                return true;
-            }
-            if (!visitedEmployeeNos.add(currentLeaderRef)) {
-                return false;
-            }
-            User leader = usersByEmployeeNo.get(currentLeaderRef);
-            if (leader == null) {
-                return false;
-            }
-            currentLeaderRef = normalize(leader.getLeaderRef());
-        }
-        return false;
-    }
-
-    private String normalize(String value) {
-        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
-    }
 }
