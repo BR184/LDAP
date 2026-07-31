@@ -70,20 +70,10 @@ function buildMenuOptions(nodes: MenuTreeNode[]): MenuTreeOption[] {
     },
     ...nodes.map((node) => ({
       value: node.id,
-      label: `${displayMenuName(node)} (${node.menuCode})`,
+      label: `${node.menuName} (${node.menuCode})`,
       children: buildMenuOptions(node.children || []).filter((item) => item.value !== 0),
     })),
   ]
-}
-
-function displayMenuName(menu: Pick<MenuTreeNode, 'menuCode' | 'menuName'> | Pick<MenuItem, 'menuCode' | 'menuName'>) {
-  if (menu.menuCode === 'GROUP_MANAGEMENT') {
-    return '部门管理'
-  }
-  if (menu.menuCode === 'OPERATION_LOG') {
-    return '同步任务'
-  }
-  return menu.menuName
 }
 
 async function refreshMenus() {
@@ -133,7 +123,7 @@ async function handleDelete() {
 
   try {
     await ElMessageBox.confirm(
-      `确认删除菜单 ${displayMenuName(currentMenu.value)}（${currentMenu.value.menuCode}）吗？`,
+      `确认删除菜单 ${currentMenu.value.menuName}（${currentMenu.value.menuCode}）吗？`,
       '删除菜单',
       {
         type: 'warning',
@@ -200,7 +190,7 @@ function canCreateChild(menu: MenuItem | null) {
         >
           <template #default="{ data }">
             <div class="menu-tree-node">
-              <strong>{{ displayMenuName(data) }}</strong>
+              <strong>{{ data.menuName }}</strong>
               <span>{{ data.menuCode }}</span>
             </div>
           </template>
@@ -235,7 +225,7 @@ function canCreateChild(menu: MenuItem | null) {
           <template v-if="currentMenu">
             <el-descriptions :column="2" border>
               <el-descriptions-item label="菜单编码">{{ currentMenu.menuCode }}</el-descriptions-item>
-              <el-descriptions-item label="菜单名称">{{ displayMenuName(currentMenu) }}</el-descriptions-item>
+              <el-descriptions-item label="菜单名称">{{ currentMenu.menuName }}</el-descriptions-item>
               <el-descriptions-item label="菜单类型">{{ menuTypeText(currentMenu.menuType) }}</el-descriptions-item>
               <el-descriptions-item label="父菜单 ID">
                 {{ currentMenu.parentId === 0 ? '根菜单' : currentMenu.parentId }}

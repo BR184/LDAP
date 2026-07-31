@@ -40,7 +40,7 @@ export const flatNavigationItems: NavigationItem[] = [
     title: '角色管理',
     path: '/roles',
     icon: Lock,
-    description: '维护角色、菜单与权限绑定',
+    description: '维护角色基础信息与权限授权',
   },
   {
     title: '菜单管理',
@@ -107,7 +107,7 @@ export const sidebarNavigationGroups: NavigationGroup[] = [
         title: '角色管理',
         path: '/roles',
         icon: Lock,
-        description: '维护角色、菜单与权限绑定',
+        description: '维护角色基础信息与权限授权',
       },
       {
         title: 'LDAP 控制面',
