@@ -24,5 +24,6 @@ public class Permission {
     private Long parentId;
     private Integer sortNo;
     private Integer status;
+    private String remark;
 }
 

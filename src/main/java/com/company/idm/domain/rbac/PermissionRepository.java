@@ -15,6 +15,12 @@ public interface PermissionRepository {
 
     Optional<Permission> findById(Long id);
 
+    Optional<Permission> findByCode(String permissionCode);
+
+    Permission save(Permission permission);
+
+    void delete(Long permissionId);
+
     Set<String> findPermissionCodesByUserId(String userId);
 }
 

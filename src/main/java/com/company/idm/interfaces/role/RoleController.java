@@ -1,6 +1,5 @@
 package com.company.idm.interfaces.role;
 
-import com.company.idm.application.rbac.BindRoleMenusCommand;
 import com.company.idm.application.rbac.BatchDeleteRolesCommand;
 import com.company.idm.application.rbac.BatchDeleteRolesResult;
 import com.company.idm.application.rbac.CreateRoleCommand;
@@ -47,12 +46,6 @@ public class RoleController {
     @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id, 'GET')")
     public ApiResponse<RoleResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(toResponse(rbacApplicationService.getRole(id)));
-    }
-
-    @GetMapping("/{id}/menus")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id + '/menus', 'GET')")
-    public ApiResponse<List<Long>> menuIds(@PathVariable Long id) {
-        return ApiResponse.success(rbacApplicationService.listRoleMenuIds(id));
     }
 
     @GetMapping("/{id}/permissions")
@@ -129,17 +122,6 @@ public class RoleController {
         @AuthenticationPrincipal(expression = "userId") String username
     ) {
         rbacApplicationService.grantPermissions(new GrantRolePermissionsCommand(id, request.permissionIds(), username));
-        return ApiResponse.success();
-    }
-
-    @PutMapping("/{id}/menus")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id + '/menus', 'PUT')")
-    public ApiResponse<Void> bindMenus(
-        @PathVariable Long id,
-        @Valid @RequestBody BindRoleMenusRequest request,
-        @AuthenticationPrincipal(expression = "userId") String username
-    ) {
-        rbacApplicationService.bindMenus(new BindRoleMenusCommand(id, request.menuIds(), username));
         return ApiResponse.success();
     }
 

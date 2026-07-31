@@ -23,7 +23,6 @@ public class MenuDO {
     private Integer sortNo;
     private Integer status;
     private Integer visible;
-    private Integer minPermissionLevel;
     private String remark;
     private String creator;
     private String modifier;
@@ -118,14 +117,6 @@ public class MenuDO {
         this.visible = visible;
     }
 
-    public Integer getMinPermissionLevel() {
-        return minPermissionLevel;
-    }
-
-    public void setMinPermissionLevel(Integer minPermissionLevel) {
-        this.minPermissionLevel = minPermissionLevel;
-    }
-
     public String getRemark() {
         return remark;
     }
@@ -166,4 +157,3 @@ public class MenuDO {
         this.gmtModified = gmtModified;
     }
 }
-

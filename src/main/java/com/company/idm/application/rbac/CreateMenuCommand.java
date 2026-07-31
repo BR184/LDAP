@@ -14,7 +14,6 @@ public record CreateMenuCommand(
     String component,
     String icon,
     Integer sortNo,
-    Integer minPermissionLevel,
     String remark
 ) {
 }

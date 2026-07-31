@@ -4,11 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.infrastructure.persistence.dataobject.RoleDO;
-import com.company.idm.infrastructure.persistence.dataobject.RoleMenuDO;
 import com.company.idm.infrastructure.persistence.dataobject.RolePermissionDO;
 import com.company.idm.infrastructure.persistence.dataobject.UserRoleDO;
 import com.company.idm.infrastructure.persistence.mapper.RoleMapper;
-import com.company.idm.infrastructure.persistence.mapper.RoleMenuMapper;
 import com.company.idm.infrastructure.persistence.mapper.RolePermissionMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserRoleMapper;
 import java.time.LocalDateTime;
@@ -27,7 +25,6 @@ public class MybatisRoleRepository implements RoleRepository {
 
     private final RoleMapper roleMapper;
     private final RolePermissionMapper rolePermissionMapper;
-    private final RoleMenuMapper roleMenuMapper;
     private final UserRoleMapper userRoleMapper;
 
     @Override
@@ -117,16 +114,30 @@ public class MybatisRoleRepository implements RoleRepository {
     }
 
     @Override
-    public void bindMenus(Long roleId, List<Long> menuIds) {
-        roleMenuMapper.delete(new LambdaQueryWrapper<RoleMenuDO>().eq(RoleMenuDO::getRoleId, roleId));
-        for (Long menuId : menuIds) {
-            RoleMenuDO relation = new RoleMenuDO();
+    public void grantPermissionToRoles(List<Long> roleIds, Long permissionId) {
+        if (roleIds == null || roleIds.isEmpty() || permissionId == null) {
+            return;
+        }
+        for (Long roleId : roleIds) {
+            long existingCount = rolePermissionMapper.selectCount(new LambdaQueryWrapper<RolePermissionDO>()
+                .eq(RolePermissionDO::getRoleId, roleId)
+                .eq(RolePermissionDO::getPermissionId, permissionId));
+            if (existingCount > 0) {
+                continue;
+            }
+            RolePermissionDO relation = new RolePermissionDO();
             relation.setRoleId(roleId);
-            relation.setMenuId(menuId);
+            relation.setPermissionId(permissionId);
             relation.setCreator("system");
             relation.setGmtCreate(LocalDateTime.now());
-            roleMenuMapper.insert(relation);
+            rolePermissionMapper.insert(relation);
         }
+    }
+
+    @Override
+    public void removePermissionFromAllRoles(Long permissionId) {
+        rolePermissionMapper.delete(new LambdaQueryWrapper<RolePermissionDO>()
+            .eq(RolePermissionDO::getPermissionId, permissionId));
     }
 
     @Override
@@ -135,16 +146,6 @@ public class MybatisRoleRepository implements RoleRepository {
                 .eq(RolePermissionDO::getRoleId, roleId))
             .stream()
             .map(RolePermissionDO::getPermissionId)
-            .sorted()
-            .toList();
-    }
-
-    @Override
-    public List<Long> findMenuIdsByRoleId(Long roleId) {
-        return roleMenuMapper.selectList(new LambdaQueryWrapper<RoleMenuDO>()
-                .eq(RoleMenuDO::getRoleId, roleId))
-            .stream()
-            .map(RoleMenuDO::getMenuId)
             .sorted()
             .toList();
     }

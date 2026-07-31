@@ -17,7 +17,6 @@ public record CreateMenuRequest(
     String component,
     String icon,
     @Min(value = 0, message = "排序值不能小于0") Integer sortNo,
-    @NotNull(message = "最小权限等级不能为空") @Min(value = 1, message = "最小权限等级最小为1") Integer minPermissionLevel,
     String remark
 ) {
 }

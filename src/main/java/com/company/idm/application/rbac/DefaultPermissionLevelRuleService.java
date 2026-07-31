@@ -1,7 +1,6 @@
 package com.company.idm.application.rbac;
 
 import com.company.idm.common.exception.BizException;
-import com.company.idm.domain.rbac.Menu;
 import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
@@ -114,22 +113,6 @@ public class DefaultPermissionLevelRuleService implements PermissionLevelRuleSer
         boolean invalidRole = assignedRoles.stream().anyMatch(role -> operatorLevel >= role.getPermissionLevel());
         if (invalidRole) {
             throw new BizException("AUTH_FORBIDDEN", "无权分配当前角色");
-        }
-    }
-
-    @Override
-    public void checkCanBindMenus(String operatorUserId, Role targetRole, List<Menu> menus) {
-        if (!isSuperAdmin(operatorUserId)) {
-            int operatorLevel = getEffectivePermissionLevel(operatorUserId);
-            if (!(operatorLevel < targetRole.getPermissionLevel())) {
-                throw new BizException("AUTH_FORBIDDEN", "无权维护当前角色菜单");
-            }
-        }
-        boolean invalidMenu = menus.stream().anyMatch(menu ->
-            menu.getMinPermissionLevel() != null && targetRole.getPermissionLevel() > menu.getMinPermissionLevel()
-        );
-        if (invalidMenu) {
-            throw new BizException("ROLE_MENU_BIND_FORBIDDEN", "角色权限等级不足以绑定目标菜单");
         }
     }
 

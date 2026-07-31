@@ -18,7 +18,9 @@ public interface PermissionMapper extends BaseMapper<PermissionDO> {
         FROM sys_role_permission rp
         INNER JOIN sys_role r ON rp.role_id = r.id
         INNER JOIN sys_permission p ON rp.permission_id = p.id
-        WHERE r.status = 1 AND p.status = 1
+        WHERE r.status = 1
+          AND p.status = 1
+          AND p.permission_type = 'API'
         """)
     List<RolePolicyRecord> selectRolePolicies();
 

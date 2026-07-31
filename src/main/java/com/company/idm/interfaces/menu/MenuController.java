@@ -53,7 +53,6 @@ public class MenuController {
             request.component(),
             request.icon(),
             request.sortNo(),
-            request.minPermissionLevel(),
             request.remark()
         ), username);
         return ApiResponse.success(toResponse(menu));
@@ -75,7 +74,6 @@ public class MenuController {
             request.component(),
             request.icon(),
             request.sortNo(),
-            request.minPermissionLevel(),
             request.remark()
         ), username);
         return ApiResponse.success(toResponse(menu));
@@ -147,7 +145,6 @@ public class MenuController {
             menu.getComponent(),
             menu.getIcon(),
             menu.getSortNo(),
-            menu.getMinPermissionLevel(),
             menu.getRemark()
         );
     }

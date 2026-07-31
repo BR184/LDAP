@@ -21,7 +21,6 @@ export interface MenuItem {
   component: string
   icon: string
   sortNo: number
-  minPermissionLevel: number
   remark: string | null
 }
 
@@ -40,7 +39,6 @@ export interface CreateMenuPayload {
   component?: string | null
   icon?: string | null
   sortNo: number
-  minPermissionLevel: number
   remark?: string | null
 }
 
@@ -52,6 +50,5 @@ export interface UpdateMenuPayload {
   component?: string | null
   icon?: string | null
   sortNo: number
-  minPermissionLevel: number
   remark?: string | null
 }

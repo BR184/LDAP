@@ -244,7 +244,6 @@ function canCreateChild(menu: MenuItem | null) {
               <el-descriptions-item label="组件路径" :span="2">{{ currentMenu.component || '--' }}</el-descriptions-item>
               <el-descriptions-item label="图标">{{ currentMenu.icon || '--' }}</el-descriptions-item>
               <el-descriptions-item label="排序值">{{ currentMenu.sortNo }}</el-descriptions-item>
-              <el-descriptions-item label="最小权限等级">{{ currentMenu.minPermissionLevel }}</el-descriptions-item>
               <el-descriptions-item label="备注" :span="2">{{ currentMenu.remark || '--' }}</el-descriptions-item>
             </el-descriptions>
           </template>

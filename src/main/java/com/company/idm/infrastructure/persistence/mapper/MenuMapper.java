@@ -16,50 +16,20 @@ public interface MenuMapper extends BaseMapper<MenuDO> {
 
     @Select("""
         <script>
-        SELECT DISTINCT m.*
+        SELECT m.*
         FROM sys_menu m
-        LEFT JOIN sys_role_menu rm ON m.id = rm.menu_id
-        LEFT JOIN sys_role r ON rm.role_id = r.id
-        LEFT JOIN sys_menu_permission mp ON m.id = mp.menu_id
-        LEFT JOIN sys_permission p ON mp.permission_id = p.id
-        WHERE m.status = 1 AND m.visible = 1
-          AND (
-            <trim prefixOverrides="OR">
-              <if test="roleCodes != null and !roleCodes.isEmpty()">
-                (r.status = 1
-                  AND r.role_code IN
-                  <foreach collection='roleCodes' item='roleCode' open='(' separator=',' close=')'>
-                    #{roleCode}
-                  </foreach>
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM sys_menu_permission configured
-                    WHERE configured.menu_id = m.id
-                  ))
-              </if>
-              <if test="permissionCodes != null and !permissionCodes.isEmpty()">
-                OR (p.status = 1
-                  AND p.permission_code IN
-                  <foreach collection='permissionCodes' item='permissionCode' open='(' separator=',' close=')'>
-                    #{permissionCode}
-                  </foreach>)
-              </if>
-            </trim>
-          )
+        INNER JOIN sys_menu_permission mp ON mp.menu_id = m.id
+        INNER JOIN sys_permission p ON p.id = mp.permission_id
+        WHERE m.status = 1
+          AND m.visible = 1
+          AND p.status = 1
+          AND p.permission_type = 'MENU'
+          AND p.permission_code IN
+          <foreach collection='permissionCodes' item='permissionCode' open='(' separator=',' close=')'>
+            #{permissionCode}
+          </foreach>
         ORDER BY m.sort_no ASC, m.id ASC
         </script>
         """)
-    List<MenuDO> selectByAccess(
-        @Param("roleCodes") Set<String> roleCodes,
-        @Param("permissionCodes") Set<String> permissionCodes
-    );
-
-    @Select("""
-        SELECT COUNT(1)
-        FROM sys_role_menu rm
-        INNER JOIN sys_role r ON rm.role_id = r.id
-        WHERE rm.menu_id = #{menuId}
-          AND r.permission_level > #{minPermissionLevel}
-        """)
-    long countRoleBindingConflict(@Param("menuId") Long menuId, @Param("minPermissionLevel") Integer minPermissionLevel);
+    List<MenuDO> selectVisibleByPermissionCodes(@Param("permissionCodes") Set<String> permissionCodes);
 }

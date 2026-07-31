@@ -27,11 +27,11 @@ public interface RoleRepository {
 
     void assignPermissions(Long roleId, List<Long> permissionIds);
 
-    void bindMenus(Long roleId, List<Long> menuIds);
+    void grantPermissionToRoles(List<Long> roleIds, Long permissionId);
+
+    void removePermissionFromAllRoles(Long permissionId);
 
     List<Long> findPermissionIdsByRoleId(Long roleId);
-
-    List<Long> findMenuIdsByRoleId(Long roleId);
 
     boolean existsUserBinding(Long roleId);
 }

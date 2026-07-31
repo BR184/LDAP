@@ -26,7 +26,5 @@ public class Menu {
     private Integer sortNo;
     private Integer status;
     private Integer visible;
-    private Integer minPermissionLevel;
     private String remark;
 }
-

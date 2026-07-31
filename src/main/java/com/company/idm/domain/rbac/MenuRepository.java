@@ -11,9 +11,7 @@ public interface MenuRepository {
 
     List<Menu> findAllEnabled();
 
-    List<Menu> findByAccess(Set<String> roleCodes, Set<String> permissionCodes);
-
-    List<Menu> findByIds(List<Long> menuIds);
+    List<Menu> findVisibleByPermissionCodes(Set<String> permissionCodes);
 
     Optional<Menu> findById(Long id);
 
@@ -23,11 +21,11 @@ public interface MenuRepository {
 
     boolean existsChildren(Long parentId);
 
-    boolean existsRoleBindingConflict(Long menuId, Integer minPermissionLevel);
+    void bindVisibilityPermission(Long menuId, Long permissionId);
 
-    void bindRole(Long roleId, Long menuId);
+    Optional<Long> findVisibilityPermissionId(Long menuId);
 
-    void removeRoleBindings(Long menuId);
+    void removeVisibilityPermission(Long menuId);
 
     void delete(Long id);
 }

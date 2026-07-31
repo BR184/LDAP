@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 class RbacApplicationServiceMenuVisibilityTest {
 
     @Test
-    void includesUserManagementWhenUserReadPermissionGrantsIt() {
+    void includesUserManagementWhenMenuVisibilityPermissionGrantsIt() {
         RoleRepository roleRepository = mock(RoleRepository.class);
         MenuRepository menuRepository = mock(MenuRepository.class);
         PermissionRepository permissionRepository = mock(PermissionRepository.class);
@@ -31,24 +31,49 @@ class RbacApplicationServiceMenuVisibilityTest {
             userRepository,
             mock(AuditLogRepository.class),
             mock(PolicyRefreshService.class),
-            mock(PermissionLevelRuleService.class)
+            mock(PermissionLevelRuleService.class),
+            mock(MenuVisibilityPermissionService.class)
         );
 
         Menu root = menu(1L, 0L, "UINIT0");
         Menu personnel = menu(2L, 1L, "PERSONNEL_MANAGEMENT");
         Menu userManagement = menu(3L, 2L, "USER_MANAGEMENT");
-        Set<String> roleCodes = Set.of("DIRECT_MANAGER");
-        Set<String> permissionCodes = Set.of("USER_READ");
-        when(userRepository.findRoleCodesByUserId("manager")).thenReturn(roleCodes);
+        Menu groupManagement = menu(4L, 2L, "GROUP_MANAGEMENT");
+        Set<String> permissionCodes = Set.of("MENU_VIEW_USER_MANAGEMENT");
         when(permissionRepository.findPermissionCodesByUserId("manager")).thenReturn(permissionCodes);
-        when(menuRepository.findByAccess(roleCodes, permissionCodes)).thenReturn(List.of(userManagement));
-        when(menuRepository.findAllEnabled()).thenReturn(List.of(root, personnel, userManagement));
+        when(menuRepository.findVisibleByPermissionCodes(permissionCodes)).thenReturn(List.of(userManagement));
+        when(menuRepository.findAllEnabled()).thenReturn(List.of(root, personnel, userManagement, groupManagement));
 
         List<Menu> menus = service.listCurrentUserMenus("manager");
 
         assertThat(menus).extracting(Menu::getMenuCode)
             .containsExactly("UINIT0", "PERSONNEL_MANAGEMENT", "USER_MANAGEMENT");
-        verify(menuRepository).findByAccess(roleCodes, permissionCodes);
+        verify(menuRepository).findVisibleByPermissionCodes(permissionCodes);
+    }
+
+    @Test
+    void doesNotIncludeUserManagementWhenOnlyUserReadIsGranted() {
+        RoleRepository roleRepository = mock(RoleRepository.class);
+        MenuRepository menuRepository = mock(MenuRepository.class);
+        PermissionRepository permissionRepository = mock(PermissionRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        RbacApplicationService service = new RbacApplicationService(
+            roleRepository,
+            menuRepository,
+            permissionRepository,
+            userRepository,
+            mock(AuditLogRepository.class),
+            mock(PolicyRefreshService.class),
+            mock(PermissionLevelRuleService.class),
+            mock(MenuVisibilityPermissionService.class)
+        );
+
+        Set<String> permissionCodes = Set.of("USER_READ");
+        when(permissionRepository.findPermissionCodesByUserId("reader")).thenReturn(permissionCodes);
+        when(menuRepository.findVisibleByPermissionCodes(permissionCodes)).thenReturn(List.of());
+
+        assertThat(service.listCurrentUserMenus("reader")).isEmpty();
+        verify(menuRepository).findVisibleByPermissionCodes(permissionCodes);
     }
 
     private Menu menu(Long id, Long parentId, String menuCode) {

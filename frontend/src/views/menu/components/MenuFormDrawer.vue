@@ -12,7 +12,6 @@ interface MenuFormValue {
   component: string
   icon: string
   sortNo: number
-  minPermissionLevel: number
   remark: string
 }
 
@@ -43,7 +42,6 @@ const rules = computed<FormRules<MenuFormValue>>(() => ({
   menuType: [{ required: true, message: '请选择菜单类型', trigger: 'change' }],
   path: [{ required: true, message: '请输入菜单路由', trigger: 'blur' }],
   component: isCatalog.value ? [] : [{ required: true, message: '请输入组件路径', trigger: 'blur' }],
-  minPermissionLevel: [{ required: true, message: '请输入最小权限等级', trigger: 'change' }],
 }))
 
 watch(
@@ -68,7 +66,6 @@ watch(
       form.component = props.menu.component || ''
       form.icon = props.menu.icon || ''
       form.sortNo = props.menu.sortNo
-      form.minPermissionLevel = props.menu.minPermissionLevel
       form.remark = props.menu.remark || ''
     }
 
@@ -100,7 +97,6 @@ function buildDefaultForm(): MenuFormValue {
     component: 'Layout',
     icon: '',
     sortNo: 0,
-    minPermissionLevel: 2,
     remark: '',
   }
 }
@@ -119,7 +115,6 @@ async function handleSubmit() {
     component: isCatalog.value ? form.component.trim() || 'Layout' : form.component.trim(),
     icon: form.icon.trim() || null,
     sortNo: form.sortNo,
-    minPermissionLevel: form.minPermissionLevel,
     remark: form.remark.trim() || null,
   }
 
@@ -191,10 +186,6 @@ function closeDrawer() {
 
       <el-form-item label="排序值">
         <el-input-number v-model="form.sortNo" :min="0" :step="1" controls-position="right" style="width: 100%" />
-      </el-form-item>
-
-      <el-form-item label="最小权限等级" prop="minPermissionLevel">
-        <el-input-number v-model="form.minPermissionLevel" :min="1" :step="1" controls-position="right" style="width: 100%" />
       </el-form-item>
 
       <el-form-item label="备注">

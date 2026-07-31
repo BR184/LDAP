@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { TreeInstance } from 'element-plus'
 import type { PermissionTreeNode } from '@/types/permission'
 import type { RoleItem } from '@/types/role'
@@ -72,7 +72,7 @@ function collectPermissionIds(nodes: PermissionTreeNode[]): number[] {
         class="role-tree-dialog__alert"
         :closable="false"
         show-icon
-        title="当前角色权限等级为 1 或 2，系统将默认授予全部接口权限。"
+        title="当前角色权限等级为 1 或 2，系统将默认授予全部权限。"
         type="warning"
       />
 

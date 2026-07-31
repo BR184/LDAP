@@ -13,7 +13,6 @@ public record MenuResponse(
     String component,
     String icon,
     Integer sortNo,
-    Integer minPermissionLevel,
     String remark
 ) {
 }

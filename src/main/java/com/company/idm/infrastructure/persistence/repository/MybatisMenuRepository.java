@@ -5,9 +5,8 @@ import com.company.idm.common.enums.MenuType;
 import com.company.idm.domain.rbac.Menu;
 import com.company.idm.domain.rbac.MenuRepository;
 import com.company.idm.infrastructure.persistence.dataobject.MenuDO;
-import com.company.idm.infrastructure.persistence.dataobject.RoleMenuDO;
 import com.company.idm.infrastructure.persistence.mapper.MenuMapper;
-import com.company.idm.infrastructure.persistence.mapper.RoleMenuMapper;
+import com.company.idm.infrastructure.persistence.mapper.MenuPermissionMapper;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -24,7 +23,7 @@ import org.springframework.stereotype.Repository;
 public class MybatisMenuRepository implements MenuRepository {
 
     private final MenuMapper menuMapper;
-    private final RoleMenuMapper roleMenuMapper;
+    private final MenuPermissionMapper menuPermissionMapper;
 
     @Override
     public List<Menu> findAllEnabled() {
@@ -38,22 +37,11 @@ public class MybatisMenuRepository implements MenuRepository {
     }
 
     @Override
-    public List<Menu> findByAccess(Set<String> roleCodes, Set<String> permissionCodes) {
-        if ((roleCodes == null || roleCodes.isEmpty())
-            && (permissionCodes == null || permissionCodes.isEmpty())) {
+    public List<Menu> findVisibleByPermissionCodes(Set<String> permissionCodes) {
+        if (permissionCodes == null || permissionCodes.isEmpty()) {
             return Collections.emptyList();
         }
-        return menuMapper.selectByAccess(roleCodes, permissionCodes).stream()
-            .map(this::toDomain)
-            .toList();
-    }
-
-    @Override
-    public List<Menu> findByIds(List<Long> menuIds) {
-        if (menuIds == null || menuIds.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return menuMapper.selectBatchIds(menuIds).stream()
+        return menuMapper.selectVisibleByPermissionCodes(permissionCodes).stream()
             .map(this::toDomain)
             .toList();
     }
@@ -91,30 +79,18 @@ public class MybatisMenuRepository implements MenuRepository {
     }
 
     @Override
-    public boolean existsRoleBindingConflict(Long menuId, Integer minPermissionLevel) {
-        return menuMapper.countRoleBindingConflict(menuId, minPermissionLevel) > 0;
+    public void bindVisibilityPermission(Long menuId, Long permissionId) {
+        menuPermissionMapper.insert(menuId, permissionId, "system");
     }
 
     @Override
-    public void bindRole(Long roleId, Long menuId) {
-        long count = roleMenuMapper.selectCount(new LambdaQueryWrapper<RoleMenuDO>()
-            .eq(RoleMenuDO::getRoleId, roleId)
-            .eq(RoleMenuDO::getMenuId, menuId));
-        if (count > 0) {
-            return;
-        }
-        RoleMenuDO relation = new RoleMenuDO();
-        relation.setRoleId(roleId);
-        relation.setMenuId(menuId);
-        relation.setCreator("system");
-        relation.setGmtCreate(LocalDateTime.now());
-        roleMenuMapper.insert(relation);
+    public Optional<Long> findVisibilityPermissionId(Long menuId) {
+        return Optional.ofNullable(menuPermissionMapper.selectPermissionIdByMenuId(menuId));
     }
 
     @Override
-    public void removeRoleBindings(Long menuId) {
-        roleMenuMapper.delete(new LambdaQueryWrapper<RoleMenuDO>()
-            .eq(RoleMenuDO::getMenuId, menuId));
+    public void removeVisibilityPermission(Long menuId) {
+        menuPermissionMapper.deleteByMenuId(menuId);
     }
 
     @Override
@@ -135,7 +111,6 @@ public class MybatisMenuRepository implements MenuRepository {
             .sortNo(dataObject.getSortNo())
             .status(dataObject.getStatus())
             .visible(dataObject.getVisible())
-            .minPermissionLevel(dataObject.getMinPermissionLevel())
             .remark(dataObject.getRemark())
             .build();
     }
@@ -153,7 +128,6 @@ public class MybatisMenuRepository implements MenuRepository {
         dataObject.setSortNo(menu.getSortNo());
         dataObject.setStatus(menu.getStatus());
         dataObject.setVisible(menu.getVisible());
-        dataObject.setMinPermissionLevel(menu.getMinPermissionLevel());
         dataObject.setRemark(menu.getRemark());
         dataObject.setCreator("system");
         dataObject.setModifier("system");

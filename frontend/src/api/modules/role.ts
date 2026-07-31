@@ -2,7 +2,6 @@ import request from '@/api/request'
 import type {
   BatchDeleteRolesPayload,
   BatchDeleteRolesResult,
-  BindRoleMenusPayload,
   CreateRolePayload,
   GrantRolePermissionsPayload,
   RoleItem,
@@ -36,14 +35,6 @@ export function deleteRole(roleId: number) {
 
 export function batchDeleteRoles(payload: BatchDeleteRolesPayload) {
   return request.post<never, BatchDeleteRolesResult>('/v1/roles/batch-delete', payload)
-}
-
-export function fetchRoleMenuIds(roleId: number) {
-  return request.get<never, number[]>(`/v1/roles/${roleId}/menus`)
-}
-
-export function bindRoleMenus(roleId: number, payload: BindRoleMenusPayload) {
-  return request.put<never, void>(`/v1/roles/${roleId}/menus`, payload)
 }
 
 export function fetchRolePermissionIds(roleId: number) {

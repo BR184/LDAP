@@ -27,10 +27,6 @@ export interface UpdateRoleStatusPayload {
   status: number
 }
 
-export interface BindRoleMenusPayload {
-  menuIds: number[]
-}
-
 export interface GrantRolePermissionsPayload {
   permissionIds: number[]
 }

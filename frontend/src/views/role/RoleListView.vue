@@ -3,14 +3,11 @@ import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Search } from '@element-plus/icons-vue'
-import { fetchMenuTree } from '@/api/modules/menu'
 import { fetchPermissionTree } from '@/api/modules/permission'
 import {
   batchDeleteRoles,
-  bindRoleMenus,
   createRole,
   deleteRole,
-  fetchRoleMenuIds,
   fetchRolePermissionIds,
   fetchRoles,
   grantRolePermissions,
@@ -18,10 +15,8 @@ import {
   updateRoleStatus,
 } from '@/api/modules/role'
 import RoleFormDrawer from '@/views/role/components/RoleFormDrawer.vue'
-import RoleMenuDrawer from '@/views/role/components/RoleMenuDrawer.vue'
 import RolePermissionDrawer from '@/views/role/components/RolePermissionDrawer.vue'
 import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
-import type { MenuTreeNode } from '@/types/menu'
 import type { PermissionTreeNode } from '@/types/permission'
 import type { CreateRolePayload, RoleItem, UpdateRolePayload } from '@/types/role'
 
@@ -52,11 +47,6 @@ const formVisible = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
 const currentRole = ref<RoleItem | null>(null)
 
-const menuDrawerVisible = ref(false)
-const menuDrawerLoading = ref(false)
-const menuDrawerRole = ref<RoleItem | null>(null)
-const checkedMenuIds = ref<number[]>([])
-
 const permissionDrawerVisible = ref(false)
 const permissionDrawerLoading = ref(false)
 const permissionDrawerRole = ref<RoleItem | null>(null)
@@ -67,11 +57,6 @@ const selectedRoles = ref<RoleItem[]>([])
 const rolesQuery = useQuery({
   queryKey: ['roles'],
   queryFn: fetchRoles,
-})
-
-const menuTreeQuery = useQuery({
-  queryKey: ['menus', 'tree'],
-  queryFn: fetchMenuTree,
 })
 
 const permissionTreeQuery = useQuery({
@@ -123,15 +108,6 @@ const batchDeleteRolesMutation = useMutation({
   },
 })
 
-const bindMenusMutation = useMutation({
-  mutationFn: ({ roleId, menuIds }: { roleId: number; menuIds: number[] }) => bindRoleMenus(roleId, { menuIds }),
-  onSuccess: async () => {
-    ElMessage.success('菜单绑定已保存')
-    menuDrawerVisible.value = false
-    await refreshRoles()
-  },
-})
-
 const grantPermissionsMutation = useMutation({
   mutationFn: ({ roleId, permissionIds }: { roleId: number; permissionIds: number[] }) =>
     grantRolePermissions(roleId, { permissionIds }),
@@ -143,7 +119,6 @@ const grantPermissionsMutation = useMutation({
 })
 
 const roles = computed(() => rolesQuery.data.value || [])
-const menuTree = computed<MenuTreeNode[]>(() => menuTreeQuery.data.value || [])
 const permissionTree = computed<PermissionTreeNode[]>(() => permissionTreeQuery.data.value || [])
 const hasSelectedRoles = computed(() => selectedRoles.value.length > 0)
 
@@ -204,19 +179,6 @@ function openEdit(role: RoleItem) {
   formVisible.value = true
 }
 
-async function openBindMenus(role: RoleItem) {
-  menuDrawerRole.value = role
-  checkedMenuIds.value = []
-  menuDrawerVisible.value = true
-  menuDrawerLoading.value = true
-
-  try {
-    checkedMenuIds.value = await fetchRoleMenuIds(role.id)
-  } finally {
-    menuDrawerLoading.value = false
-  }
-}
-
 async function openGrantPermissions(role: RoleItem) {
   permissionDrawerRole.value = role
   checkedPermissionIds.value = []
@@ -273,7 +235,7 @@ async function handleToggleStatus(role: RoleItem) {
 async function handleDelete(role: RoleItem) {
   try {
     await ElMessageBox.confirm(
-      `确认删除角色 ${role.roleName}（${role.roleCode}）吗？删除后将同步清理该角色的菜单与权限绑定。`,
+      `确认删除角色 ${role.roleName}（${role.roleCode}）吗？删除后将同步清理该角色的权限授权。`,
       '删除角色',
       {
         type: 'warning',
@@ -300,7 +262,7 @@ async function handleBatchDelete() {
 
   try {
     await ElMessageBox.confirm(
-      `删除后将同步清理角色菜单绑定、权限授权和用户角色关系约束。确认批量删除以下角色吗？\n${summaryText}`,
+      `删除后将同步清理角色权限授权和用户角色关系约束。确认批量删除以下角色吗？\n${summaryText}`,
       '确认批量删除',
       {
         type: 'warning',
@@ -314,16 +276,6 @@ async function handleBatchDelete() {
 
   await batchDeleteRolesMutation.mutateAsync({
     roleIds: selectedRoles.value.map((role) => role.id),
-  })
-}
-
-async function handleBindMenus(menuIds: number[]) {
-  if (!menuDrawerRole.value) {
-    return
-  }
-  await bindMenusMutation.mutateAsync({
-    roleId: menuDrawerRole.value.id,
-    menuIds,
   })
 }
 
@@ -355,7 +307,7 @@ function statusTagType(status: number) {
 </script>
 
 <template>
-  <PageContainer title="角色管理" description="维护角色基础信息、启停状态、菜单绑定和接口权限授权，形成完整的 RBAC 管理闭环。">
+  <PageContainer title="角色管理" description="维护角色基础信息、启停状态与 API、菜单显示权限授权，形成完整的 RBAC 管理闭环。">
     <el-card class="idm-card" shadow="never">
       <el-form :inline="true" :model="searchForm">
         <el-form-item label="角色编码">
@@ -424,7 +376,6 @@ function statusTagType(status: number) {
           <template #default="{ row }">
             <el-space wrap>
               <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-              <el-button link type="warning" @click="openBindMenus(row)">绑定菜单</el-button>
               <el-button link type="success" @click="openGrantPermissions(row)">授权权限</el-button>
               <el-button link type="info" @click="handleToggleStatus(row)">
                 {{ row.status === 1 ? '禁用' : '启用' }}
@@ -456,16 +407,6 @@ function statusTagType(status: number) {
       :loading="createRoleMutation.isPending.value || updateRoleMutation.isPending.value"
       :role="currentRole"
       @submit="handleSubmitRole"
-    />
-
-    <RoleMenuDrawer
-      v-model="menuDrawerVisible"
-      :checked-menu-ids="checkedMenuIds"
-      :initializing="menuDrawerLoading || menuTreeQuery.isLoading.value"
-      :loading="bindMenusMutation.isPending.value"
-      :menu-tree="menuTree"
-      :role="menuDrawerRole"
-      @submit="handleBindMenus"
     />
 
     <RolePermissionDrawer

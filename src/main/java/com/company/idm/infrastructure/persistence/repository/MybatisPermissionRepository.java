@@ -7,6 +7,7 @@ import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.domain.rbac.RolePolicy;
 import com.company.idm.infrastructure.persistence.dataobject.PermissionDO;
 import com.company.idm.infrastructure.persistence.mapper.PermissionMapper;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -45,6 +46,32 @@ public class MybatisPermissionRepository implements PermissionRepository {
     }
 
     @Override
+    public Optional<Permission> findByCode(String permissionCode) {
+        return Optional.ofNullable(permissionMapper.selectOne(new LambdaQueryWrapper<PermissionDO>()
+            .eq(PermissionDO::getPermissionCode, permissionCode)))
+            .map(this::toDomain);
+    }
+
+    @Override
+    public Permission save(Permission permission) {
+        PermissionDO dataObject = toDataObject(permission);
+        if (dataObject.getId() == null) {
+            dataObject.setGmtCreate(LocalDateTime.now());
+            dataObject.setGmtModified(LocalDateTime.now());
+            permissionMapper.insert(dataObject);
+        } else {
+            dataObject.setGmtModified(LocalDateTime.now());
+            permissionMapper.updateById(dataObject);
+        }
+        return toDomain(dataObject);
+    }
+
+    @Override
+    public void delete(Long permissionId) {
+        permissionMapper.deleteById(permissionId);
+    }
+
+    @Override
     public Set<String> findPermissionCodesByUserId(String userId) {
         if (userId == null || userId.isBlank()) {
             return Set.of();
@@ -64,6 +91,22 @@ public class MybatisPermissionRepository implements PermissionRepository {
             .parentId(dataObject.getParentId())
             .sortNo(dataObject.getSortNo())
             .status(dataObject.getStatus())
+            .remark(dataObject.getRemark())
             .build();
+    }
+
+    private PermissionDO toDataObject(Permission permission) {
+        PermissionDO dataObject = new PermissionDO();
+        dataObject.setId(permission.getId());
+        dataObject.setPermissionCode(permission.getPermissionCode());
+        dataObject.setPermissionName(permission.getPermissionName());
+        dataObject.setPermissionType(permission.getPermissionType().name());
+        dataObject.setResourcePath(permission.getResourcePath());
+        dataObject.setAction(permission.getAction());
+        dataObject.setParentId(permission.getParentId());
+        dataObject.setSortNo(permission.getSortNo());
+        dataObject.setStatus(permission.getStatus());
+        dataObject.setRemark(permission.getRemark());
+        return dataObject;
     }
 }
