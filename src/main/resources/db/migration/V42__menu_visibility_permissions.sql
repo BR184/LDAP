@@ -20,15 +20,16 @@ VALUES
     ('MENU_VIEW_FILE_IMPORT_MANAGEMENT', '菜单显示_文件导入', 'MENU', 'menu:FILE_IMPORT_MANAGEMENT', 'VIEW', 0, 107, 1, '文件导入页面显示权限'),
     ('MENU_VIEW_MAIL_CONFIG_MANAGEMENT', '菜单显示_邮件配置', 'MENU', 'menu:MAIL_CONFIG_MANAGEMENT', 'VIEW', 0, 108, 1, '邮件配置页面显示权限'),
     ('MENU_VIEW_OPERATION_LOG', '菜单显示_同步任务', 'MENU', 'menu:OPERATION_LOG', 'VIEW', 0, 109, 1, '同步任务页面显示权限')
+AS incoming_permission
 ON DUPLICATE KEY UPDATE
-    permission_name = VALUES(permission_name),
-    permission_type = VALUES(permission_type),
-    resource_path = VALUES(resource_path),
-    action = VALUES(action),
-    parent_id = VALUES(parent_id),
-    sort_no = VALUES(sort_no),
-    status = VALUES(status),
-    remark = VALUES(remark),
+    permission_name = incoming_permission.permission_name,
+    permission_type = incoming_permission.permission_type,
+    resource_path = incoming_permission.resource_path,
+    action = incoming_permission.action,
+    parent_id = incoming_permission.parent_id,
+    sort_no = incoming_permission.sort_no,
+    status = incoming_permission.status,
+    remark = incoming_permission.remark,
     gmt_modified = CURRENT_TIMESTAMP;
 
 -- 将原 sys_role_menu 中的页面授权迁移到同编码的菜单显示权限；目录节点由后端按祖先关系自动补齐。
@@ -83,4 +84,4 @@ WHERE menu.menu_type = 'MENU'
       'OPERATION_LOG'
   )
 ON DUPLICATE KEY UPDATE
-    creator = VALUES(creator);
+    creator = 'system';
