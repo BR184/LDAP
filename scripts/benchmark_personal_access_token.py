@@ -42,17 +42,22 @@ def api_request(base_url: str, path: str, method: str = "GET", token: str | None
     return envelope.get("data") if isinstance(envelope, dict) and "success" in envelope else envelope
 
 
-def mysql_questions(container: str | None) -> int | None:
+def mysql_status(container: str | None) -> dict[str, int] | None:
     if not container:
         return None
     command = [
         "docker", "exec", container, "sh", "-c",
         "mysql -u\"$MYSQL_USER\" -p\"$MYSQL_PASSWORD\" \"$MYSQL_DATABASE\" "
-        "--batch --skip-column-names -e \"SHOW GLOBAL STATUS LIKE 'Questions'\" 2>/dev/null",
+        "--batch --skip-column-names -e \"SHOW GLOBAL STATUS WHERE Variable_name "
+        "IN ('Questions', 'Com_update')\" 2>/dev/null",
     ]
     completed = subprocess.run(command, check=True, capture_output=True, text=True)
-    fields = completed.stdout.strip().split()
-    return int(fields[-1]) if fields else None
+    result: dict[str, int] = {}
+    for line in completed.stdout.splitlines():
+        fields = line.split()
+        if len(fields) == 2:
+            result[fields[0]] = int(fields[1])
+    return result
 
 
 def percentile(values: list[float], percentage: float) -> float:
@@ -63,7 +68,7 @@ def percentile(values: list[float], percentage: float) -> float:
 
 def benchmark(base_url: str, token: str, iterations: int, concurrency: int,
               mysql_container: str | None) -> dict[str, Any]:
-    questions_before = mysql_questions(mysql_container)
+    status_before = mysql_status(mysql_container)
 
     def invoke(_: int) -> float:
         started = time.perf_counter()
@@ -73,10 +78,12 @@ def benchmark(base_url: str, token: str, iterations: int, concurrency: int,
     with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
         latencies = list(executor.map(invoke, range(iterations)))
 
-    questions_after = mysql_questions(mysql_container)
+    status_after = mysql_status(mysql_container)
     question_delta = None
-    if questions_before is not None and questions_after is not None:
-        question_delta = max(0, questions_after - questions_before - 1)
+    update_delta = None
+    if status_before is not None and status_after is not None:
+        question_delta = max(0, status_after["Questions"] - status_before["Questions"] - 1)
+        update_delta = max(0, status_after["Com_update"] - status_before["Com_update"])
     return {
         "requestCount": iterations,
         "concurrency": concurrency,
@@ -91,6 +98,7 @@ def benchmark(base_url: str, token: str, iterations: int, concurrency: int,
         "databaseQuestionsPerRequest": (
             round(question_delta / iterations, 2) if question_delta is not None else None
         ),
+        "databaseUpdatesDelta": update_delta,
     }
 
 

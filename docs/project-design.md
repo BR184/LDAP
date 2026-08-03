@@ -3753,7 +3753,7 @@ LDAP 控制面页直接对接以下接口：
 
 - 每账号有效令牌上限由 `APP_PAT_MAX_ACTIVE_PER_USER` 配置，默认 `20`。
 - 最近使用信息由 `APP_PAT_LAST_USED_WRITE_INTERVAL_SECONDS` 节流，默认 `300` 秒。
-- 创建、撤销和失败认证写入审计；成功认证的最近使用信息使用数据库条件更新防止并发重复写入。
+- 创建、撤销和失败认证写入审计；成功认证的最近使用信息先由进程内自动过期门闩合并同实例并发，再由数据库条件更新处理多实例竞争。
 - 使用与基准方法见 `docs/runbooks/personal-access-token-usage.md`。
 
 

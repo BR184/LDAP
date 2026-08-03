@@ -83,4 +83,15 @@ python scripts/benchmark_personal_access_token.py `
   --concurrency 10
 ```
 
-脚本会提示输入密码，自动创建只含 `AUTH_ME` 的一小时临时密钥，分别输出 JWT/PAT 的 P50、P95、MySQL `Questions` 增量和最近使用元数据变化次数，并在结束或异常时撤销临时密钥。脚本不会输出完整 JWT 或 PAT。
+脚本会提示输入密码，自动创建只含 `AUTH_ME` 的一小时临时密钥，分别输出 JWT/PAT 的 P50、P95、MySQL `Questions` 与 `Com_update` 增量和最近使用元数据变化次数，并在结束或异常时撤销临时密钥。脚本不会输出完整 JWT 或 PAT。
+
+### 2026-08-03 开发环境基线
+
+基线环境为本机 Docker、Java 17、MySQL 8.0，直接访问 `http://127.0.0.1:8083`，后端提交为 `1e3d836`。负载固定为每种凭证 100 次请求、10 路并发，SQL 日志保持开启。该数据用于同环境回归比较，不作为生产 SLA。
+
+| 凭证 | P50 | P95 | 平均值 | MySQL Questions | 每请求 Questions | MySQL Updates |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| JWT | 15.48 ms | 19.65 ms | 16.20 ms | 902 | 9.02 | 0 |
+| PAT | 14.77 ms | 27.75 ms | 16.34 ms | 1104 | 11.04 | 1 |
+
+PAT 的 `usageMetadataTransitionCount` 为 `1`，与 MySQL 更新增量一致。10 路并发首次使用由进程内门闩合并为一次条件更新，后续请求在 300 秒窗口内不再写入。
