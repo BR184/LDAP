@@ -24,7 +24,7 @@ public class PermissionController {
     private final RbacApplicationService rbacApplicationService;
 
     @GetMapping("/tree")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/permissions/tree', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'PERMISSION_TREE')")
     public ApiResponse<List<PermissionNodeResponse>> tree() {
         List<Permission> permissions = rbacApplicationService.listPermissions();
         Map<Long, PermissionNodeResponse> index = new LinkedHashMap<>();

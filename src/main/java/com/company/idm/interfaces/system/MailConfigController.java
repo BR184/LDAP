@@ -27,13 +27,13 @@ public class MailConfigController {
     private final MailConfigApplicationService mailConfigApplicationService;
 
     @GetMapping
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/system/mail-config', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'MAIL_CONFIG_READ')")
     public ApiResponse<MailConfigResponse> current() {
         return ApiResponse.success(toResponse(mailConfigApplicationService.getCurrentConfig()));
     }
 
     @PutMapping
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/system/mail-config', 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'MAIL_CONFIG_SAVE')")
     public ApiResponse<MailConfigResponse> save(
         @Valid @RequestBody SaveMailConfigRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -55,7 +55,7 @@ public class MailConfigController {
     }
 
     @PostMapping("/test")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/system/mail-config/test', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'MAIL_CONFIG_TEST')")
     public ApiResponse<MailConfigTestResponse> test(
         @Valid @RequestBody TestMailConfigRequest request,
         @AuthenticationPrincipal(expression = "userId") String username

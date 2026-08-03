@@ -36,7 +36,7 @@ public class MybatisPermissionRepository implements PermissionRepository {
     @Override
     public List<RolePolicy> listRolePolicies() {
         return permissionMapper.selectRolePolicies().stream()
-            .map(item -> new RolePolicy(item.roleCode(), item.resourcePath(), item.action()))
+            .map(item -> new RolePolicy(item.roleCode(), item.permissionCode()))
             .toList();
     }
 

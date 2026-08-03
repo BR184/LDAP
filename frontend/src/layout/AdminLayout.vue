@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Expand, Fold, SwitchButton, User } from '@element-plus/icons-vue'
+import { Expand, Fold, Key, SwitchButton, User } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -17,6 +17,9 @@ const menuStore = useMenuStore()
 const activeMenu = computed(() => {
   if (route.path === '/profile') {
     return '/profile'
+  }
+  if (route.path === '/access-tokens') {
+    return '/access-tokens'
   }
 
   const match = menuStore.visibleNavigation.find((item) => route.path.startsWith(item.path))
@@ -88,6 +91,11 @@ function handleMenuSelect(index: string) {
           <el-menu-item index="/profile" class="admin-menu-item">
             <el-icon><User /></el-icon>
             <template #title>个人中心</template>
+          </el-menu-item>
+
+          <el-menu-item index="/access-tokens" class="admin-menu-item">
+            <el-icon><Key /></el-icon>
+            <template #title>访问密钥</template>
           </el-menu-item>
 
           <el-sub-menu v-for="group in visibleSidebarGroups" :key="group.title" :index="group.title">

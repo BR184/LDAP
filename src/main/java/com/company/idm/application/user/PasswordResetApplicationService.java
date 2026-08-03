@@ -32,7 +32,12 @@ public class PasswordResetApplicationService {
             User operator = userRepository.findByUserId(command.operator())
                 .orElseThrow(() -> new BizException("USER_NOT_FOUND", "操作人不存在"));
             List<User> allUsers = userRepository.findAll();
-            PasswordResetScope scope = passwordResetAuthorizationService.checkCanReset(operator, target, allUsers);
+            PasswordResetScope scope = passwordResetAuthorizationService.checkCanReset(
+                operator,
+                target,
+                allUsers,
+                command.effectivePermissionCodes()
+            );
             doAdminReset(target, command.operator(), command.operatorIp(), scope);
         } catch (RuntimeException exception) {
             auditFailure(command.operator(), command.operatorIp(), String.valueOf(target.getId()), exception.getMessage());

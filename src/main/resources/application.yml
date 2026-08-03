@@ -46,6 +46,9 @@ app:
     # JWT 密钥优先从环境变量读取，默认值仅用于原型环境。
     secret: ${APP_JWT_SECRET:prototype-secret-prototype-secret-prototype-secret}
     expire-minutes: ${APP_JWT_EXPIRE_MINUTES:30}
+  personal-access-token:
+    max-active-per-user: ${APP_PAT_MAX_ACTIVE_PER_USER:20}
+    last-used-write-interval-seconds: ${APP_PAT_LAST_USED_WRITE_INTERVAL_SECONDS:300}
   sql-log:
     # SQL 日志默认开启，便于当前阶段联调和问题排查。
     enabled: ${APP_SQL_LOG_ENABLED:true}

@@ -14,7 +14,7 @@ import org.apache.ibatis.annotations.Select;
 public interface PermissionMapper extends BaseMapper<PermissionDO> {
 
     @Select("""
-        SELECT r.role_code AS roleCode, p.resource_path AS resourcePath, p.action AS action
+        SELECT r.role_code AS roleCode, p.permission_code AS permissionCode
         FROM sys_role_permission rp
         INNER JOIN sys_role r ON rp.role_id = r.id
         INNER JOIN sys_permission p ON rp.permission_id = p.id

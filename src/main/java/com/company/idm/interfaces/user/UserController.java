@@ -1,6 +1,7 @@
 package com.company.idm.interfaces.user;
 
 import com.company.idm.application.rbac.AssignUserRolesCommand;
+import com.company.idm.application.rbac.EffectivePermissionService;
 import com.company.idm.application.rbac.RbacApplicationService;
 import com.company.idm.application.department.DepartmentDisplay;
 import com.company.idm.application.department.DepartmentPathService;
@@ -22,7 +23,7 @@ import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
-import com.company.idm.domain.rbac.PermissionRepository;
+import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.util.ClientIpUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -51,25 +52,26 @@ public class UserController {
     private final PasswordResetAuthorizationService passwordResetAuthorizationService;
     private final UserReadScopeService userReadScopeService;
     private final UserRepository userRepository;
-    private final PermissionRepository permissionRepository;
+    private final EffectivePermissionService effectivePermissionService;
     private final RbacApplicationService rbacApplicationService;
     private final DepartmentRepository departmentRepository;
     private final DepartmentPathService departmentPathService;
 
     @GetMapping
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_READ', 'USER_READ_SELF_AND_SUBORDINATE_TREE')")
     public ApiResponse<List<UserResponse>> list(
         @RequestParam(required = false) String userId,
         @RequestParam(required = false) String deptName,
         @RequestParam(required = false) String deptCode,
         @RequestParam(required = false) Boolean accessAllowed,
-        @AuthenticationPrincipal(expression = "userId") String username
+        @AuthenticationPrincipal AuthenticatedUser principal
     ) {
+        String username = principal.userId();
         String departmentKeyword = deptName != null && !deptName.isBlank() ? deptName : deptCode;
         User operator = resolveOperator(username);
         List<User> organizationSnapshot = userRepositorySnapshot();
         List<Department> departmentSnapshot = departmentRepository.findAll();
-        Set<String> operatorPermissionCodes = permissionRepository.findPermissionCodesByUserId(username);
+        Set<String> operatorPermissionCodes = effectivePermissionService.resolve(principal);
         List<User> userList = userReadScopeService.filterVisibleUsers(
             operator,
             userApplicationService.listUsers(userId, departmentKeyword, accessAllowed),
@@ -87,15 +89,16 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id, 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_DETAIL')")
     public ApiResponse<UserResponse> detail(
         @PathVariable Long id,
-        @AuthenticationPrincipal(expression = "userId") String username
+        @AuthenticationPrincipal AuthenticatedUser principal
     ) {
+        String username = principal.userId();
         User user = userApplicationService.getUser(id);
         User operator = resolveOperator(username);
         List<User> organizationSnapshot = userRepositorySnapshot();
-        Set<String> operatorPermissionCodes = permissionRepository.findPermissionCodesByUserId(username);
+        Set<String> operatorPermissionCodes = effectivePermissionService.resolve(principal);
         userReadScopeService.checkCanReadUser(operator, user, organizationSnapshot, operatorPermissionCodes);
         return ApiResponse.success(toResponse(
             user,
@@ -105,7 +108,7 @@ public class UserController {
     }
 
     @PostMapping
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_CREATE')")
     public ApiResponse<UserResponse> create(
         @Valid @RequestBody CreateUserRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -127,7 +130,7 @@ public class UserController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id, 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_UPDATE')")
     public ApiResponse<UserResponse> update(
         @PathVariable Long id,
         @Valid @RequestBody UpdateUserRequest request,
@@ -149,7 +152,7 @@ public class UserController {
     }
 
     @PutMapping("/{id}/access")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/access', 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_ACCESS_UPDATE')")
     public ApiResponse<Void> updateAccess(
         @PathVariable Long id,
         @Valid @RequestBody UpdateUserAccessRequest request,
@@ -160,7 +163,7 @@ public class UserController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id, 'DELETE')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_DELETE')")
     public ApiResponse<Void> delete(
         @PathVariable Long id,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -170,7 +173,7 @@ public class UserController {
     }
 
     @PostMapping("/batch-delete")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/batch-delete', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_BATCH_DELETE')")
     public ApiResponse<BatchDeleteUsersResponse> batchDelete(
         @Valid @RequestBody BatchDeleteUsersRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -186,6 +189,7 @@ public class UserController {
     }
 
     @PutMapping("/me/password")
+    @PreAuthorize("@credentialAccessService.isSession(authentication)")
     public ApiResponse<Void> changePassword(
         @Valid @RequestBody ChangePasswordRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -200,6 +204,7 @@ public class UserController {
     }
 
     @PostMapping("/me/password/verify")
+    @PreAuthorize("@credentialAccessService.isSession(authentication)")
     public ApiResponse<VerifyPasswordResponse> verifyPassword(
         @Valid @RequestBody VerifyPasswordRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -208,22 +213,23 @@ public class UserController {
     }
 
     @PutMapping("/{id}/password/reset")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/password/reset', 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_PASSWORD_RESET_ALL', 'USER_PASSWORD_RESET_DIRECT', 'USER_PASSWORD_RESET_TREE')")
     public ApiResponse<Void> resetPassword(
         @PathVariable Long id,
-        @AuthenticationPrincipal(expression = "userId") String username,
+        @AuthenticationPrincipal AuthenticatedUser principal,
         HttpServletRequest httpServletRequest
     ) {
         passwordResetApplicationService.adminResetPassword(new AdminResetPasswordCommand(
             id,
-            username,
-            ClientIpUtil.getClientIp(httpServletRequest)
+            principal.userId(),
+            ClientIpUtil.getClientIp(httpServletRequest),
+            effectivePermissionService.resolve(principal)
         ));
         return ApiResponse.success();
     }
 
     @PutMapping("/{id}/roles")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/roles', 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_ROLE_ASSIGN')")
     public ApiResponse<Void> assignRoles(
         @PathVariable Long id,
         @Valid @RequestBody AssignUserRolesRequest request,
@@ -234,7 +240,7 @@ public class UserController {
     }
 
     @PostMapping("/{id}/sync-ldap")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/users/' + #id + '/sync-ldap', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_SYNC_LDAP')")
     public ApiResponse<UserResponse> syncLdap(
         @PathVariable Long id,
         @AuthenticationPrincipal(expression = "userId") String username

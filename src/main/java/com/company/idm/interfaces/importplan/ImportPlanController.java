@@ -31,7 +31,7 @@ public class ImportPlanController {
     private final ImportPlanResponseAssembler assembler;
 
     @PostMapping("/plan")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_CREATE')")
     public ApiResponse<ImportBatchDetailResponse> generatePlan(
         @Valid @RequestBody GenerateImportPlanRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -42,7 +42,7 @@ public class ImportPlanController {
     }
 
     @PostMapping("/plan/upload")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_CREATE')")
     public ApiResponse<ImportBatchDetailResponse> generatePlanByUpload(
         @RequestParam("file") MultipartFile file,
         @RequestParam(value = "remark", required = false) String remark,
@@ -54,7 +54,7 @@ public class ImportPlanController {
     }
 
     @GetMapping("/plan")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_READ')")
     public ApiResponse<List<ImportBatchResponse>> listPlans(@RequestParam(defaultValue = "50") Integer limit) {
         return ApiResponse.success(importPlanService.listRecent(limit).stream()
             .map(assembler::toBatchResponse)
@@ -62,19 +62,19 @@ public class ImportPlanController {
     }
 
     @GetMapping("/plan/{batchId}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId, 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_DETAIL')")
     public ApiResponse<ImportBatchDetailResponse> getPlanDetail(@PathVariable Long batchId) {
         return ApiResponse.success(assembler.toDetailResponse(importPlanService.findById(batchId)));
     }
 
     @GetMapping("/plan/{batchId}/review")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId, 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_DETAIL')")
     public ApiResponse<ImportPlanReviewResponse> getPlanReview(@PathVariable Long batchId) {
         return ApiResponse.success(assembler.toReviewResponse(importPlanService.findById(batchId)));
     }
 
     @PostMapping("/plan/{batchId}/confirm")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/confirm', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_CONFIRM')")
     public ApiResponse<ImportBatchDetailResponse> confirmPlan(
         @PathVariable Long batchId,
         @RequestBody(required = false) ConfirmImportPlanRequest request,
@@ -88,7 +88,7 @@ public class ImportPlanController {
     }
 
     @PostMapping("/plan/{batchId}/conflicts/{itemId}/skip")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/conflicts/' + #itemId + '/skip', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_CONFLICT_RESOLVE')")
     public ApiResponse<ImportBatchDetailResponse> resolveConflictBySkipping(
         @PathVariable Long batchId,
         @PathVariable Long itemId,
@@ -100,7 +100,7 @@ public class ImportPlanController {
     }
 
     @PostMapping("/plan/{batchId}/conflicts/{itemId}/merge-by-employee-no")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/conflicts/' + #itemId + '/merge-by-employee-no', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_CONFLICT_MERGE')")
     public ApiResponse<ImportBatchDetailResponse> resolveConflictByMergingEmployeeNumber(
         @PathVariable Long batchId,
         @PathVariable Long itemId,
@@ -112,7 +112,7 @@ public class ImportPlanController {
     }
 
     @PostMapping("/plan/{batchId}/cancel")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/cancel', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_CANCEL')")
     public ApiResponse<ImportBatchDetailResponse> cancelPlan(
         @PathVariable Long batchId,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -121,7 +121,7 @@ public class ImportPlanController {
     }
 
     @PostMapping("/plan/{batchId}/execute")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/execute', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_EXECUTE')")
     public ApiResponse<ImportBatchDetailResponse> executePlan(
         @PathVariable Long batchId,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -130,13 +130,13 @@ public class ImportPlanController {
     }
 
     @PostMapping("/plan/{batchId}/rollback-plan")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/rollback', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_ROLLBACK')")
     public ApiResponse<ImportBatchDetailResponse> generateRollbackPlan(@PathVariable Long batchId) {
         return ApiResponse.success(assembler.toDetailResponse(rollbackService.generateRollbackPlan(batchId)));
     }
 
     @PostMapping("/plan/{batchId}/rollback")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/rollback', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_ROLLBACK')")
     public ApiResponse<ImportBatchDetailResponse> rollbackPlan(
         @PathVariable Long batchId,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -145,7 +145,7 @@ public class ImportPlanController {
     }
 
     @PostMapping("/plan/{batchId}/retry-ldap")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/import/plan/' + #batchId + '/execute', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'IMPORT_PLAN_RETRY_LDAP')")
     public ApiResponse<ImportBatchDetailResponse> retryLdapFailures(
         @PathVariable Long batchId,
         @AuthenticationPrincipal(expression = "userId") String username

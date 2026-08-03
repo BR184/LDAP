@@ -16,6 +16,8 @@ public class AuditLogDO {
     private String traceId;
     private String operator;
     private String operatorIp;
+    private String credentialType;
+    private Long credentialId;
     private String operationType;
     private String bizType;
     private String bizId;
@@ -55,6 +57,22 @@ public class AuditLogDO {
 
     public void setOperatorIp(String operatorIp) {
         this.operatorIp = operatorIp;
+    }
+
+    public String getCredentialType() {
+        return credentialType;
+    }
+
+    public void setCredentialType(String credentialType) {
+        this.credentialType = credentialType;
+    }
+
+    public Long getCredentialId() {
+        return credentialId;
+    }
+
+    public void setCredentialId(Long credentialId) {
+        this.credentialId = credentialId;
     }
 
     public String getOperationType() {

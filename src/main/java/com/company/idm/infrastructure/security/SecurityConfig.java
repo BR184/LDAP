@@ -18,7 +18,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
         HttpSecurity http,
-        JwtAuthenticationFilter jwtAuthenticationFilter,
+        BearerAuthenticationFilter bearerAuthenticationFilter,
         RestAuthenticationEntryPoint restAuthenticationEntryPoint,
         RestAccessDeniedHandler restAccessDeniedHandler
     )
@@ -44,7 +44,7 @@ public class SecurityConfig {
                 .permitAll()
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(bearerAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 }

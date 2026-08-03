@@ -31,19 +31,19 @@ public class DepartmentController {
     private final DepartmentApplicationService departmentApplicationService;
 
     @GetMapping("/tree")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/tree', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'DEPT_TREE')")
     public ApiResponse<List<DepartmentTreeNodeResponse>> tree() {
         return ApiResponse.success(buildTree(departmentApplicationService.listDepartments()));
     }
 
     @GetMapping("/{deptCode}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/' + #deptCode, 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'DEPT_DETAIL')")
     public ApiResponse<DepartmentResponse> detail(@PathVariable String deptCode) {
         return ApiResponse.success(toResponse(departmentApplicationService.getDepartment(deptCode)));
     }
 
     @PostMapping
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'DEPT_CREATE')")
     public ApiResponse<DepartmentResponse> create(
         @Valid @RequestBody CreateDepartmentRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -58,7 +58,7 @@ public class DepartmentController {
     }
 
     @PutMapping("/{deptCode}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/' + #deptCode, 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'DEPT_UPDATE')")
     public ApiResponse<DepartmentResponse> update(
         @PathVariable String deptCode,
         @Valid @RequestBody UpdateDepartmentRequest request,
@@ -74,7 +74,7 @@ public class DepartmentController {
     }
 
     @DeleteMapping("/{deptCode}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/' + #deptCode, 'DELETE')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'DEPT_DELETE')")
     public ApiResponse<Void> delete(
         @PathVariable String deptCode,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -84,7 +84,7 @@ public class DepartmentController {
     }
 
     @PostMapping("/{deptCode}/sync-ldap")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/departments/' + #deptCode + '/sync-ldap', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'DEPT_SYNC_LDAP')")
     public ApiResponse<DepartmentResponse> syncLdap(
         @PathVariable String deptCode,
         @AuthenticationPrincipal(expression = "userId") String username

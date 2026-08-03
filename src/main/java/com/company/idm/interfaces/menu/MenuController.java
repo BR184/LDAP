@@ -33,13 +33,13 @@ public class MenuController {
     private final RbacApplicationService rbacApplicationService;
 
     @GetMapping("/{id}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/menus/' + #id, 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'MENU_DETAIL')")
     public ApiResponse<MenuResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(toResponse(rbacApplicationService.getMenu(id)));
     }
 
     @PostMapping
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/menus', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'MENU_CREATE')")
     public ApiResponse<MenuResponse> create(
         @Valid @RequestBody CreateMenuRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -59,7 +59,7 @@ public class MenuController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/menus/' + #id, 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'MENU_UPDATE')")
     public ApiResponse<MenuResponse> update(
         @PathVariable Long id,
         @Valid @RequestBody UpdateMenuRequest request,
@@ -80,7 +80,7 @@ public class MenuController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/menus/' + #id, 'DELETE')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'MENU_DELETE')")
     public ApiResponse<Void> delete(
         @PathVariable Long id,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -90,13 +90,13 @@ public class MenuController {
     }
 
     @GetMapping("/tree")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/menus/tree', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'MENU_TREE')")
     public ApiResponse<List<MenuTreeNodeResponse>> tree() {
         return ApiResponse.success(buildTree(rbacApplicationService.listAllMenus()));
     }
 
     @GetMapping("/self/tree")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("@credentialAccessService.isSession(authentication)")
     public ApiResponse<List<MenuTreeNodeResponse>> selfTree(
         @AuthenticationPrincipal(expression = "userId") String username
     ) {

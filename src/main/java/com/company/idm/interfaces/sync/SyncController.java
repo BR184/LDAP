@@ -26,7 +26,7 @@ public class SyncController {
     private final SyncResponseAssembler syncResponseAssembler;
 
     @PostMapping("/reconcile/preview")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/sync/reconcile/preview', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'SYNC_RECONCILE_PREVIEW')")
     public ApiResponse<SyncBatchDetailResponse> previewReconcile(
         @AuthenticationPrincipal(expression = "userId") String username
     ) {
@@ -34,7 +34,7 @@ public class SyncController {
     }
 
     @PostMapping("/reconcile/execute")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/sync/reconcile/execute', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'SYNC_RECONCILE_EXECUTE')")
     public ApiResponse<SyncBatchDetailResponse> executeReconcile(
         @RequestBody(required = false) SyncReconcileRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -44,7 +44,7 @@ public class SyncController {
     }
 
     @PostMapping("/jobs/{id}/retry")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/sync/jobs/' + #id + '/retry', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'SYNC_JOB_RETRY')")
     public ApiResponse<SyncBatchDetailResponse> retryJob(
         @PathVariable Long id,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -53,13 +53,13 @@ public class SyncController {
     }
 
     @GetMapping("/jobs")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/sync/jobs', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'SYNC_JOB_LIST')")
     public ApiResponse<List<SyncJobResponse>> listJobs() {
         return ApiResponse.success(syncApplicationService.listJobs().stream().map(syncResponseAssembler::toJobResponse).toList());
     }
 
     @GetMapping("/batches/{batchNo}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/sync/batches/' + #batchNo, 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'SYNC_BATCH_DETAIL')")
     public ApiResponse<SyncBatchDetailResponse> batchDetail(@PathVariable String batchNo) {
         return ApiResponse.success(syncResponseAssembler.toResponse(syncApplicationService.getBatchDetail(batchNo)));
     }

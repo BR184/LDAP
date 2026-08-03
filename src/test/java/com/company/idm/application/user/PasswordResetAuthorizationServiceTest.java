@@ -1,9 +1,6 @@
 package com.company.idm.application.user;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-
-import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.domain.user.User;
 import java.util.List;
 import java.util.Set;
@@ -12,7 +9,6 @@ import org.junit.jupiter.api.Test;
 class PasswordResetAuthorizationServiceTest {
 
     private final PasswordResetAuthorizationService service = new PasswordResetAuthorizationService(
-        mock(PermissionRepository.class),
         new ReportingHierarchyService()
     );
 
@@ -48,6 +44,23 @@ class PasswordResetAuthorizationServiceTest {
 
         assertThat(result.allowed()).isFalse();
         assertThat(result.scope()).isNull();
+    }
+
+    @Test
+    void roleNameCannotExpandTheCredentialPermissionScope() {
+        User manager = user(1L, "manager", "E001", null).toBuilder()
+            .roleCodes(Set.of("SUPER_ADMIN"))
+            .build();
+        User unrelatedUser = user(2L, "unrelated", "E002", null);
+
+        PasswordResetAuthorizationResult result = service.evaluate(
+            manager,
+            unrelatedUser,
+            List.of(manager, unrelatedUser),
+            Set.of(PasswordResetAuthorizationService.RESET_DIRECT)
+        );
+
+        assertThat(result.allowed()).isFalse();
     }
 
     private User user(Long id, String userId, String employeeNo, String leaderRef) {

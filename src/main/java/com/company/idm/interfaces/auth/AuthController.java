@@ -55,7 +55,7 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/auth/me', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'AUTH_ME')")
     public ApiResponse<CurrentUserResponse> me(@AuthenticationPrincipal(expression = "userId") String username) {
         User user = authApplicationService.loadProfile(username);
         return ApiResponse.success(new CurrentUserResponse(

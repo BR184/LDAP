@@ -34,7 +34,7 @@ public class RoleController {
     private final RbacApplicationService rbacApplicationService;
 
     @GetMapping
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_READ')")
     public ApiResponse<List<RoleResponse>> list() {
         List<RoleResponse> roles = rbacApplicationService.listRoles().stream()
             .map(this::toResponse)
@@ -43,19 +43,19 @@ public class RoleController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id, 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_DETAIL')")
     public ApiResponse<RoleResponse> detail(@PathVariable Long id) {
         return ApiResponse.success(toResponse(rbacApplicationService.getRole(id)));
     }
 
     @GetMapping("/{id}/permissions")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id + '/permissions', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_PERMISSION_READ_BINDINGS')")
     public ApiResponse<List<Long>> permissionIds(@PathVariable Long id) {
         return ApiResponse.success(rbacApplicationService.listRolePermissionIds(id));
     }
 
     @PostMapping
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_CREATE')")
     public ApiResponse<RoleResponse> create(
         @Valid @RequestBody CreateRoleRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -67,7 +67,7 @@ public class RoleController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id, 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_UPDATE')")
     public ApiResponse<RoleResponse> update(
         @PathVariable Long id,
         @Valid @RequestBody UpdateRoleRequest request,
@@ -81,7 +81,7 @@ public class RoleController {
     }
 
     @PutMapping("/{id}/status")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id + '/status', 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_STATUS')")
     public ApiResponse<Void> updateStatus(
         @PathVariable Long id,
         @Valid @RequestBody UpdateRoleStatusRequest request,
@@ -92,7 +92,7 @@ public class RoleController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id, 'DELETE')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_DELETE')")
     public ApiResponse<Void> delete(
         @PathVariable Long id,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -102,7 +102,7 @@ public class RoleController {
     }
 
     @PostMapping("/batch-delete")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/batch-delete', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_BATCH_DELETE')")
     public ApiResponse<BatchDeleteRolesResponse> batchDelete(
         @Valid @RequestBody BatchDeleteRolesRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
@@ -115,7 +115,7 @@ public class RoleController {
     }
 
     @PutMapping("/{id}/permissions")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/roles/' + #id + '/permissions', 'PUT')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_PERMISSION_ASSIGN')")
     public ApiResponse<Void> grantPermissions(
         @PathVariable Long id,
         @Valid @RequestBody GrantRolePermissionsRequest request,

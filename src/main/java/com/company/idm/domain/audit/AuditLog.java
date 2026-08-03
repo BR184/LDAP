@@ -18,6 +18,8 @@ public class AuditLog {
     private String traceId;
     private String operator;
     private String operatorIp;
+    private String credentialType;
+    private Long credentialId;
     private String operationType;
     private String bizType;
     private String bizId;

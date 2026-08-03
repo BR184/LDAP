@@ -27,19 +27,19 @@ public class ThirdPartyLdapController {
     private final ThirdPartyLdapIntegrationApplicationService thirdPartyLdapIntegrationApplicationService;
 
     @GetMapping("/framework")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/ldap/framework', 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'LDAP_FRAMEWORK_READ')")
     public ApiResponse<ThirdPartyLdapFrameworkDetail> framework() {
         return ApiResponse.success(thirdPartyLdapIntegrationApplicationService.getFramework());
     }
 
     @GetMapping("/templates/{systemCode}")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/ldap/templates/' + #systemCode, 'GET')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'LDAP_TEMPLATE_READ')")
     public ApiResponse<ThirdPartyLdapTemplateDetail> template(@PathVariable String systemCode) {
         return ApiResponse.success(thirdPartyLdapIntegrationApplicationService.getTemplate(systemCode));
     }
 
     @PostMapping("/precheck")
-    @PreAuthorize("@casbinAccessService.check(authentication, '/api/v1/ldap/precheck', 'POST')")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'LDAP_PRECHECK_EXECUTE')")
     public ApiResponse<ThirdPartyLdapPrecheckReport> precheck(@Valid @RequestBody ThirdPartyLdapPrecheckRequest request) {
         return ApiResponse.success(thirdPartyLdapIntegrationApplicationService.precheck(
             new ThirdPartyLdapPrecheckCommand(request.systemCode(), request.enabledUsername(), request.disabledUsername())

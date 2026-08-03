@@ -3719,6 +3719,43 @@ LDAP 控制面页直接对接以下接口：
 - 暂未同步清理：
   - 大量历史测试用例仍使用旧 `username/externalId` API，后续需专项更新测试基线
 
+### 16.37 个人访问密钥
+
+#### 16.37.1 权威模型
+
+- 采用数据库托管的不透明令牌，格式为 `idm_pat_<tokenUid>_<secret>`。
+- `secret` 使用 `SecureRandom` 生成 256 位熵，数据库仅保存完整令牌的 SHA-256 摘要。
+- 明文只在创建成功响应返回一次；列表、日志、异常和审计均不返回明文或摘要。
+- 每份令牌保存创建时勾选的 API 权限 ID，创建后不因账号新增权限而扩张。
+- 请求有效权限为令牌所选权限与账号当前已启用权限的实时交集。
+
+#### 16.37.2 认证与授权
+
+- 统一 Bearer 过滤器按 `idm_pat_` 前缀显式选择 PAT 或 JWT 认证器。
+- JWT 的签名、过期、用户 ID、准入状态和 `tokenVersion` 校验保持不变。
+- PAT 每次请求读取令牌和账号权威状态，撤销、过期、账号禁用、离职或删除立即生效。
+- Casbin 策略对象统一为稳定 `permissionCode`，不再以路径和方法作为内部授权主键。
+- 用户查询与密码重置的多数据范围接口使用 `hasAny` 准入，并由业务服务按当前凭证有效权限执行二次范围校验。
+- 密码、本人菜单和个人访问密钥生命周期接口只允许网页登录会话。
+
+#### 16.37.3 数据与 API
+
+- Flyway `V46` 新增 `sys_personal_access_token` 和 `sys_personal_access_token_permission`。
+- `sys_audit_log` 新增可空的 `credential_type`、`credential_id`，旧审计数据与旧写入方不受影响。
+- 新增接口：
+  - `GET /api/v1/personal-access-tokens`
+  - `GET /api/v1/personal-access-tokens/available-permissions`
+  - `POST /api/v1/personal-access-tokens`
+  - `DELETE /api/v1/personal-access-tokens/{id}`
+- 现有登录、`/api/v1/auth/me`、用户、LDAP 路径、请求字段、响应字段和错误包络保持不变。
+
+#### 16.37.4 运维边界
+
+- 每账号有效令牌上限由 `APP_PAT_MAX_ACTIVE_PER_USER` 配置，默认 `20`。
+- 最近使用信息由 `APP_PAT_LAST_USED_WRITE_INTERVAL_SECONDS` 节流，默认 `300` 秒。
+- 创建、撤销和失败认证写入审计；成功认证的最近使用信息使用数据库条件更新防止并发重复写入。
+- 使用与基准方法见 `docs/runbooks/personal-access-token-usage.md`。
+
 
 
 
