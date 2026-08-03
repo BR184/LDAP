@@ -61,15 +61,18 @@ $artifactId = $pomXml.project.artifactId
 $version = $pomXml.project.version
 $jarFile = "$artifactId-$version.jar"
 
-# 获取最新的 Flyway 版本
-$migrationFiles = Get-ChildItem "src/main/resources/db/migration/V*.sql" | Sort-Object Name -Descending
-if ($migrationFiles) {
-    $latestMigration = $migrationFiles[0].BaseName
-    if ($latestMigration -match '^(V\d+)__') {
-        $dbVersion = $matches[1]
-    } else {
-        $dbVersion = "unknown"
+# 获取最新的 Flyway 版本。文件名必须按版本号数值排序，避免 V9 被判定为比 V46 更新。
+$migrationFiles = Get-ChildItem "src/main/resources/db/migration/V*.sql" | ForEach-Object {
+    if ($_.BaseName -match '^V(?<Version>\d+)__') {
+        [PSCustomObject]@{
+            File = $_
+            Version = [long]$matches['Version']
+        }
     }
+} | Sort-Object Version -Descending
+
+if ($migrationFiles) {
+    $dbVersion = "V$($migrationFiles[0].Version)"
 } else {
     $dbVersion = "none"
 }
