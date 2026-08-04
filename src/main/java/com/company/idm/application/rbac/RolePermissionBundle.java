@@ -7,7 +7,12 @@ public record RolePermissionBundle(
     String name,
     int sort,
     List<Long> permissionIds,
-    List<String> permissionCodes
+    List<String> permissionCodes,
+    String categoryId,
+    String categoryName,
+    String categoryDescription,
+    int categorySort,
+    RolePermissionBundleTier tier
 ) {
 
     public RolePermissionBundle {
@@ -22,6 +27,18 @@ public record RolePermissionBundle(
         }
         if (permissionCodes == null || permissionCodes.isEmpty()) {
             throw new IllegalArgumentException("Role permission bundle must contain permission codes");
+        }
+        if (categoryId == null || categoryId.isBlank()) {
+            throw new IllegalArgumentException("Role permission bundle category id must not be blank");
+        }
+        if (categoryName == null || categoryName.isBlank()) {
+            throw new IllegalArgumentException("Role permission bundle category name must not be blank");
+        }
+        if (categoryDescription == null || categoryDescription.isBlank()) {
+            throw new IllegalArgumentException("Role permission bundle category description must not be blank");
+        }
+        if (tier == null) {
+            throw new IllegalArgumentException("Role permission bundle tier must not be null");
         }
         permissionIds = List.copyOf(permissionIds);
         permissionCodes = List.copyOf(permissionCodes);

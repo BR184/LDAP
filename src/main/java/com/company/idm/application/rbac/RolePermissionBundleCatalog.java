@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +33,8 @@ public class RolePermissionBundleCatalog {
     }
 
     RolePermissionBundleCatalog(BundleDocument document, Collection<Permission> permissions) {
-        if (document == null || document.version() <= 0 || document.bundles() == null) {
+        if (document == null || document.version() <= 0 || document.categories() == null
+            || document.categories().isEmpty()) {
             throw new IllegalStateException("Role permission bundle resource is invalid");
         }
         if (permissions == null) {
@@ -42,11 +43,13 @@ public class RolePermissionBundleCatalog {
         Map<String, Permission> permissionsByCode = permissions.stream()
             .filter(permission -> permission.getPermissionCode() != null && !permission.getPermissionCode().isBlank())
             .collect(Collectors.toMap(Permission::getPermissionCode, Function.identity(), (first, ignored) -> first));
-        validateDefinitions(document.bundles(), permissionsByCode.keySet());
+        validateDefinitions(document.categories(), permissionsByCode.keySet());
         this.version = document.version();
-        this.bundles = document.bundles().stream()
-            .map(definition -> toBundle(definition, permissionsByCode))
-            .sorted(Comparator.comparingInt(RolePermissionBundle::sort))
+        this.bundles = document.categories().stream()
+            .sorted(Comparator.comparingInt(CategoryDefinition::sort))
+            .flatMap(category -> category.bundles().stream()
+                .sorted(Comparator.comparingInt(BundleDefinition::sort))
+                .map(definition -> toBundle(category, definition, permissionsByCode)))
             .toList();
     }
 
@@ -66,38 +69,101 @@ public class RolePermissionBundleCatalog {
         }
     }
 
-    private static void validateDefinitions(List<BundleDefinition> definitions, Set<String> knownPermissionCodes) {
+    private static void validateDefinitions(
+        List<CategoryDefinition> categories,
+        Set<String> knownPermissionCodes
+    ) {
+        Set<String> categoryIds = new HashSet<>();
         Set<String> bundleIds = new HashSet<>();
-        for (BundleDefinition definition : definitions) {
-            if (definition == null || definition.id() == null || definition.id().isBlank()) {
-                throw new IllegalStateException("Role permission bundle id must not be blank");
-            }
-            if (!bundleIds.add(definition.id())) {
-                throw new IllegalStateException("Duplicate role permission bundle: " + definition.id());
-            }
-            if (definition.name() == null || definition.name().isBlank() || definition.sort() < 0
-                || definition.permissionCodes() == null || definition.permissionCodes().isEmpty()) {
-                throw new IllegalStateException("Role permission bundle definition is invalid: " + definition.id());
-            }
-            Set<String> codes = new HashSet<>();
-            for (String permissionCode : definition.permissionCodes()) {
-                if (permissionCode == null || permissionCode.isBlank() || !codes.add(permissionCode)) {
+        for (CategoryDefinition category : categories) {
+            validateCategoryMetadata(category, categoryIds);
+            Map<RolePermissionBundleTier, BundleDefinition> definitionsByTier = new EnumMap<>(
+                RolePermissionBundleTier.class
+            );
+            for (BundleDefinition definition : category.bundles()) {
+                validateBundleDefinition(category.id(), definition, bundleIds, knownPermissionCodes);
+                if (definitionsByTier.put(definition.tier(), definition) != null) {
                     throw new IllegalStateException(
-                        "Duplicate or blank permission code in role permission bundle "
-                            + definition.id() + ": " + permissionCode
+                        "Duplicate role permission bundle tier in category " + category.id() + ": " + definition.tier()
                     );
                 }
-                if (!knownPermissionCodes.contains(permissionCode)) {
-                    throw new IllegalStateException(
-                        "Unknown permission code in role permission bundle "
-                            + definition.id() + ": " + permissionCode
-                    );
-                }
+            }
+            if (definitionsByTier.size() != RolePermissionBundleTier.values().length) {
+                throw new IllegalStateException(
+                    "Role permission bundle category must define STANDARD and ADMIN: " + category.id()
+                );
+            }
+            validateStrictSuperset(
+                category.id(),
+                definitionsByTier.get(RolePermissionBundleTier.STANDARD),
+                definitionsByTier.get(RolePermissionBundleTier.ADMIN)
+            );
+        }
+    }
+
+    private static void validateCategoryMetadata(CategoryDefinition category, Set<String> categoryIds) {
+        if (category == null || category.id() == null || category.id().isBlank()) {
+            throw new IllegalStateException("Role permission bundle category id must not be blank");
+        }
+        if (!categoryIds.add(category.id())) {
+            throw new IllegalStateException("Duplicate role permission bundle category: " + category.id());
+        }
+        if (category.name() == null || category.name().isBlank()
+            || category.description() == null || category.description().isBlank()
+            || category.sort() < 0 || category.bundles() == null || category.bundles().isEmpty()) {
+            throw new IllegalStateException("Role permission bundle category is invalid: " + category.id());
+        }
+    }
+
+    private static void validateBundleDefinition(
+        String categoryId,
+        BundleDefinition definition,
+        Set<String> bundleIds,
+        Set<String> knownPermissionCodes
+    ) {
+        if (definition == null || definition.id() == null || definition.id().isBlank()) {
+            throw new IllegalStateException("Role permission bundle id must not be blank in category " + categoryId);
+        }
+        if (!bundleIds.add(definition.id())) {
+            throw new IllegalStateException("Duplicate role permission bundle: " + definition.id());
+        }
+        if (definition.name() == null || definition.name().isBlank() || definition.tier() == null
+            || definition.sort() < 0 || definition.permissionCodes() == null || definition.permissionCodes().isEmpty()) {
+            throw new IllegalStateException("Role permission bundle definition is invalid: " + definition.id());
+        }
+        Set<String> codes = new HashSet<>();
+        for (String permissionCode : definition.permissionCodes()) {
+            if (permissionCode == null || permissionCode.isBlank() || !codes.add(permissionCode)) {
+                throw new IllegalStateException(
+                    "Duplicate or blank permission code in role permission bundle "
+                        + definition.id() + ": " + permissionCode
+                );
+            }
+            if (!knownPermissionCodes.contains(permissionCode)) {
+                throw new IllegalStateException(
+                    "Unknown permission code in role permission bundle "
+                        + definition.id() + ": " + permissionCode
+                );
             }
         }
     }
 
+    private static void validateStrictSuperset(
+        String categoryId,
+        BundleDefinition standard,
+        BundleDefinition admin
+    ) {
+        Set<String> standardCodes = Set.copyOf(standard.permissionCodes());
+        Set<String> adminCodes = Set.copyOf(admin.permissionCodes());
+        if (!adminCodes.containsAll(standardCodes) || adminCodes.size() <= standardCodes.size()) {
+            throw new IllegalStateException(
+                "ADMIN permission bundle must be a strict superset of STANDARD in category " + categoryId
+            );
+        }
+    }
+
     private static RolePermissionBundle toBundle(
+        CategoryDefinition category,
         BundleDefinition definition,
         Map<String, Permission> permissionsByCode
     ) {
@@ -110,13 +176,33 @@ public class RolePermissionBundleCatalog {
             definition.name(),
             definition.sort(),
             permissionIds,
-            definition.permissionCodes()
+            definition.permissionCodes(),
+            category.id(),
+            category.name(),
+            category.description(),
+            category.sort(),
+            definition.tier()
         );
     }
 
-    public record BundleDocument(int version, List<BundleDefinition> bundles) {
+    public record BundleDocument(int version, List<CategoryDefinition> categories) {
     }
 
-    public record BundleDefinition(String id, String name, int sort, List<String> permissionCodes) {
+    public record CategoryDefinition(
+        String id,
+        String name,
+        String description,
+        int sort,
+        List<BundleDefinition> bundles
+    ) {
+    }
+
+    public record BundleDefinition(
+        String id,
+        String name,
+        RolePermissionBundleTier tier,
+        int sort,
+        List<String> permissionCodes
+    ) {
     }
 }

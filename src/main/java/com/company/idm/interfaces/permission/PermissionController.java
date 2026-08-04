@@ -68,7 +68,8 @@ public class PermissionController {
 
     private RolePermissionBundleResponse toResponse(RolePermissionBundle bundle) {
         return new RolePermissionBundleResponse(
-            bundle.id(), bundle.name(), bundle.sort(), bundle.permissionIds(), bundle.permissionCodes()
+            bundle.id(), bundle.name(), bundle.sort(), bundle.permissionIds(), bundle.permissionCodes(),
+            bundle.categoryId(), bundle.categoryName(), bundle.categoryDescription(), bundle.categorySort(), bundle.tier()
         );
     }
 
@@ -77,7 +78,12 @@ public class PermissionController {
         String name,
         int sort,
         List<Long> permissionIds,
-        List<String> permissionCodes
+        List<String> permissionCodes,
+        String categoryId,
+        String categoryName,
+        String categoryDescription,
+        int categorySort,
+        com.company.idm.application.rbac.RolePermissionBundleTier tier
     ) {
     }
 }

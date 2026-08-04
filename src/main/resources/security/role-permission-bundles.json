@@ -1,45 +1,260 @@
 {
-  "version": 1,
-  "bundles": [
+  "version": 2,
+  "categories": [
     {
-      "id": "ROLE_GROUP_MANAGEMENT_FULL",
-      "name": "角色组管理完整权限",
+      "id": "USER_MANAGEMENT",
+      "name": "用户管理",
+      "description": "用户查询与账号生命周期管理",
       "sort": 10,
-      "permissionCodes": [
-        "ROLE_GROUP_MANAGE",
-        "ROLE_GROUP_USER_ASSIGN",
-        "MENU_VIEW_ROLE_GROUP_MANAGEMENT"
+      "bundles": [
+        {
+          "id": "USER_MANAGEMENT_STANDARD",
+          "name": "用户管理·常规操作",
+          "tier": "STANDARD",
+          "sort": 101,
+          "permissionCodes": ["MENU_VIEW_USER_MANAGEMENT", "USER_READ", "USER_DETAIL"]
+        },
+        {
+          "id": "USER_MANAGEMENT_ADMIN",
+          "name": "用户管理·完整管理",
+          "tier": "ADMIN",
+          "sort": 102,
+          "permissionCodes": [
+            "MENU_VIEW_USER_MANAGEMENT", "USER_READ", "USER_DETAIL", "USER_CREATE", "USER_UPDATE",
+            "USER_ACCESS_UPDATE", "USER_DELETE", "USER_BATCH_DELETE", "USER_PASSWORD_RESET_ALL",
+            "USER_ROLE_ASSIGN", "USER_SYNC_LDAP", "USER_FEISHU_SYNC"
+          ]
+        }
       ]
     },
     {
-      "id": "USER_MANAGEMENT_READ_ONLY",
-      "name": "用户管理只读权限",
+      "id": "DEPARTMENT_MANAGEMENT",
+      "name": "部门管理",
+      "description": "组织树查询与部门生命周期管理",
       "sort": 20,
-      "permissionCodes": [
-        "USER_READ",
-        "USER_DETAIL",
-        "ROLE_READ",
-        "DEPT_TREE",
-        "MENU_VIEW_USER_MANAGEMENT"
+      "bundles": [
+        {
+          "id": "DEPARTMENT_MANAGEMENT_STANDARD",
+          "name": "部门管理·常规操作",
+          "tier": "STANDARD",
+          "sort": 201,
+          "permissionCodes": ["MENU_VIEW_GROUP_MANAGEMENT", "DEPT_TREE", "DEPT_DETAIL"]
+        },
+        {
+          "id": "DEPARTMENT_MANAGEMENT_ADMIN",
+          "name": "部门管理·完整管理",
+          "tier": "ADMIN",
+          "sort": 202,
+          "permissionCodes": [
+            "MENU_VIEW_GROUP_MANAGEMENT", "DEPT_TREE", "DEPT_DETAIL", "DEPT_CREATE", "DEPT_UPDATE",
+            "DEPT_DELETE", "DEPT_FEISHU_SYNC", "DEPT_SYNC_LDAP"
+          ]
+        }
       ]
     },
     {
-      "id": "ROLE_MANAGEMENT_FULL",
-      "name": "角色管理完整权限",
+      "id": "ROLE_MANAGEMENT",
+      "name": "角色管理",
+      "description": "平台角色查询与结构治理",
       "sort": 30,
-      "permissionCodes": [
-        "ROLE_READ",
-        "ROLE_DETAIL",
-        "ROLE_PERMISSION_READ_BINDINGS",
-        "PERMISSION_TREE",
-        "ROLE_CREATE",
-        "ROLE_UPDATE",
-        "ROLE_DELETE",
-        "ROLE_BATCH_DELETE",
-        "ROLE_STATUS",
-        "ROLE_PERMISSION_ASSIGN",
-        "ROLE_SCOPE_MANAGE",
-        "MENU_VIEW_ROLE_MANAGEMENT"
+      "bundles": [
+        {
+          "id": "ROLE_MANAGEMENT_STANDARD",
+          "name": "角色管理·常规操作",
+          "tier": "STANDARD",
+          "sort": 301,
+          "permissionCodes": ["MENU_VIEW_ROLE_MANAGEMENT", "ROLE_READ", "ROLE_DETAIL"]
+        },
+        {
+          "id": "ROLE_MANAGEMENT_ADMIN",
+          "name": "角色管理·完整管理",
+          "tier": "ADMIN",
+          "sort": 302,
+          "permissionCodes": [
+            "MENU_VIEW_ROLE_MANAGEMENT", "ROLE_READ", "ROLE_DETAIL", "ROLE_CREATE", "ROLE_UPDATE",
+            "ROLE_STATUS", "ROLE_DELETE", "ROLE_BATCH_DELETE", "ROLE_SCOPE_MANAGE"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "PERMISSION_ASSIGNMENT",
+      "name": "权限授权",
+      "description": "查看权限目录并维护角色授权",
+      "sort": 40,
+      "bundles": [
+        {
+          "id": "PERMISSION_ASSIGNMENT_STANDARD",
+          "name": "权限授权·常规操作",
+          "tier": "STANDARD",
+          "sort": 401,
+          "permissionCodes": [
+            "MENU_VIEW_ROLE_MANAGEMENT", "ROLE_READ", "ROLE_DETAIL",
+            "ROLE_PERMISSION_READ_BINDINGS", "PERMISSION_TREE"
+          ]
+        },
+        {
+          "id": "PERMISSION_ASSIGNMENT_ADMIN",
+          "name": "权限授权·完整管理",
+          "tier": "ADMIN",
+          "sort": 402,
+          "permissionCodes": [
+            "MENU_VIEW_ROLE_MANAGEMENT", "ROLE_READ", "ROLE_DETAIL",
+            "ROLE_PERMISSION_READ_BINDINGS", "PERMISSION_TREE", "ROLE_PERMISSION_ASSIGN"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ROLE_GROUP_MANAGEMENT",
+      "name": "角色组管理",
+      "description": "委派角色组查询与成员关系管理",
+      "sort": 50,
+      "bundles": [
+        {
+          "id": "ROLE_GROUP_MANAGEMENT_STANDARD",
+          "name": "角色组管理·常规操作",
+          "tier": "STANDARD",
+          "sort": 501,
+          "permissionCodes": ["MENU_VIEW_ROLE_GROUP_MANAGEMENT", "ROLE_GROUP_READ"]
+        },
+        {
+          "id": "ROLE_GROUP_MANAGEMENT_ADMIN",
+          "name": "角色组管理·完整管理",
+          "tier": "ADMIN",
+          "sort": 502,
+          "permissionCodes": [
+            "MENU_VIEW_ROLE_GROUP_MANAGEMENT", "ROLE_GROUP_READ", "ROLE_GROUP_MANAGE", "ROLE_GROUP_USER_ASSIGN"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MENU_MANAGEMENT",
+      "name": "菜单管理",
+      "description": "导航目录查询与菜单配置",
+      "sort": 60,
+      "bundles": [
+        {
+          "id": "MENU_MANAGEMENT_STANDARD",
+          "name": "菜单管理·常规操作",
+          "tier": "STANDARD",
+          "sort": 601,
+          "permissionCodes": ["MENU_VIEW_MENU_MANAGEMENT", "MENU_TREE", "MENU_DETAIL"]
+        },
+        {
+          "id": "MENU_MANAGEMENT_ADMIN",
+          "name": "菜单管理·完整管理",
+          "tier": "ADMIN",
+          "sort": 602,
+          "permissionCodes": [
+            "MENU_VIEW_MENU_MANAGEMENT", "MENU_TREE", "MENU_DETAIL", "MENU_CREATE", "MENU_UPDATE", "MENU_DELETE"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "FILE_IMPORT",
+      "name": "文件导入",
+      "description": "导入计划审阅与执行治理",
+      "sort": 70,
+      "bundles": [
+        {
+          "id": "FILE_IMPORT_STANDARD",
+          "name": "文件导入·常规操作",
+          "tier": "STANDARD",
+          "sort": 701,
+          "permissionCodes": ["MENU_VIEW_FILE_IMPORT_MANAGEMENT", "IMPORT_PLAN_READ", "IMPORT_PLAN_DETAIL"]
+        },
+        {
+          "id": "FILE_IMPORT_ADMIN",
+          "name": "文件导入·完整管理",
+          "tier": "ADMIN",
+          "sort": 702,
+          "permissionCodes": [
+            "MENU_VIEW_FILE_IMPORT_MANAGEMENT", "IMPORT_PLAN_READ", "IMPORT_PLAN_DETAIL",
+            "IMPORT_PLAN_CREATE", "IMPORT_PLAN_CONFIRM", "IMPORT_PLAN_EXECUTE", "IMPORT_PLAN_ROLLBACK",
+            "IMPORT_PLAN_RETRY_LDAP", "IMPORT_PLAN_CONFLICT_RESOLVE", "IMPORT_PLAN_CONFLICT_MERGE",
+            "IMPORT_PLAN_CANCEL"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SYNC_OPERATIONS",
+      "name": "同步任务",
+      "description": "同步任务查询、预览与执行",
+      "sort": 80,
+      "bundles": [
+        {
+          "id": "SYNC_OPERATIONS_STANDARD",
+          "name": "同步任务·常规操作",
+          "tier": "STANDARD",
+          "sort": 801,
+          "permissionCodes": [
+            "MENU_VIEW_OPERATION_LOG", "SYNC_JOB_LIST", "SYNC_BATCH_DETAIL",
+            "SYNC_FEISHU_PREVIEW", "SYNC_RECONCILE_PREVIEW"
+          ]
+        },
+        {
+          "id": "SYNC_OPERATIONS_ADMIN",
+          "name": "同步任务·完整管理",
+          "tier": "ADMIN",
+          "sort": 802,
+          "permissionCodes": [
+            "MENU_VIEW_OPERATION_LOG", "SYNC_JOB_LIST", "SYNC_BATCH_DETAIL",
+            "SYNC_FEISHU_PREVIEW", "SYNC_RECONCILE_PREVIEW", "SYNC_FEISHU_EXECUTE",
+            "SYNC_RECONCILE_EXECUTE", "SYNC_JOB_RETRY"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LDAP_CONTROL",
+      "name": "LDAP 控制面",
+      "description": "LDAP 接入模板查询与连接预检",
+      "sort": 90,
+      "bundles": [
+        {
+          "id": "LDAP_CONTROL_STANDARD",
+          "name": "LDAP 控制面·常规操作",
+          "tier": "STANDARD",
+          "sort": 901,
+          "permissionCodes": ["MENU_VIEW_API_MANAGEMENT", "LDAP_FRAMEWORK_READ", "LDAP_TEMPLATE_READ"]
+        },
+        {
+          "id": "LDAP_CONTROL_ADMIN",
+          "name": "LDAP 控制面·完整管理",
+          "tier": "ADMIN",
+          "sort": 902,
+          "permissionCodes": [
+            "MENU_VIEW_API_MANAGEMENT", "LDAP_FRAMEWORK_READ", "LDAP_TEMPLATE_READ", "LDAP_PRECHECK_EXECUTE"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "MAIL_CONFIGURATION",
+      "name": "邮件配置",
+      "description": "邮件服务配置查询与验证",
+      "sort": 100,
+      "bundles": [
+        {
+          "id": "MAIL_CONFIGURATION_STANDARD",
+          "name": "邮件配置·常规操作",
+          "tier": "STANDARD",
+          "sort": 1001,
+          "permissionCodes": ["MENU_VIEW_MAIL_CONFIG_MANAGEMENT", "MAIL_CONFIG_READ"]
+        },
+        {
+          "id": "MAIL_CONFIGURATION_ADMIN",
+          "name": "邮件配置·完整管理",
+          "tier": "ADMIN",
+          "sort": 1002,
+          "permissionCodes": [
+            "MENU_VIEW_MAIL_CONFIG_MANAGEMENT", "MAIL_CONFIG_READ", "MAIL_CONFIG_SAVE", "MAIL_CONFIG_TEST"
+          ]
+        }
       ]
     }
   ]
