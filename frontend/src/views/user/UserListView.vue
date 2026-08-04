@@ -58,6 +58,20 @@ const roleVisible = ref(false)
 const roleUser = ref<UserItem | null>(null)
 const selectedRoleIds = ref<number[]>([])
 const selectedUsers = ref<UserItem[]>([])
+const canCreateUser = computed(() =>
+  authStore.can('USER_CREATE') && authStore.can('ROLE_READ') && authStore.can('DEPT_TREE'),
+)
+const canEditUser = computed(() =>
+  authStore.can('USER_UPDATE') && authStore.can('ROLE_READ') && authStore.can('DEPT_TREE'),
+)
+const canAssignUserRoles = computed(() => authStore.can('USER_ROLE_ASSIGN') && authStore.can('ROLE_READ'))
+const canResetUserPassword = computed(() => authStore.canAny(
+  'USER_PASSWORD_RESET_ALL',
+  'USER_PASSWORD_RESET_DIRECT',
+  'USER_PASSWORD_RESET_TREE',
+))
+const needsRoleOptions = computed(() => canCreateUser.value || canEditUser.value || canAssignUserRoles.value)
+const needsDepartmentOptions = computed(() => canCreateUser.value || canEditUser.value)
 
 const usersQuery = useQuery({
   queryKey: computed(() => ['users', appliedQuery.userId || '', appliedQuery.deptName || '', appliedQuery.accessAllowed ?? 'all']),
@@ -72,11 +86,13 @@ const usersQuery = useQuery({
 const rolesQuery = useQuery({
   queryKey: ['roles'],
   queryFn: fetchRoles,
+  enabled: needsRoleOptions,
 })
 
 const departmentsQuery = useQuery({
   queryKey: ['department-tree'],
   queryFn: fetchDepartmentTree,
+  enabled: needsDepartmentOptions,
 })
 
 const users = computed(() => usersQuery.data.value || [])
@@ -111,6 +127,10 @@ const canBatchDelete = computed(() =>
 )
 const selectedDeletableUsers = computed(() => selectedUsers.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
 const deletableUsersByQuery = computed(() => users.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
+
+function hasMoreActions() {
+  return canResetUserPassword.value || authStore.canAny('USER_SYNC_LDAP', 'USER_DELETE')
+}
 
 const createUserMutation = useMutation({
   mutationFn: (payload: CreateUserPayload) => createUser(payload),
@@ -435,8 +455,9 @@ async function handleSyncLdap(user: UserItem) {
           </div>
 
           <div class="view-toolbar__actions">
-            <el-button type="primary" :icon="Plus" @click="openCreate">新增用户</el-button>
+            <el-button v-if="canCreateUser" type="primary" :icon="Plus" @click="openCreate">新增用户</el-button>
             <el-button
+              v-if="authStore.can('USER_BATCH_DELETE')"
               type="danger"
               plain
               :icon="Delete"
@@ -458,7 +479,7 @@ async function handleSyncLdap(user: UserItem) {
           border
           @selection-change="handleSelectionChange"
         >
-        <el-table-column type="selection" width="52" :selectable="selectableUser" />
+        <el-table-column v-if="authStore.can('USER_BATCH_DELETE')" type="selection" width="52" :selectable="selectableUser" />
         <el-table-column prop="id" label="数据库ID" min-width="100" show-overflow-tooltip />
         <el-table-column prop="userId" label="用户ID" min-width="180" show-overflow-tooltip />
         <el-table-column prop="realName" label="姓名" min-width="120" />
@@ -515,6 +536,7 @@ async function handleSyncLdap(user: UserItem) {
         <el-table-column label="允许使用" width="84" align="center">
           <template #default="{ row }">
             <el-switch
+              v-if="authStore.can('USER_ACCESS_UPDATE')"
               :model-value="row.accessAllowed"
               inline-prompt
               :active-icon="Check"
@@ -523,6 +545,9 @@ async function handleSyncLdap(user: UserItem) {
               :loading="updateAccessMutation.isPending.value"
               :before-change="() => confirmAccessChange(row, !row.accessAllowed)"
             />
+            <el-tag v-else :type="row.accessAllowed ? 'success' : 'info'" effect="plain">
+              {{ row.accessAllowed ? '允许' : '禁止' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="角色" min-width="180">
@@ -542,11 +567,11 @@ async function handleSyncLdap(user: UserItem) {
         <el-table-column label="操作" min-width="280" fixed="right">
           <template #default="{ row }">
             <el-space>
-              <el-button link type="primary" @click="openDetail(row.id)">详情</el-button>
-              <el-button link type="primary" @click="openEdit(row.id)">编辑</el-button>
-              <el-button link type="warning" @click="openRoleAssign(row)">分配角色</el-button>
+              <el-button v-if="authStore.can('USER_DETAIL')" link type="primary" @click="openDetail(row.id)">详情</el-button>
+              <el-button v-if="canEditUser" link type="primary" @click="openEdit(row.id)">编辑</el-button>
+              <el-button v-if="canAssignUserRoles" link type="warning" @click="openRoleAssign(row)">分配角色</el-button>
 
-              <el-dropdown trigger="click">
+              <el-dropdown v-if="hasMoreActions()" trigger="click">
                 <el-button link type="info">
                   更多
                   <el-icon class="el-icon--right"><MoreFilled /></el-icon>
@@ -555,6 +580,7 @@ async function handleSyncLdap(user: UserItem) {
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-tooltip
+                      v-if="canResetUserPassword"
                       :disabled="row.canResetPassword"
                       content="无权重置此用户密码"
                       placement="left"
@@ -568,8 +594,8 @@ async function handleSyncLdap(user: UserItem) {
                         </el-dropdown-item>
                       </span>
                     </el-tooltip>
-                    <el-dropdown-item @click="handleSyncLdap(row)">同步 LDAP</el-dropdown-item>
-                    <el-dropdown-item divided :disabled="!canDeleteUser(row)" @click="handleDelete(row)">
+                    <el-dropdown-item v-if="authStore.can('USER_SYNC_LDAP')" @click="handleSyncLdap(row)">同步 LDAP</el-dropdown-item>
+                    <el-dropdown-item v-if="authStore.can('USER_DELETE')" divided :disabled="!canDeleteUser(row)" @click="handleDelete(row)">
                       删除用户
                     </el-dropdown-item>
                   </el-dropdown-menu>

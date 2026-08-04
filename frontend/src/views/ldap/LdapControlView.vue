@@ -7,7 +7,9 @@ import { Promotion } from '@element-plus/icons-vue'
 import { executeLdapPrecheck, fetchLdapFramework } from '@/api/modules/ldap'
 import type { LdapPrecheckPayload, LdapPrecheckReport } from '@/types/ldap'
 import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
+import { useAuthStore } from '@/stores/auth'
 
+const authStore = useAuthStore()
 const formRef = ref<FormInstance>()
 const precheckReport = ref<LdapPrecheckReport | null>(null)
 
@@ -74,7 +76,7 @@ function resetPrecheckForm() {
 <template>
   <PageContainer title="LDAP 控制面" description="查看统一 LDAP 接入框架，并在联调前执行基础预检。">
     <div class="ldap-grid">
-      <el-card class="idm-card" shadow="never">
+      <el-card v-if="authStore.can('LDAP_PRECHECK_EXECUTE')" class="idm-card" shadow="never">
         <template #header>
           <div class="section-header">
             <strong>框架说明</strong>
@@ -137,7 +139,7 @@ function resetPrecheckForm() {
       </el-card>
     </div>
 
-    <el-card class="idm-card" shadow="never">
+    <el-card v-if="authStore.can('LDAP_PRECHECK_EXECUTE')" class="idm-card" shadow="never">
       <template #header>
         <div class="section-header">
           <strong>预检结果</strong>

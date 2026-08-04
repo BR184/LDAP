@@ -48,11 +48,13 @@ const authStore = useAuthStore()
 const selectedGroupId = ref<number | null>(null)
 const activeTab = ref('roles')
 const viewerId = computed(() => authStore.currentUser?.id ?? null)
+const canReadRoleGroups = computed(() => authStore.canAny('ROLE_GROUP_READ', 'ROLE_GROUP_MANAGE'))
+const hasRoleGroupManagement = computed(() => authStore.can('ROLE_GROUP_MANAGE'))
 
 const groupsQuery = useQuery({
   queryKey: computed(() => ['role-groups', viewerId.value]),
   queryFn: fetchRoleGroups,
-  enabled: computed(() => viewerId.value !== null),
+  enabled: computed(() => viewerId.value !== null && canReadRoleGroups.value),
 })
 const groups = computed(() => groupsQuery.data.value || [])
 const selectedGroup = computed(() => groups.value.find((group) => group.id === selectedGroupId.value) || null)
@@ -60,8 +62,20 @@ const hasValidGroupSelection = computed(
   () => groupsQuery.isSuccess.value && selectedGroup.value !== null,
 )
 const canManageGroupSettings = computed(
-  () => authStore.isAdmin || selectedGroup.value?.currentMemberRole === 'OWNER',
+  () => hasRoleGroupManagement.value && (authStore.isAdmin || selectedGroup.value?.currentMemberRole === 'OWNER'),
 )
+const canManageGroupContent = computed(() =>
+  hasRoleGroupManagement.value
+  && (
+    authStore.isAdmin
+    || selectedGroup.value?.currentMemberRole === 'OWNER'
+    || selectedGroup.value?.currentMemberRole === 'MANAGER'
+  ),
+)
+const canAssignRoleMembers = computed(() =>
+  canManageGroupContent.value && authStore.can('ROLE_GROUP_USER_ASSIGN'),
+)
+const canManageGlobalTokens = computed(() => authStore.isAdmin && hasRoleGroupManagement.value)
 
 const rolesQuery = useQuery({
   queryKey: computed(() => ['role-groups', viewerId.value, selectedGroupId.value, 'roles']),
@@ -81,14 +95,14 @@ const groupTokensQuery = useQuery({
 const globalTokensQuery = useQuery({
   queryKey: computed(() => ['role-supply-tokens', viewerId.value, 'global']),
   queryFn: fetchGlobalTokens,
-  enabled: computed(() => viewerId.value !== null && authStore.isAdmin),
+  enabled: computed(() => viewerId.value !== null && canManageGlobalTokens.value),
 })
 
 watch(
   viewerId,
   () => {
     selectedGroupId.value = null
-    activeTab.value = authStore.isAdmin ? 'global-tokens' : 'roles'
+    activeTab.value = canManageGlobalTokens.value ? 'global-tokens' : 'roles'
   },
   { immediate: true },
 )
@@ -98,7 +112,7 @@ watch(
   (items) => {
     if (!items.length) {
       selectedGroupId.value = null
-      activeTab.value = authStore.isAdmin ? 'global-tokens' : 'roles'
+      activeTab.value = canManageGlobalTokens.value ? 'global-tokens' : 'roles'
       return
     }
     if (!items.some((group) => group.id === selectedGroupId.value)) {
@@ -441,6 +455,11 @@ function accessIdentityText(group: RoleGroupItem) {
   return authStore.isAdmin ? '访问身份：平台管理员监督' : '我的身份：未加入'
 }
 
+function railIdentityText(group: RoleGroupItem) {
+  if (group.currentMemberRole) return memberRoleText(group.currentMemberRole)
+  return authStore.isAdmin ? '平台监管' : '未加入'
+}
+
 function ownerNamesText(group: RoleGroupItem) {
   return group.ownerNames.length ? group.ownerNames.join('、') : '暂无所有者'
 }
@@ -459,7 +478,7 @@ function tokenStatusText(status: string) {
             <strong>角色组</strong>
             <span>{{ groups.length }}</span>
           </div>
-          <el-button circle type="primary" :icon="Plus" title="创建角色组" @click="openCreateGroup" />
+          <el-button v-if="hasRoleGroupManagement" circle type="primary" :icon="Plus" title="创建角色组" @click="openCreateGroup" />
         </div>
         <el-skeleton v-if="groupsQuery.isLoading.value" :rows="5" animated />
         <el-empty v-else-if="!groups.length" description="暂无角色组" :image-size="72" />
@@ -472,15 +491,19 @@ function tokenStatusText(status: string) {
             :class="{ 'is-active': group.id === selectedGroupId }"
             @click="selectGroup(group)"
           >
-            <span class="group-list__name">{{ group.groupName }}</span>
+            <span class="group-list__headline">
+              <span class="group-list__name">{{ group.groupName }}</span>
+              <el-tag size="small" effect="plain">{{ railIdentityText(group) }}</el-tag>
+            </span>
             <span class="group-list__meta">{{ group.roleCount }} 个角色 · {{ group.memberCount }} 名协作者</span>
-            <span class="group-list__creator">创建者：{{ group.creatorName || '未知用户' }}</span>
-            <el-tag size="small" effect="plain">{{ accessIdentityText(group) }}</el-tag>
+            <span class="group-list__creator" :title="`创建者：${group.creatorName || '未知用户'}`">
+              创建者：{{ group.creatorName || '未知用户' }}
+            </span>
           </button>
         </div>
       </aside>
 
-      <section v-if="selectedGroup || authStore.isAdmin" class="group-detail">
+      <section v-if="selectedGroup || canManageGlobalTokens" class="group-detail">
         <header v-if="selectedGroup" class="group-detail__header">
           <div>
             <div class="group-detail__title-row">
@@ -509,7 +532,7 @@ function tokenStatusText(status: string) {
           <el-tab-pane v-if="selectedGroup" label="角色与成员" name="roles">
             <div class="section-toolbar">
               <strong>角色成员关系</strong>
-              <el-button type="primary" :icon="Plus" @click="openCreateRole">创建组角色</el-button>
+              <el-button v-if="canManageGroupContent" type="primary" :icon="Plus" @click="openCreateRole">创建组角色</el-button>
             </div>
             <PersistentTableScrollFrame>
               <el-table :data="rolesQuery.data.value || []" v-loading="rolesQuery.isLoading.value" border>
@@ -522,8 +545,8 @@ function tokenStatusText(status: string) {
                 <el-table-column label="操作" width="230" fixed="right">
                   <template #default="{ row }">
                     <el-button link type="primary" :icon="UserFilled" @click="openRoleMembers(row)">成员</el-button>
-                    <el-button v-if="row.editable" link type="primary" :icon="Edit" @click="openEditRole(row)">编辑</el-button>
-                    <el-button v-if="row.editable" link type="danger" :icon="Delete" @click="handleDeleteRole(row)">删除</el-button>
+                    <el-button v-if="canManageGroupContent && row.editable" link type="primary" :icon="Edit" @click="openEditRole(row)">编辑</el-button>
+                    <el-button v-if="canManageGroupContent && row.editable" link type="danger" :icon="Delete" @click="handleDeleteRole(row)">删除</el-button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -569,7 +592,7 @@ function tokenStatusText(status: string) {
             </el-table>
           </el-tab-pane>
 
-          <el-tab-pane v-if="authStore.isAdmin" label="全局令牌" name="global-tokens">
+          <el-tab-pane v-if="canManageGlobalTokens" label="全局令牌" name="global-tokens">
             <div class="section-toolbar">
               <strong>全局供给令牌</strong>
               <el-button type="primary" :icon="Key" @click="openTokenDialog('GLOBAL')">创建令牌</el-button>
@@ -625,7 +648,7 @@ function tokenStatusText(status: string) {
     </el-dialog>
 
     <el-dialog v-model="roleMembersVisible" :title="`${memberRole?.roleName || ''} · 成员`" width="720px">
-      <div class="member-picker">
+      <div v-if="canAssignRoleMembers" class="member-picker">
         <el-select v-model="selectedMemberUserIds" multiple filterable remote :remote-method="searchPublicUsers" :loading="publicUserLoading" placeholder="搜索公开姓名" style="width: 100%">
           <el-option v-for="user in publicUserOptions" :key="user.id" :label="user.realName" :value="user.id" />
         </el-select>
@@ -633,7 +656,7 @@ function tokenStatusText(status: string) {
       </div>
       <el-table :data="roleMembers" v-loading="roleMembersLoading" border max-height="420">
         <el-table-column prop="realName" label="姓名" />
-        <el-table-column label="操作" width="100"><template #default="{ row }"><el-button link type="danger" @click="deleteRoleMember(row)">移除</el-button></template></el-table-column>
+        <el-table-column v-if="canAssignRoleMembers" label="操作" width="100"><template #default="{ row }"><el-button link type="danger" @click="deleteRoleMember(row)">移除</el-button></template></el-table-column>
       </el-table>
     </el-dialog>
 
@@ -667,11 +690,13 @@ function tokenStatusText(status: string) {
 .group-rail__header > div { display: flex; align-items: baseline; gap: 8px; }
 .group-rail__header span, .section-toolbar span { color: var(--idm-text-secondary); font-size: 13px; }
 .group-list { display: flex; flex-direction: column; gap: 6px; }
-.group-list__item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; width: 100%; padding: 13px 12px; border: 1px solid transparent; background: transparent; color: var(--idm-text-primary); text-align: left; cursor: pointer; transition: background 180ms ease, border-color 180ms ease, transform 180ms ease; }
+.group-list__item { display: grid; gap: 6px; width: 100%; padding: 13px 12px; border: 1px solid transparent; background: transparent; color: var(--idm-text-primary); text-align: left; cursor: pointer; transition: background 180ms ease, border-color 180ms ease, transform 180ms ease; }
 .group-list__item:hover { background: #fff; border-color: var(--idm-border-color-light); transform: translateX(2px); }
 .group-list__item.is-active { background: #fff; border-color: #b8c6bd; box-shadow: 0 8px 24px rgba(31, 48, 38, 0.08); }
+.group-list__headline { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.group-list__headline .el-tag { flex: 0 0 auto; }
 .group-list__name { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.group-list__meta { grid-column: 1 / -1; color: var(--idm-text-secondary); font-size: 12px; }
+.group-list__meta { color: var(--idm-text-secondary); font-size: 12px; }
 .group-list__creator { overflow: hidden; color: var(--idm-text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .group-detail { min-width: 0; padding: 26px 28px; }
 .group-detail--empty { display: flex; align-items: center; justify-content: center; }

@@ -13,8 +13,10 @@ import {
 import MenuFormDrawer from '@/views/menu/components/MenuFormDrawer.vue'
 import type { CreateMenuPayload, MenuItem, MenuTreeNode, MenuTreeOption, UpdateMenuPayload } from '@/types/menu'
 import { normalizeMenuTreeForDisplay } from '@/utils/menu-tree'
+import { useAuthStore } from '@/stores/auth'
 
 const queryClient = useQueryClient()
+const authStore = useAuthStore()
 
 const selectedMenuId = ref<number | undefined>()
 const currentMenu = ref<MenuItem | null>(null)
@@ -166,7 +168,7 @@ function canCreateChild(menu: MenuItem | null) {
 <template>
   <PageContainer title="菜单管理" description="维护后台菜单树、导航挂载关系和菜单元数据，采用树加详情的页面组织方式。">
     <template #extra>
-      <el-button type="primary" :icon="Plus" @click="openCreateRoot">新增根菜单</el-button>
+      <el-button v-if="authStore.can('MENU_CREATE')" type="primary" :icon="Plus" @click="openCreateRoot">新增根菜单</el-button>
     </template>
 
     <div class="menu-layout">
@@ -203,7 +205,7 @@ function canCreateChild(menu: MenuItem | null) {
             <strong>菜单详情</strong>
             <div v-if="currentMenu" class="view-toolbar__actions">
               <el-button
-                v-if="canCreateChild(currentMenu)"
+                v-if="authStore.can('MENU_CREATE') && canCreateChild(currentMenu)"
                 type="primary"
                 plain
                 :icon="FolderAdd"
@@ -211,8 +213,8 @@ function canCreateChild(menu: MenuItem | null) {
               >
                 新增子菜单
               </el-button>
-              <el-button @click="openEdit">编辑</el-button>
-              <el-button type="danger" plain @click="handleDelete">删除</el-button>
+              <el-button v-if="authStore.can('MENU_UPDATE')" @click="openEdit">编辑</el-button>
+              <el-button v-if="authStore.can('MENU_DELETE')" type="danger" plain @click="handleDelete">删除</el-button>
             </div>
           </div>
         </template>

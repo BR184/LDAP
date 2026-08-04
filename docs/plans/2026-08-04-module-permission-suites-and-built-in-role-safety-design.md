@@ -72,6 +72,8 @@
 - `USER_ROLE_ASSIGN`
 - `USER_SYNC_LDAP`
 - `USER_FEISHU_SYNC`
+- `ROLE_READ`（新增、编辑和分配角色所需的角色选项依赖）
+- `DEPT_TREE`（新增、编辑所需的部门选项依赖）
 
 `USER_READ_SELF_AND_SUBORDINATE_TREE`、`USER_PASSWORD_RESET_DIRECT`、`USER_PASSWORD_RESET_TREE` 是数据范围受限的专用权限，继续作为细粒度权限手动配置，不能并入全局用户套件。
 

@@ -6,6 +6,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { Connection, Promotion } from '@element-plus/icons-vue'
 import { fetchMailConfig, saveMailConfig, testMailConfig } from '@/api/modules/mail-config'
 import type { MailConfig, MailSecureMode, MailSendMode, SaveMailConfigPayload, TestMailConfigPayload } from '@/types/mail-config'
+import { useAuthStore } from '@/stores/auth'
 
 interface MailConfigForm {
   sendMode: MailSendMode
@@ -24,6 +25,7 @@ interface MailConfigForm {
 }
 
 const formRef = ref<FormInstance>()
+const authStore = useAuthStore()
 const passwordConfigured = ref(false)
 
 const form = reactive<MailConfigForm>({
@@ -320,6 +322,7 @@ async function handleTest() {
 
           <div class="form-actions">
             <el-button
+              v-if="authStore.can('MAIL_CONFIG_SAVE')"
               type="primary"
               :icon="Connection"
               :loading="saveMutation.isPending.value"
@@ -328,6 +331,7 @@ async function handleTest() {
               保存配置
             </el-button>
             <el-button
+              v-if="authStore.can('MAIL_CONFIG_TEST')"
               type="success"
               plain
               :icon="Promotion"

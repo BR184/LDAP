@@ -61,22 +61,27 @@ const scopeTargetRole = ref<GovernedRoleItem | null>(null)
 const scopeTargetGroupId = ref<number | null>(null)
 
 const selectedRoles = ref<RoleItem[]>([])
+const canGovernRoles = computed(() => authStore.isAdmin && authStore.can('ROLE_SCOPE_MANAGE'))
+const canReadPermissionAssignments = computed(() =>
+  authStore.can('PERMISSION_TREE') && authStore.can('ROLE_PERMISSION_READ_BINDINGS'),
+)
 
 const rolesQuery = useQuery({
   queryKey: ['roles'],
   queryFn: fetchRoles,
-  enabled: computed(() => !authStore.isAdmin),
+  enabled: computed(() => !canGovernRoles.value),
 })
 
 const governedRolesQuery = useQuery({
   queryKey: ['role-governance', 'roles'],
   queryFn: fetchGovernedRoles,
-  enabled: computed(() => authStore.isAdmin),
+  enabled: canGovernRoles,
 })
 
 const permissionTreeQuery = useQuery({
   queryKey: ['permissions', 'tree'],
   queryFn: fetchPermissionTree,
+  enabled: computed(() => authStore.can('PERMISSION_TREE')),
 })
 
 const createRoleMutation = useMutation({
@@ -136,12 +141,13 @@ const grantPermissionsMutation = useMutation({
 const permissionBundlesQuery = useQuery({
   queryKey: ['permissions', 'bundles'],
   queryFn: fetchRolePermissionBundles,
+  enabled: computed(() => authStore.can('PERMISSION_TREE')),
 })
 
 const roleGroupsQuery = useQuery({
   queryKey: ['role-groups', 'scope-targets'],
   queryFn: fetchRoleGroups,
-  enabled: computed(() => authStore.isAdmin),
+  enabled: canGovernRoles,
 })
 
 const updateScopeMutation = useMutation({
@@ -155,7 +161,7 @@ const updateScopeMutation = useMutation({
 })
 
 const roles = computed<Array<RoleItem | GovernedRoleItem>>(() =>
-  authStore.isAdmin ? governedRolesQuery.data.value || [] : rolesQuery.data.value || [],
+  canGovernRoles.value ? governedRolesQuery.data.value || [] : rolesQuery.data.value || [],
 )
 const permissionTree = computed<PermissionTreeNode[]>(() => permissionTreeQuery.data.value || [])
 const permissionBundles = computed<RolePermissionBundle[]>(() => permissionBundlesQuery.data.value || [])
@@ -392,7 +398,7 @@ function scopeText(scope: RoleScope) {
             <el-option label="禁用" :value="0" />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="authStore.isAdmin" label="作用域">
+        <el-form-item v-if="canGovernRoles" label="作用域">
           <el-select
             v-model="searchForm.roleScopes"
             multiple
@@ -422,8 +428,9 @@ function scopeText(scope: RoleScope) {
             <span class="idm-muted">当前共 {{ total }} 条数据</span>
           </div>
           <div class="view-toolbar__actions">
-            <el-button type="primary" :icon="Plus" @click="openCreate">新增角色</el-button>
+            <el-button v-if="authStore.can('ROLE_CREATE')" type="primary" :icon="Plus" @click="openCreate">新增角色</el-button>
             <el-button
+              v-if="authStore.can('ROLE_BATCH_DELETE')"
               type="danger"
               plain
               :icon="Delete"
@@ -445,11 +452,11 @@ function scopeText(scope: RoleScope) {
           border
           @selection-change="handleSelectionChange"
         >
-        <el-table-column type="selection" width="52" :selectable="selectableRole" />
+        <el-table-column v-if="authStore.can('ROLE_BATCH_DELETE')" type="selection" width="52" :selectable="selectableRole" />
         <el-table-column prop="roleCode" label="角色编码" min-width="160" />
         <el-table-column prop="roleName" label="角色名称" min-width="160" />
         <el-table-column prop="permissionLevel" label="权限等级" width="120" align="center" />
-        <el-table-column v-if="authStore.isAdmin" label="作用域" width="150" align="center">
+        <el-table-column v-if="canGovernRoles" label="作用域" width="150" align="center">
           <template #default="{ row }">
             <el-select
               v-if="row.builtIn !== 1"
@@ -484,12 +491,12 @@ function scopeText(scope: RoleScope) {
         <el-table-column label="操作" min-width="340" fixed="right">
           <template #default="{ row }">
             <el-space wrap>
-              <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-              <el-button v-if="row.roleScope !== 'GROUP'" link type="success" @click="openGrantPermissions(row)">授权权限</el-button>
-              <el-button v-if="row.builtIn !== 1" link type="info" @click="handleToggleStatus(row)">
+              <el-button v-if="authStore.can('ROLE_UPDATE')" link type="primary" @click="openEdit(row)">编辑</el-button>
+              <el-button v-if="row.roleScope !== 'GROUP' && authStore.can('ROLE_PERMISSION_ASSIGN') && canReadPermissionAssignments" link type="success" @click="openGrantPermissions(row)">授权权限</el-button>
+              <el-button v-if="row.builtIn !== 1 && authStore.can('ROLE_STATUS')" link type="info" @click="handleToggleStatus(row)">
                 {{ row.status === 1 ? '禁用' : '启用' }}
               </el-button>
-              <el-button v-if="row.builtIn !== 1" link type="danger" @click="handleDelete(row)">
+              <el-button v-if="row.builtIn !== 1 && authStore.can('ROLE_DELETE')" link type="danger" @click="handleDelete(row)">
                 删除
               </el-button>
             </el-space>

@@ -27,6 +27,7 @@ import type {
   UserReviewRow,
 } from '@/types/system-import'
 import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
+import { useAuthStore } from '@/stores/auth'
 
 type ReviewObjectType = 'USER' | 'DEPARTMENT' | 'CONFLICT'
 
@@ -61,6 +62,7 @@ interface ReviewRow {
 }
 
 const queryClient = useQueryClient()
+const authStore = useAuthStore()
 
 const form = reactive({
   documentPath: '',
@@ -191,12 +193,20 @@ const hasUnconfirmedEnabledRows = computed(() =>
   reviewRows.value.some((row) => isRowSelected(row) && row.requiresConfirmation && !isRowConfirmed(row)),
 )
 const canConfirm = computed(() =>
-  currentBatch.value?.status === 'DRAFT' && !hasBlocker.value && selectedCount.value > 0 && !hasUnconfirmedEnabledRows.value,
+  authStore.can('IMPORT_PLAN_CONFIRM')
+  && currentBatch.value?.status === 'DRAFT'
+  && !hasBlocker.value
+  && selectedCount.value > 0
+  && !hasUnconfirmedEnabledRows.value,
 )
-const canExecute = computed(() => currentBatch.value?.status === 'CONFIRMED')
-const canCancel = computed(() => currentBatch.value?.status === 'DRAFT')
-const canRollback = computed(() => currentBatch.value?.status === 'COMPLETED')
-const canRetryLdap = computed(() => currentBatch.value?.status === 'FAILED' && changeItems.value.some((item) => item.status === 'LDAP_FAILED'))
+const canExecute = computed(() => authStore.can('IMPORT_PLAN_EXECUTE') && currentBatch.value?.status === 'CONFIRMED')
+const canCancel = computed(() => authStore.can('IMPORT_PLAN_CANCEL') && currentBatch.value?.status === 'DRAFT')
+const canRollback = computed(() => authStore.can('IMPORT_PLAN_ROLLBACK') && currentBatch.value?.status === 'COMPLETED')
+const canRetryLdap = computed(() =>
+  authStore.can('IMPORT_PLAN_RETRY_LDAP')
+  && currentBatch.value?.status === 'FAILED'
+  && changeItems.value.some((item) => item.status === 'LDAP_FAILED'),
+)
 
 const generatePlanMutation = useMutation({
   mutationFn: generateFeishuImportPlan,
@@ -618,7 +628,7 @@ function objectCaption(row: ReviewRow) {
   >
     <div class="system-import-layout">
       <div class="top-grid">
-        <el-card class="idm-card import-generate" shadow="never">
+        <el-card v-if="authStore.can('IMPORT_PLAN_CREATE')" class="idm-card import-generate" shadow="never">
           <template #header>
             <div class="section-header">
               <strong>生成计划</strong>
@@ -702,10 +712,10 @@ function objectCaption(row: ReviewRow) {
               <span v-else class="idm-muted">选择或生成一个计划后查看详情。</span>
             </div>
             <div v-if="currentBatch" class="detail-actions">
-              <el-button :icon="Check" :disabled="!canConfirm" :loading="confirmPlanMutation.isPending.value" @click="handleConfirmPlan">
+              <el-button v-if="authStore.can('IMPORT_PLAN_CONFIRM')" :icon="Check" :disabled="!canConfirm" :loading="confirmPlanMutation.isPending.value" @click="handleConfirmPlan">
                 确认计划
               </el-button>
-              <el-button type="primary" :icon="VideoPlay" :disabled="!canExecute" :loading="executePlanMutation.isPending.value" @click="handleExecutePlan">
+              <el-button v-if="authStore.can('IMPORT_PLAN_EXECUTE')" type="primary" :icon="VideoPlay" :disabled="!canExecute" :loading="executePlanMutation.isPending.value" @click="handleExecutePlan">
                 执行计划
               </el-button>
               <el-button v-if="canCancel" type="danger" plain :icon="CircleClose" :loading="cancelPlanMutation.isPending.value" @click="handleCancelPlan">
@@ -714,10 +724,10 @@ function objectCaption(row: ReviewRow) {
               <el-button v-if="canRetryLdap" type="warning" :loading="retryLdapMutation.isPending.value" @click="handleRetryLdapFailures">
                 重试 LDAP
               </el-button>
-              <el-button :disabled="!canRollback" :loading="rollbackPreviewMutation.isPending.value" @click="handleRollbackPreview">
+              <el-button v-if="authStore.can('IMPORT_PLAN_ROLLBACK')" :disabled="!canRollback" :loading="rollbackPreviewMutation.isPending.value" @click="handleRollbackPreview">
                 生成撤回计划
               </el-button>
-              <el-button type="danger" plain :disabled="!canRollback && rollbackItems.length === 0" :loading="rollbackPlanMutation.isPending.value" @click="handleRollbackPlan">
+              <el-button v-if="authStore.can('IMPORT_PLAN_ROLLBACK')" type="danger" plain :disabled="!canRollback && rollbackItems.length === 0" :loading="rollbackPlanMutation.isPending.value" @click="handleRollbackPlan">
                 撤回
               </el-button>
             </div>
@@ -808,7 +818,7 @@ function objectCaption(row: ReviewRow) {
               <template #default="{ row }">
                 <el-checkbox
                   :model-value="isRowSelected(row)"
-                  :disabled="currentBatch?.status !== 'DRAFT' || row.riskLevel === 'BLOCKER'"
+                  :disabled="!authStore.can('IMPORT_PLAN_CONFIRM') || currentBatch?.status !== 'DRAFT' || row.riskLevel === 'BLOCKER'"
                   @change="(value: CheckboxValueType) => toggleRowEnabled(row, value)"
                 />
               </template>
@@ -838,7 +848,7 @@ function objectCaption(row: ReviewRow) {
               <template #default="{ row }">
                 <el-checkbox
                   :model-value="isRowConfirmed(row)"
-                  :disabled="currentBatch?.status !== 'DRAFT' || !row.requiresConfirmation || !isRowSelected(row)"
+                  :disabled="!authStore.can('IMPORT_PLAN_CONFIRM') || currentBatch?.status !== 'DRAFT' || !row.requiresConfirmation || !isRowSelected(row)"
                   @change="(value: CheckboxValueType) => toggleRowConfirmed(row, value)"
                 />
               </template>
@@ -850,7 +860,7 @@ function objectCaption(row: ReviewRow) {
                   class="conflict-actions"
                 >
                   <el-button
-                    v-if="row.resolutionOptions.includes('MERGE_BY_EMPLOYEE_NO')"
+                    v-if="authStore.can('IMPORT_PLAN_CONFLICT_MERGE') && row.resolutionOptions.includes('MERGE_BY_EMPLOYEE_NO')"
                     type="primary"
                     text
                     :icon="Check"
@@ -860,7 +870,7 @@ function objectCaption(row: ReviewRow) {
                     确认更新
                   </el-button>
                   <el-button
-                    v-if="row.resolutionOptions.includes('SKIP_RELATED_CHANGES')"
+                    v-if="authStore.can('IMPORT_PLAN_CONFLICT_RESOLVE') && row.resolutionOptions.includes('SKIP_RELATED_CHANGES')"
                     type="warning"
                     text
                     :loading="skipConflictMutation.isPending.value"

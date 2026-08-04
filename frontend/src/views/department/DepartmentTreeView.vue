@@ -12,6 +12,7 @@ import {
   updateDepartment,
 } from '@/api/modules/department'
 import DepartmentFormDrawer from '@/views/department/components/DepartmentFormDrawer.vue'
+import { useAuthStore } from '@/stores/auth'
 import type {
   CreateDepartmentPayload,
   DepartmentDetail,
@@ -21,6 +22,7 @@ import type {
 } from '@/types/department'
 
 const queryClient = useQueryClient()
+const authStore = useAuthStore()
 
 const selectedDeptCode = ref<string>('')
 const detailLoading = ref(false)
@@ -159,7 +161,7 @@ async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentP
   <PageContainer title="部门管理" description="统一维护部门树、组织层级与 LDAP 分组映射，支持 CRUD 和手工 LDAP 同步。">
     <template #extra>
       <el-space>
-        <el-button type="primary" :icon="FolderAdd" @click="openCreate" size="large">新增部门</el-button>
+        <el-button v-if="authStore.can('DEPT_CREATE')" type="primary" :icon="FolderAdd" @click="openCreate" size="large">新增部门</el-button>
       </el-space>
     </template>
 
@@ -188,12 +190,12 @@ async function handleSubmit(payload: CreateDepartmentPayload | UpdateDepartmentP
         <template #header>
           <div class="view-toolbar">
             <strong>部门详情</strong>
-            <div v-if="currentDepartment" class="view-toolbar__actions">
-              <el-button @click="openEdit" size="large">编辑</el-button>
-              <el-button type="success" :loading="syncLdapMutation.isPending.value" @click="handleSyncLdap" size="large">
+            <div v-if="currentDepartment && authStore.canAny('DEPT_UPDATE', 'DEPT_SYNC_LDAP', 'DEPT_DELETE')" class="view-toolbar__actions">
+              <el-button v-if="authStore.can('DEPT_UPDATE')" @click="openEdit" size="large">编辑</el-button>
+              <el-button v-if="authStore.can('DEPT_SYNC_LDAP')" type="success" :loading="syncLdapMutation.isPending.value" @click="handleSyncLdap" size="large">
                 同步 LDAP
               </el-button>
-              <el-button type="danger" plain @click="handleDelete" size="large">删除</el-button>
+              <el-button v-if="authStore.can('DEPT_DELETE')" type="danger" plain @click="handleDelete" size="large">删除</el-button>
             </div>
           </div>
         </template>

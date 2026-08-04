@@ -5,8 +5,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { executeSyncReconcile, fetchSyncBatchDetail, fetchSyncJobs, previewSyncReconcile, retrySyncJob } from '@/api/modules/sync'
 import type { SyncBatchDetail, SyncJob } from '@/types/sync'
 import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const queryClient = useQueryClient()
+const authStore = useAuthStore()
 
 const detailVisible = ref(false)
 const detailLoading = ref(false)
@@ -152,8 +154,8 @@ async function handleRetry(job: SyncJob) {
   <PageContainer title="同步任务" description="同步中心页用于查看任务执行、批次详情和对账结果，是后续飞书导入与 LDAP 对账的统一入口。">
     <template #extra>
       <el-space>
-        <el-button :loading="actionLoading" @click="handlePreview">对账预览</el-button>
-        <el-button type="primary" :loading="actionLoading" @click="handleExecute">执行对账</el-button>
+        <el-button v-if="authStore.can('SYNC_RECONCILE_PREVIEW')" :loading="actionLoading" @click="handlePreview">对账预览</el-button>
+        <el-button v-if="authStore.can('SYNC_RECONCILE_EXECUTE')" type="primary" :loading="actionLoading" @click="handleExecute">执行对账</el-button>
       </el-space>
     </template>
 
@@ -181,8 +183,8 @@ async function handleRetry(job: SyncJob) {
         <el-table-column label="操作" min-width="220" fixed="right">
           <template #default="{ row }">
             <el-space wrap>
-              <el-button link type="primary" @click="openBatchDetail(row.batchNo)">批次详情</el-button>
-              <el-button link type="warning" :disabled="actionLoading" @click="handleRetry(row)">任务重试</el-button>
+              <el-button v-if="authStore.can('SYNC_BATCH_DETAIL')" link type="primary" @click="openBatchDetail(row.batchNo)">批次详情</el-button>
+              <el-button v-if="authStore.can('SYNC_JOB_RETRY')" link type="warning" :disabled="actionLoading" @click="handleRetry(row)">任务重试</el-button>
             </el-space>
           </template>
         </el-table-column>
