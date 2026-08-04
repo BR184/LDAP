@@ -15,4 +15,11 @@ export interface RolePermissionBundle {
   sort: number
   permissionIds: number[]
   permissionCodes: string[]
+  categoryId: string
+  categoryName: string
+  categoryDescription: string
+  categorySort: number
+  tier: RolePermissionBundleTier
 }
+
+export type RolePermissionBundleTier = 'STANDARD' | 'ADMIN'
