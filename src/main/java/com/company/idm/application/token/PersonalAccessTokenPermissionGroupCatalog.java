@@ -60,6 +60,12 @@ public class PersonalAccessTokenPermissionGroupCatalog {
         return groups;
     }
 
+    public Set<String> apiPermissionCodes() {
+        return groups.stream()
+            .flatMap(group -> group.permissionCodes().stream())
+            .collect(Collectors.toUnmodifiableSet());
+    }
+
     public List<PersonalAccessTokenPermissionGroup> intersect(Collection<String> ownedPermissionCodes) {
         Set<String> owned = ownedPermissionCodes == null ? Set.of() : Set.copyOf(ownedPermissionCodes);
         return groups.stream()

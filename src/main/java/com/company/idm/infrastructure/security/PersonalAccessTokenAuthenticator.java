@@ -99,7 +99,8 @@ public class PersonalAccessTokenAuthenticator implements BearerCredentialAuthent
             owner.getRoleCodes(),
             CredentialType.PERSONAL_ACCESS_TOKEN,
             token.getId(),
-            selectedPermissionCodes
+            selectedPermissionCodes,
+            token.getScopeMode()
         ));
     }
 

@@ -38,7 +38,8 @@ public class JwtBearerCredentialAuthenticator implements BearerCredentialAuthent
             user.getRoleCodes(),
             CredentialType.SESSION,
             null,
-            Set.of()
+            Set.of(),
+            null
         ));
     }
 }

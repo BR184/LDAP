@@ -11,6 +11,7 @@ import com.company.idm.application.token.PersonalAccessTokenPage;
 import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
+import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -47,8 +48,9 @@ class PersonalAccessTokenControllerTest {
         CreatePersonalAccessTokenRequest request = new CreatePersonalAccessTokenRequest(
             "automation",
             null,
+            null,
             List.of(1L),
-            "verification"
+            PersonalAccessTokenScopeMode.FIXED
         );
         when(applicationService.create(
             org.mockito.ArgumentMatchers.eq(principal()),
@@ -80,6 +82,6 @@ class PersonalAccessTokenControllerTest {
     }
 
     private AuthenticatedUser principal() {
-        return new AuthenticatedUser(7L, "employee", 0, Set.of(), CredentialType.SESSION, null, Set.of());
+        return new AuthenticatedUser(7L, "employee", 0, Set.of(), CredentialType.SESSION, null, Set.of(), null);
     }
 }

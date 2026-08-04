@@ -3,22 +3,22 @@ package com.company.idm.application.token;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.company.idm.application.rbac.EffectivePermissionService;
-import com.company.idm.application.user.PasswordVerificationTokenService;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.PermissionType;
 import com.company.idm.common.exception.BizException;
+import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.rbac.Permission;
 import com.company.idm.domain.rbac.PermissionRepository;
-import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.domain.token.PersonalAccessTokenRepository;
+import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.PersonalAccessTokenProperties;
@@ -45,9 +45,9 @@ class PersonalAccessTokenApplicationServiceTest {
     private final PermissionRepository permissionRepository = mock(PermissionRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final EffectivePermissionService effectivePermissionService = mock(EffectivePermissionService.class);
-    private final PasswordVerificationTokenService passwordVerificationTokenService =
-        mock(PasswordVerificationTokenService.class);
     private final PersonalAccessTokenSecretService secretService = mock(PersonalAccessTokenSecretService.class);
+    private final PersonalAccessTokenEncryptionService encryptionService =
+        mock(PersonalAccessTokenEncryptionService.class);
     private final PersonalAccessTokenProperties properties = new PersonalAccessTokenProperties();
     private final AuditLogRepository auditLogRepository = mock(AuditLogRepository.class);
     private final PersonalAccessTokenApplicationService service = new PersonalAccessTokenApplicationService(
@@ -55,8 +55,8 @@ class PersonalAccessTokenApplicationServiceTest {
         permissionRepository,
         userRepository,
         effectivePermissionService,
-        passwordVerificationTokenService,
         secretService,
+        encryptionService,
         properties,
         auditLogRepository,
         CLOCK
@@ -75,6 +75,8 @@ class PersonalAccessTokenApplicationServiceTest {
             1,
             "idm_pat_uid_..."
         ));
+        when(encryptionService.encrypt("idm_pat_uid_secret", 7L, "uid"))
+            .thenReturn(new EncryptedPersonalAccessTokenSecret("ciphertext", "key-v1"));
         when(tokenRepository.create(any())).thenAnswer(invocation -> invocation.<PersonalAccessToken>getArgument(0)
             .toBuilder()
             .id(11L)
@@ -82,23 +84,40 @@ class PersonalAccessTokenApplicationServiceTest {
     }
 
     @Test
-    void createsAOneTimeSecretForAnOwnedPermissionSubset() {
-        CreatedPersonalAccessToken created = service.create(session(), command(List.of(1L), now().plusDays(30)));
-
-        verify(passwordVerificationTokenService).verify(
-            org.mockito.ArgumentMatchers.eq("verification"),
-            argThat(user -> Long.valueOf(7L).equals(user.getId()) && "employee".equals(user.getUserId()))
+    void createsAnEncryptedFixedScopeWithoutPasswordVerification() {
+        CreatedPersonalAccessToken created = service.create(
+            session(),
+            command("automation", "deployment automation", PersonalAccessTokenScopeMode.FIXED,
+                List.of(1L), now().plusDays(30))
         );
+
         assertThat(created.secret()).isEqualTo("idm_pat_uid_secret");
         assertThat(created.token().getSecretHash()).isEqualTo("hash");
+        assertThat(created.token().getSecretCiphertext()).isEqualTo("ciphertext");
+        assertThat(created.token().getSecretKeyId()).isEqualTo("key-v1");
+        assertThat(created.token().getDescription()).isEqualTo("deployment automation");
+        assertThat(created.token().getScopeMode()).isEqualTo(PersonalAccessTokenScopeMode.FIXED);
         assertThat(created.token().getPermissions()).extracting(permission -> permission.code())
             .containsExactly("USER_READ");
     }
 
     @Test
-    void rejectsPermissionsOutsideTheOwnersCurrentApiPermissions() {
-        assertThatThrownBy(() -> service.create(session(), command(List.of(2L), now().plusDays(30))))
-            .isInstanceOf(BizException.class)
+    void createsFollowAccountTokenWithoutPersistingAStalePermissionSnapshot() {
+        CreatedPersonalAccessToken created = service.create(
+            session(),
+            command("automation", null, PersonalAccessTokenScopeMode.FOLLOW_ACCOUNT, List.of(), null)
+        );
+
+        assertThat(created.token().getScopeMode()).isEqualTo(PersonalAccessTokenScopeMode.FOLLOW_ACCOUNT);
+        assertThat(created.token().getPermissions()).isEmpty();
+    }
+
+    @Test
+    void rejectsFixedPermissionsOutsideTheOwnersCurrentApiPermissions() {
+        assertThatThrownBy(() -> service.create(
+            session(),
+            command("automation", null, PersonalAccessTokenScopeMode.FIXED, List.of(2L), now().plusDays(30))
+        )).isInstanceOf(BizException.class)
             .extracting(exception -> ((BizException) exception).getCode())
             .isEqualTo("PAT_PERMISSION_SCOPE_INVALID");
 
@@ -106,15 +125,84 @@ class PersonalAccessTokenApplicationServiceTest {
     }
 
     @Test
+    void rejectsFixedModeWithoutASelectedPermission() {
+        assertThatThrownBy(() -> service.create(
+            session(),
+            command("automation", null, PersonalAccessTokenScopeMode.FIXED, List.of(), null)
+        )).isInstanceOf(BizException.class)
+            .hasMessageContaining("至少选择");
+    }
+
+    @Test
+    void rejectsPermissionIdsWhenFollowAccountIsEnabled() {
+        assertThatThrownBy(() -> service.create(
+            session(),
+            command("automation", null, PersonalAccessTokenScopeMode.FOLLOW_ACCOUNT, List.of(1L), null)
+        )).isInstanceOf(BizException.class)
+            .hasMessageContaining("自动跟随");
+    }
+
+    @Test
     void rejectsPastExpiryAndActiveTokenLimit() {
-        assertThatThrownBy(() -> service.create(session(), command(List.of(1L), now())))
-            .isInstanceOf(BizException.class)
-            .hasMessageContaining("有效期");
+        assertThatThrownBy(() -> service.create(
+            session(),
+            command("automation", null, PersonalAccessTokenScopeMode.FIXED, List.of(1L), now())
+        )).isInstanceOf(BizException.class).hasMessageContaining("有效期");
 
         when(tokenRepository.countActiveByUserId(7L, now())).thenReturn(20L);
-        assertThatThrownBy(() -> service.create(session(), command(List.of(1L), null)))
-            .isInstanceOf(BizException.class)
-            .hasMessageContaining("上限");
+        assertThatThrownBy(() -> service.create(
+            session(),
+            command("automation", null, PersonalAccessTokenScopeMode.FIXED, List.of(1L), null)
+        )).isInstanceOf(BizException.class).hasMessageContaining("上限");
+    }
+
+    @Test
+    void rotatesOnlyAnOwnedActiveTokenAndReturnsTheNewSecret() {
+        PersonalAccessToken existing = PersonalAccessToken.builder()
+            .id(11L)
+            .userId(7L)
+            .tokenUid("old-uid")
+            .secretHash("old-hash")
+            .hashVersion(1)
+            .expiresAt(now().plusDays(1))
+            .scopeMode(PersonalAccessTokenScopeMode.FIXED)
+            .permissions(List.of())
+            .build();
+        when(tokenRepository.findOwnedById(11L, 7L)).thenReturn(Optional.of(existing));
+        when(tokenRepository.rotateOwned(any())).thenReturn(true);
+
+        CreatedPersonalAccessToken rotated = service.rotate(session(), 11L, "127.0.0.1");
+
+        assertThat(rotated.secret()).isEqualTo("idm_pat_uid_secret");
+        assertThat(rotated.token().getTokenUid()).isEqualTo("uid");
+        verify(tokenRepository).rotateOwned(any());
+    }
+
+    @Test
+    void revealsOnlyAnOwnedRecoverableActiveToken() {
+        PersonalAccessToken existing = PersonalAccessToken.builder()
+            .id(11L)
+            .userId(7L)
+            .tokenUid("uid")
+            .secretCiphertext("ciphertext")
+            .secretKeyId("key-v1")
+            .expiresAt(now().plusDays(1))
+            .build();
+        when(tokenRepository.findOwnedById(11L, 7L)).thenReturn(Optional.of(existing));
+        when(encryptionService.decrypt("ciphertext", "key-v1", 7L, "uid"))
+            .thenReturn("idm_pat_uid_secret");
+
+        assertThat(service.reveal(session(), 11L, "127.0.0.1"))
+            .isEqualTo("idm_pat_uid_secret");
+    }
+
+    @Test
+    void physicallyDeletesOnlyAnOwnedToken() {
+        when(tokenRepository.deleteOwned(11L, 7L)).thenReturn(true);
+
+        service.delete(session(), 11L, "127.0.0.1");
+
+        verify(tokenRepository).deleteOwned(11L, 7L);
     }
 
     @Test
@@ -138,7 +226,8 @@ class PersonalAccessTokenApplicationServiceTest {
             Set.of(),
             CredentialType.PERSONAL_ACCESS_TOKEN,
             11L,
-            Set.of("USER_READ")
+            Set.of("USER_READ"),
+            PersonalAccessTokenScopeMode.FIXED
         );
 
         assertThatThrownBy(() -> service.list(pat, 1, 20))
@@ -146,18 +235,25 @@ class PersonalAccessTokenApplicationServiceTest {
             .hasMessageContaining("网页登录会话");
     }
 
-    private CreatePersonalAccessTokenCommand command(List<Long> permissionIds, LocalDateTime expiresAt) {
+    private CreatePersonalAccessTokenCommand command(
+        String name,
+        String description,
+        PersonalAccessTokenScopeMode scopeMode,
+        List<Long> permissionIds,
+        LocalDateTime expiresAt
+    ) {
         return new CreatePersonalAccessTokenCommand(
-            "automation",
+            name,
+            description,
             expiresAt,
+            scopeMode,
             permissionIds,
-            "verification",
             "127.0.0.1"
         );
     }
 
     private AuthenticatedUser session() {
-        return new AuthenticatedUser(7L, "employee", 0, Set.of(), CredentialType.SESSION, null, Set.of());
+        return new AuthenticatedUser(7L, "employee", 0, Set.of(), CredentialType.SESSION, null, Set.of(), null);
     }
 
     private User owner() {

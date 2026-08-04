@@ -5,6 +5,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.company.idm.domain.rbac.PermissionRepository;
+import com.company.idm.application.token.PersonalAccessTokenPermissionGroupCatalog;
+import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
 import java.util.Set;
@@ -13,7 +15,12 @@ import org.junit.jupiter.api.Test;
 class EffectivePermissionServiceTest {
 
     private final PermissionRepository permissionRepository = mock(PermissionRepository.class);
-    private final EffectivePermissionService service = new EffectivePermissionService(permissionRepository);
+    private final PersonalAccessTokenPermissionGroupCatalog permissionGroupCatalog =
+        mock(PersonalAccessTokenPermissionGroupCatalog.class);
+    private final EffectivePermissionService service = new EffectivePermissionService(
+        permissionRepository,
+        permissionGroupCatalog
+    );
 
     @Test
     void sessionUsesAllCurrentAccountPermissions() {
@@ -26,7 +33,8 @@ class EffectivePermissionServiceTest {
             Set.of("NORMAL_USER"),
             CredentialType.SESSION,
             null,
-            Set.of()
+            Set.of(),
+            null
         );
 
         assertThat(service.resolve(principal)).containsExactlyInAnyOrder("AUTH_ME", "USER_READ");
@@ -43,7 +51,8 @@ class EffectivePermissionServiceTest {
             Set.of("NORMAL_USER"),
             CredentialType.PERSONAL_ACCESS_TOKEN,
             99L,
-            Set.of("AUTH_ME", "USER_READ")
+            Set.of("AUTH_ME", "USER_READ"),
+            PersonalAccessTokenScopeMode.FIXED
         );
 
         assertThat(service.resolve(principal)).containsExactlyInAnyOrder("AUTH_ME", "USER_READ");
@@ -60,9 +69,29 @@ class EffectivePermissionServiceTest {
             Set.of("NORMAL_USER"),
             CredentialType.PERSONAL_ACCESS_TOKEN,
             99L,
-            Set.of("AUTH_ME")
+            Set.of("AUTH_ME"),
+            PersonalAccessTokenScopeMode.FIXED
         );
 
         assertThat(service.resolve(principal)).containsExactly("AUTH_ME");
+    }
+
+    @Test
+    void followAccountUsesCurrentApiPermissionsAndNeverIncludesMenus() {
+        when(permissionRepository.findPermissionCodesByUserId("employee"))
+            .thenReturn(Set.of("AUTH_ME", "USER_READ", "MENU_VIEW_USER_MANAGEMENT"));
+        when(permissionGroupCatalog.apiPermissionCodes()).thenReturn(Set.of("AUTH_ME", "USER_READ"));
+        AuthenticatedUser principal = new AuthenticatedUser(
+            1L,
+            "employee",
+            0,
+            Set.of("NORMAL_USER"),
+            CredentialType.PERSONAL_ACCESS_TOKEN,
+            99L,
+            Set.of(),
+            PersonalAccessTokenScopeMode.FOLLOW_ACCOUNT
+        );
+
+        assertThat(service.resolve(principal)).containsExactlyInAnyOrder("AUTH_ME", "USER_READ");
     }
 }

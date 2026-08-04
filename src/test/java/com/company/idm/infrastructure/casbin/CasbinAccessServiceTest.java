@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.company.idm.application.rbac.EffectivePermissionService;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
+import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
 import java.util.Set;
 import org.casbin.jcasbin.main.Enforcer;
 import org.junit.jupiter.api.Test;
@@ -48,7 +49,8 @@ class CasbinAccessServiceTest {
             Set.of("NORMAL_USER"),
             CredentialType.PERSONAL_ACCESS_TOKEN,
             99L,
-            Set.of("AUTH_ME", "USER_READ")
+            Set.of("AUTH_ME", "USER_READ"),
+            PersonalAccessTokenScopeMode.FIXED
         );
     }
 }

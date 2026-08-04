@@ -66,9 +66,10 @@ public class PersonalAccessTokenController {
             principal,
             new CreatePersonalAccessTokenCommand(
                 request.name(),
+                request.description(),
                 request.expiresAt(),
+                request.scopeMode(),
                 request.permissionIds(),
-                request.passwordVerificationToken(),
                 ClientIpUtil.getClientIp(httpServletRequest)
             )
         );

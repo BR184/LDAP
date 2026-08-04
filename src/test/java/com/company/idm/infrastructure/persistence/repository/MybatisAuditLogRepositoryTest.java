@@ -9,6 +9,7 @@ import com.company.idm.infrastructure.persistence.dataobject.AuditLogDO;
 import com.company.idm.infrastructure.persistence.mapper.AuditLogMapper;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
+import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,8 @@ class MybatisAuditLogRepositoryTest {
             Set.of(),
             CredentialType.PERSONAL_ACCESS_TOKEN,
             11L,
-            Set.of("USER_READ")
+            Set.of("USER_READ"),
+            PersonalAccessTokenScopeMode.FIXED
         );
         SecurityContextHolder.getContext().setAuthentication(
             new UsernamePasswordAuthenticationToken(principal, null, Set.of())

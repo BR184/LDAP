@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import jakarta.servlet.FilterChain;
 import java.util.Optional;
 import java.util.Set;
+import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -74,6 +75,7 @@ class BearerAuthenticationFilterTest {
     }
 
     private AuthenticatedUser principal(CredentialType type) {
-        return new AuthenticatedUser(1L, "employee", 0, Set.of(), type, null, Set.of());
+        return new AuthenticatedUser(1L, "employee", 0, Set.of(), type, null, Set.of(),
+            type == CredentialType.PERSONAL_ACCESS_TOKEN ? PersonalAccessTokenScopeMode.FIXED : null);
     }
 }
