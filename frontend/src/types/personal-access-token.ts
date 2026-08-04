@@ -1,4 +1,6 @@
 export type PersonalAccessTokenStatus = 'ACTIVE' | 'EXPIRED' | 'REVOKED'
+export type PersonalAccessTokenScopeMode = 'FIXED' | 'FOLLOW_ACCOUNT'
+export type TokenPermissionRisk = 'LOW' | 'HIGH'
 
 export interface TokenPermission {
   id: number
@@ -6,6 +8,14 @@ export interface TokenPermission {
   permissionName: string
   resourcePath: string
   action: string
+}
+
+export interface TokenPermissionGroup {
+  id: string
+  name: string
+  risk: TokenPermissionRisk
+  sort: number
+  permissions: TokenPermission[]
 }
 
 export interface PersonalAccessTokenItem {
@@ -18,6 +28,9 @@ export interface PersonalAccessTokenItem {
   lastUsedIp: string | null
   createdAt: string
   permissions: TokenPermission[]
+  description: string | null
+  scopeMode: PersonalAccessTokenScopeMode | null
+  secretRecoverable: boolean
 }
 
 export interface PersonalAccessTokenPage {
@@ -29,12 +42,17 @@ export interface PersonalAccessTokenPage {
 
 export interface CreatePersonalAccessTokenPayload {
   name: string
+  description: string | null
   expiresAt: string | null
   permissionIds: number[]
-  passwordVerificationToken: string
+  scopeMode: PersonalAccessTokenScopeMode
 }
 
 export interface CreatedPersonalAccessToken {
   token: PersonalAccessTokenItem
+  secret: string
+}
+
+export interface PersonalAccessTokenSecretResponse {
   secret: string
 }

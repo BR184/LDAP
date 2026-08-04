@@ -4,7 +4,7 @@ import { fetchCurrentUserMenuTree } from '@/api/modules/menu'
 import { flatNavigationItems } from '@/constants/navigation'
 import type { MenuTreeNode } from '@/types/menu'
 
-const ALWAYS_ALLOWED_PATHS = new Set(['/profile', '/access-tokens'])
+const ALWAYS_ALLOWED_PATHS = new Set(['/profile', '/access-tokens', '/access-tokens/new'])
 const ADMIN_ROLE_CODES = new Set(['ADMIN', 'SUPER_ADMIN'])
 
 export const useMenuStore = defineStore('menu', () => {

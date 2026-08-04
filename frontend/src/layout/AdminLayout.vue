@@ -18,7 +18,7 @@ const activeMenu = computed(() => {
   if (route.path === '/profile') {
     return '/profile'
   }
-  if (route.path === '/access-tokens') {
+  if (route.path.startsWith('/access-tokens')) {
     return '/access-tokens'
   }
 

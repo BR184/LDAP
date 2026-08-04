@@ -79,6 +79,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/profile/PersonalAccessTokenView.vue'),
         meta: { title: '访问密钥', hideInMenu: true },
       },
+      {
+        path: 'access-tokens/new',
+        name: 'access-tokens-new',
+        component: () => import('@/views/profile/PersonalAccessTokenCreateView.vue'),
+        meta: { title: '创建访问密钥', hideInMenu: true },
+      },
     ],
   },
   {
