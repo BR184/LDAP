@@ -37,6 +37,9 @@ public class RoleGovernanceApplicationService {
         }
         Role role = roleRepository.findById(roleId)
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
+        if (Integer.valueOf(1).equals(role.getBuiltIn())) {
+            throw new BizException("BUILT_IN_ROLE_SCOPE_LOCKED", "内置角色的作用域不允许修改");
+        }
         Long normalizedGroupId = validateScopeTarget(roleId, roleScope, roleGroupId);
         Role saved = roleRepository.save(Role.builder()
             .id(role.getId())

@@ -3,10 +3,12 @@ package com.company.idm.application.rolegroup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.company.idm.application.rbac.PolicyRefreshService;
+import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
@@ -60,6 +62,29 @@ class RoleGovernanceApplicationServiceTest {
         ArgumentCaptor<Role> roleCaptor = ArgumentCaptor.forClass(Role.class);
         verify(roleRepository).save(roleCaptor.capture());
         assertThat(roleCaptor.getValue().getRoleGroupId()).isEqualTo(21L);
+    }
+
+    @Test
+    void rejectsScopeChangesForBuiltInRoles() {
+        Role builtInRole = Role.builder()
+            .id(9L)
+            .roleCode("DIRECT_MANAGER")
+            .roleName("直属上级")
+            .builtIn(1)
+            .roleScope(RoleScope.SYSTEM)
+            .status(1)
+            .build();
+        when(authorizationService.isPlatformAdmin(principal())).thenReturn(true);
+        when(roleRepository.findById(9L)).thenReturn(Optional.of(builtInRole));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> service.updateScope(9L, RoleScope.GLOBAL, null, principal())
+        )
+            .isInstanceOf(BizException.class)
+            .extracting(exception -> ((BizException) exception).getCode())
+            .isEqualTo("BUILT_IN_ROLE_SCOPE_LOCKED");
+
+        verify(roleRepository, never()).save(any());
     }
 
     private AuthenticatedUser principal() {

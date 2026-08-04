@@ -131,6 +131,9 @@ public class RbacApplicationService {
     public Role updateRole(UpdateRoleCommand command, String operator) {
         Role role = roleRepository.findById(command.roleId())
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
+        if (isBuiltIn(role) && !java.util.Objects.equals(role.getPermissionLevel(), command.permissionLevel())) {
+            throw new BizException("BUILT_IN_ROLE_PERMISSION_LEVEL_LOCKED", "内置角色的权限等级不允许修改");
+        }
         permissionLevelRuleService.checkCanUpdateRole(operator, role, command.permissionLevel());
         Role updated = roleRepository.save(Role.builder()
             .id(role.getId())
@@ -159,6 +162,9 @@ public class RbacApplicationService {
     public void updateRoleStatus(UpdateRoleStatusCommand command) {
         Role role = roleRepository.findById(command.roleId())
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
+        if (isBuiltIn(role)) {
+            throw new BizException("BUILT_IN_ROLE_STATUS_LOCKED", "内置角色不允许启用或禁用");
+        }
         permissionLevelRuleService.checkCanUpdateRole(command.operator(), role, role.getPermissionLevel());
         roleRepository.updateStatus(command.roleId(), command.status());
         policyRefreshService.refresh();
@@ -425,10 +431,17 @@ public class RbacApplicationService {
     }
 
     private void validateRoleDeletion(Role role, String operator) {
+        if (isBuiltIn(role)) {
+            throw new BizException("BUILT_IN_ROLE_DELETE_FORBIDDEN", "内置角色不允许删除");
+        }
         permissionLevelRuleService.checkCanDeleteRole(operator, role);
         if (roleRepository.existsUserBinding(role.getId())) {
             throw new BizException("ROLE_IN_USE", "当前角色仍绑定用户，不能删除");
         }
+    }
+
+    private boolean isBuiltIn(Role role) {
+        return Integer.valueOf(1).equals(role.getBuiltIn());
     }
 
     private void ensureRolesEnabled(List<Role> roles) {
