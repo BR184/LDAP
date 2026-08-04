@@ -13,7 +13,24 @@ class DelegatedPermissionPairPolicyTest {
 
     @Test
     void acceptsTheCompleteDelegationPair() {
-        assertThat(policy.isDelegated(Set.of(
+        assertThat(policy.canManage(Set.of(
+            DelegatedPermissionPairPolicy.ROLE_GROUP_READ,
+            DelegatedPermissionPairPolicy.ROLE_GROUP_MANAGE,
+            DelegatedPermissionPairPolicy.ROLE_GROUP_USER_ASSIGN
+        ))).isTrue();
+    }
+
+    @Test
+    void acceptsReadOnlyRoleGroupAccess() {
+        assertThat(policy.canRead(Set.of(
+            DelegatedPermissionPairPolicy.ROLE_GROUP_READ,
+            DelegatedPermissionPairPolicy.ROLE_GROUP_MENU_VIEW
+        ))).isTrue();
+    }
+
+    @Test
+    void preservesReadAccessForExistingManagementCredentials() {
+        assertThat(policy.canRead(Set.of(
             DelegatedPermissionPairPolicy.ROLE_GROUP_MANAGE,
             DelegatedPermissionPairPolicy.ROLE_GROUP_USER_ASSIGN
         ))).isTrue();
@@ -36,6 +53,8 @@ class DelegatedPermissionPairPolicyTest {
 
     @Test
     void treatsAnAbsentPairAsNoDelegation() {
-        assertThat(policy.isDelegated(Set.of("ROLE_READ"))).isFalse();
+        assertThat(policy.canRead(Set.of("ROLE_READ"))).isFalse();
+        assertThat(policy.canManage(Set.of("ROLE_READ"))).isFalse();
     }
+
 }

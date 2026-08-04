@@ -20,7 +20,20 @@ public class RoleGroupAuthorizationService {
     private final RoleGroupRepository roleGroupRepository;
     private final DelegatedPermissionPairPolicy delegatedPermissionPairPolicy;
 
-    public void requireDelegated(AuthenticatedUser principal) {
+    public void requireRead(AuthenticatedUser principal) {
+        if (isPlatformAdmin(principal)) {
+            return;
+        }
+        if (principal == null || principal.id() == null) {
+            throw forbidden("当前身份不能查询角色组");
+        }
+        Set<String> permissions = effectivePermissionService.resolve(principal);
+        if (!delegatedPermissionPairPolicy.canRead(permissions)) {
+            throw forbidden("当前账号没有角色组查询权限");
+        }
+    }
+
+    public void requireManagement(AuthenticatedUser principal) {
         if (isPlatformAdmin(principal)) {
             return;
         }
@@ -28,16 +41,24 @@ public class RoleGroupAuthorizationService {
             throw forbidden("当前身份不能管理角色组");
         }
         Set<String> permissions = effectivePermissionService.resolve(principal);
-        if (!delegatedPermissionPairPolicy.isDelegated(permissions)) {
-            throw forbidden("当前账号未同时持有完整的委派权限");
+        if (!delegatedPermissionPairPolicy.canManage(permissions)) {
+            throw forbidden("当前账号没有完整的角色组管理权限");
         }
+    }
+
+    public void requireReadableGroup(AuthenticatedUser principal, Long groupId) {
+        if (isPlatformAdmin(principal)) {
+            return;
+        }
+        requireRead(principal);
+        requireMember(principal, groupId);
     }
 
     public void requireRoleManager(AuthenticatedUser principal, Long groupId) {
         if (isPlatformAdmin(principal)) {
             return;
         }
-        requireDelegated(principal);
+        requireManagement(principal);
         requireMember(principal, groupId);
     }
 
@@ -45,7 +66,7 @@ public class RoleGroupAuthorizationService {
         if (isPlatformAdmin(principal)) {
             return;
         }
-        requireDelegated(principal);
+        requireManagement(principal);
         RoleGroupMember member = requireMember(principal, groupId);
         if (member.memberRole() != RoleGroupMemberRole.OWNER) {
             throw forbidden("只有角色组所有者可以执行此操作");

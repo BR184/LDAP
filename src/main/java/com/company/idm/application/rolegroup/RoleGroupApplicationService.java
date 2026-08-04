@@ -49,7 +49,7 @@ public class RoleGroupApplicationService {
     private final PersonalAccessTokenRepository tokenRepository;
 
     public List<RoleGroupView> listGroups(AuthenticatedUser principal) {
-        authorizationService.requireDelegated(principal);
+        authorizationService.requireRead(principal);
         List<RoleGroup> groups = authorizationService.isPlatformAdmin(principal)
             ? roleGroupRepository.findAll()
             : roleGroupRepository.findByMemberUserId(principal.id());
@@ -58,13 +58,13 @@ public class RoleGroupApplicationService {
 
     public RoleGroupView getGroup(Long groupId, AuthenticatedUser principal) {
         RoleGroup group = requireGroup(groupId);
-        authorizationService.requireRoleManager(principal, groupId);
+        authorizationService.requireReadableGroup(principal, groupId);
         return toView(group, principal);
     }
 
     @Transactional
     public RoleGroupView createGroup(String groupName, String remark, AuthenticatedUser principal) {
-        authorizationService.requireDelegated(principal);
+        authorizationService.requireManagement(principal);
         requireSessionUser(principal);
         String normalizedName = normalizeRequired(groupName, "ROLE_GROUP_NAME_REQUIRED", "角色组名称不能为空");
         validateLength(normalizedName, MAX_GROUP_NAME_LENGTH, "ROLE_GROUP_NAME_TOO_LONG", "角色组名称不能超过128个字符");
@@ -128,7 +128,7 @@ public class RoleGroupApplicationService {
 
     public List<RoleGroupMember> listCollaborators(Long groupId, AuthenticatedUser principal) {
         requireGroup(groupId);
-        authorizationService.requireRoleManager(principal, groupId);
+        authorizationService.requireReadableGroup(principal, groupId);
         return roleGroupRepository.findMembers(groupId);
     }
 
@@ -176,7 +176,7 @@ public class RoleGroupApplicationService {
 
     public List<PublicUser> searchPublicUsers(Long groupId, String keyword, AuthenticatedUser principal) {
         requireGroup(groupId);
-        authorizationService.requireRoleManager(principal, groupId);
+        authorizationService.requireReadableGroup(principal, groupId);
         String normalized = normalizeOptional(keyword);
         if (normalized == null || normalized.length() < 1) {
             return List.of();
@@ -186,7 +186,7 @@ public class RoleGroupApplicationService {
 
     public List<RoleGroupRoleView> listRoles(Long groupId, AuthenticatedUser principal) {
         requireGroup(groupId);
-        authorizationService.requireRoleManager(principal, groupId);
+        authorizationService.requireReadableGroup(principal, groupId);
         List<RoleGroupRoleView> result = new ArrayList<>();
         roleRepository.findByScope(RoleScope.GLOBAL).stream()
             .filter(role -> isAssignableRole(role, principal))
@@ -272,7 +272,7 @@ public class RoleGroupApplicationService {
     }
 
     public List<PublicUser> listRoleMembers(Long groupId, Long roleId, AuthenticatedUser principal) {
-        requireManageableRole(groupId, roleId, principal);
+        requireReadableRole(groupId, roleId, principal);
         return userRepository.findPublicUsersByRoleId(roleId);
     }
 
@@ -327,6 +327,19 @@ public class RoleGroupApplicationService {
         }
         if (!isAssignableRole(role, principal)) {
             throw new BizException("ROLE_GROUP_ROLE_ASSIGN_FORBIDDEN", "委派者不能分配管理级角色");
+        }
+        return role;
+    }
+
+    private Role requireReadableRole(Long groupId, Long roleId, AuthenticatedUser principal) {
+        requireGroup(groupId);
+        authorizationService.requireReadableGroup(principal, groupId);
+        Role role = roleRepository.findById(roleId)
+            .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
+        boolean visible = role.getRoleScope() == RoleScope.GLOBAL
+            || (role.getRoleScope() == RoleScope.GROUP && groupId.equals(role.getRoleGroupId()));
+        if (!visible) {
+            throw new BizException("ROLE_GROUP_ROLE_FORBIDDEN", "当前角色不属于此角色组的可查询范围");
         }
         return role;
     }

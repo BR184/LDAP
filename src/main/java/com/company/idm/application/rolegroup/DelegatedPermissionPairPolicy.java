@@ -5,11 +5,12 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * Keeps delegated group management and delegated assignment as one indivisible capability.
+ * Defines the valid permission combinations for delegated role-group access.
  */
 @Component
 public class DelegatedPermissionPairPolicy {
 
+    public static final String ROLE_GROUP_READ = "ROLE_GROUP_READ";
     public static final String ROLE_GROUP_MANAGE = "ROLE_GROUP_MANAGE";
     public static final String ROLE_GROUP_USER_ASSIGN = "ROLE_GROUP_USER_ASSIGN";
     public static final String ROLE_GROUP_MENU_VIEW = "MENU_VIEW_ROLE_GROUP_MANAGEMENT";
@@ -26,9 +27,15 @@ public class DelegatedPermissionPairPolicy {
         }
     }
 
-    public boolean isDelegated(Set<String> permissionCodes) {
+    public boolean canRead(Set<String> permissionCodes) {
         validate(permissionCodes);
         Set<String> safeCodes = permissionCodes == null ? Set.of() : permissionCodes;
-        return safeCodes.contains(ROLE_GROUP_MANAGE) && safeCodes.contains(ROLE_GROUP_USER_ASSIGN);
+        return safeCodes.contains(ROLE_GROUP_READ) || safeCodes.contains(ROLE_GROUP_MANAGE);
+    }
+
+    public boolean canManage(Set<String> permissionCodes) {
+        validate(permissionCodes);
+        Set<String> safeCodes = permissionCodes == null ? Set.of() : permissionCodes;
+        return safeCodes.contains(ROLE_GROUP_MANAGE);
     }
 }

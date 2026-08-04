@@ -30,6 +30,13 @@
       "permissionCodes": ["MENU_TREE", "MENU_DETAIL"]
     },
     {
+      "id": "DELEGATED_ROLE_READ",
+      "name": "委派角色组查询",
+      "risk": "LOW",
+      "sort": 45,
+      "permissionCodes": ["ROLE_GROUP_READ"]
+    },
+    {
       "id": "IMPORT_READ",
       "name": "导入计划查询",
       "risk": "LOW",

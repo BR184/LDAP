@@ -31,12 +31,27 @@ class RoleGroupAuthorizationServiceTest {
     void requiresBothMembershipAndDelegatedPermissionsForRoleManagement() {
         AuthenticatedUser principal = principal("delegate", Set.of("NORMAL_USER"));
         when(permissionService.resolve(principal)).thenReturn(Set.of(
+            DelegatedPermissionPairPolicy.ROLE_GROUP_READ,
             DelegatedPermissionPairPolicy.ROLE_GROUP_MANAGE,
             DelegatedPermissionPairPolicy.ROLE_GROUP_USER_ASSIGN
         ));
         when(roleGroupRepository.findMember(9L, 7L)).thenReturn(Optional.of(member(RoleGroupMemberRole.MANAGER)));
 
         assertThatCode(() -> service.requireRoleManager(principal, 9L)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void allowsReadOnlyMembersToReadTheirRoleGroup() {
+        AuthenticatedUser principal = principal("reader", Set.of("NORMAL_USER"));
+        when(permissionService.resolve(principal)).thenReturn(Set.of(
+            DelegatedPermissionPairPolicy.ROLE_GROUP_READ
+        ));
+        when(roleGroupRepository.findMember(9L, 7L)).thenReturn(Optional.of(member(RoleGroupMemberRole.MANAGER)));
+
+        assertThatCode(() -> service.requireReadableGroup(principal, 9L)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> service.requireRoleManager(principal, 9L))
+            .isInstanceOf(BizException.class)
+            .hasMessageContaining("管理权限");
     }
 
     @Test
@@ -47,13 +62,14 @@ class RoleGroupAuthorizationServiceTest {
 
         assertThatThrownBy(() -> service.requireRoleManager(principal, 9L))
             .isInstanceOf(BizException.class)
-            .hasMessageContaining("委派权限");
+            .hasMessageContaining("管理权限");
     }
 
     @Test
     void restrictsGroupSettingsMembersAndTokensToOwners() {
         AuthenticatedUser principal = principal("manager", Set.of("NORMAL_USER"));
         when(permissionService.resolve(principal)).thenReturn(Set.of(
+            DelegatedPermissionPairPolicy.ROLE_GROUP_READ,
             DelegatedPermissionPairPolicy.ROLE_GROUP_MANAGE,
             DelegatedPermissionPairPolicy.ROLE_GROUP_USER_ASSIGN
         ));
@@ -70,6 +86,7 @@ class RoleGroupAuthorizationServiceTest {
 
         assertThatCode(() -> service.requireOwner(principal, 999L)).doesNotThrowAnyException();
         assertThatCode(() -> service.requireRoleManager(principal, 999L)).doesNotThrowAnyException();
+        assertThatCode(() -> service.requireReadableGroup(principal, 999L)).doesNotThrowAnyException();
     }
 
     private AuthenticatedUser principal(String userId, Set<String> roleCodes) {

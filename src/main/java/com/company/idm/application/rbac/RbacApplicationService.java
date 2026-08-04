@@ -499,7 +499,7 @@ public class RbacApplicationService {
                 "角色组管理菜单权限未初始化"
             ));
         LinkedHashSet<Long> synchronizedIds = new LinkedHashSet<>(permissionIds);
-        if (delegatedPermissionPairPolicy.isDelegated(permissionCodes)) {
+        if (delegatedPermissionPairPolicy.canRead(permissionCodes)) {
             synchronizedIds.add(menuPermission.getId());
         } else {
             synchronizedIds.remove(menuPermission.getId());

@@ -32,6 +32,19 @@ class PersonalAccessTokenPermissionGroupCatalogTest {
     }
 
     @Test
+    void exposesDelegatedRoleGroupReadAsALowRiskPermission() throws Exception {
+        PersonalAccessTokenPermissionGroupCatalog.PermissionGroupDocument document = document();
+
+        PersonalAccessTokenPermissionGroupCatalog.PermissionGroupDefinition group = document.groups().stream()
+            .filter(candidate -> candidate.permissionCodes().contains("ROLE_GROUP_READ"))
+            .findFirst()
+            .orElseThrow();
+
+        assertThat(group.id()).isEqualTo("DELEGATED_ROLE_READ");
+        assertThat(group.risk()).isEqualTo("LOW");
+    }
+
+    @Test
     void rejectsAnUngroupedEnabledApiPermission() throws Exception {
         PersonalAccessTokenPermissionGroupCatalog.PermissionGroupDocument document = document();
         List<Permission> permissions = allApiPermissions(document);
