@@ -120,13 +120,6 @@ def main() -> None:
         payload={"loginId": args.username, "password": password},
     )
     jwt_token = login["accessToken"]
-    verification = api_request(
-        args.base_url,
-        "/api/v1/users/me/password/verify",
-        method="POST",
-        token=jwt_token,
-        payload={"oldPassword": password},
-    )
     permissions = api_request(
         args.base_url,
         "/api/v1/personal-access-tokens/available-permissions",
@@ -146,9 +139,10 @@ def main() -> None:
         token=jwt_token,
         payload={
             "name": f"benchmark-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+            "description": "temporary authentication benchmark",
             "expiresAt": (datetime.now() + timedelta(hours=1)).isoformat(timespec="seconds"),
             "permissionIds": [auth_me["id"]],
-            "passwordVerificationToken": verification["verificationToken"],
+            "scopeMode": "FIXED",
         },
     )
     pat_id = created["token"]["id"]
