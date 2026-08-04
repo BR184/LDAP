@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 
 class PersonalAccessTokenControllerTest {
 
@@ -65,6 +66,36 @@ class PersonalAccessTokenControllerTest {
 
         assertThat(response.secret()).isEqualTo("idm_pat_uid_secret");
         assertThat(response.token().toString()).doesNotContain("stored-hash");
+    }
+
+    @Test
+    void revealDisablesResponseCaching() {
+        when(applicationService.reveal(org.mockito.ArgumentMatchers.eq(principal()),
+            org.mockito.ArgumentMatchers.eq(11L), org.mockito.ArgumentMatchers.anyString()))
+            .thenReturn("idm_pat_uid_secret");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        PersonalAccessTokenSecretResponse secret = controller.reveal(
+            11L,
+            principal(),
+            new MockHttpServletRequest(),
+            response
+        ).getData();
+
+        assertThat(secret.secret()).isEqualTo("idm_pat_uid_secret");
+        assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store");
+        assertThat(response.getHeader("Pragma")).isEqualTo("no-cache");
+    }
+
+    @Test
+    void deleteUsesThePhysicalDeleteApplicationOperation() {
+        controller.delete(11L, principal(), new MockHttpServletRequest());
+
+        org.mockito.Mockito.verify(applicationService).delete(
+            org.mockito.ArgumentMatchers.eq(principal()),
+            org.mockito.ArgumentMatchers.eq(11L),
+            org.mockito.ArgumentMatchers.anyString()
+        );
     }
 
     private PersonalAccessToken token() {

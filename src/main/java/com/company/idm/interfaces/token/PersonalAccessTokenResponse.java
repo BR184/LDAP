@@ -13,7 +13,10 @@ public record PersonalAccessTokenResponse(
     LocalDateTime lastUsedAt,
     String lastUsedIp,
     LocalDateTime createdAt,
-    List<TokenPermissionResponse> permissions
+    List<TokenPermissionResponse> permissions,
+    String description,
+    String scopeMode,
+    boolean secretRecoverable
 ) {
 
     public static PersonalAccessTokenResponse from(PersonalAccessToken token, LocalDateTime now) {
@@ -26,7 +29,10 @@ public record PersonalAccessTokenResponse(
             token.getLastUsedAt(),
             token.getLastUsedIp(),
             token.getGmtCreate(),
-            token.getPermissions().stream().map(TokenPermissionResponse::from).toList()
+            token.getPermissions().stream().map(TokenPermissionResponse::from).toList(),
+            token.getDescription(),
+            token.getScopeMode() == null ? null : token.getScopeMode().name(),
+            token.isSecretRecoverable()
         );
     }
 

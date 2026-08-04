@@ -48,6 +48,8 @@ class PersonalAccessTokenApplicationServiceTest {
     private final PersonalAccessTokenSecretService secretService = mock(PersonalAccessTokenSecretService.class);
     private final PersonalAccessTokenEncryptionService encryptionService =
         mock(PersonalAccessTokenEncryptionService.class);
+    private final PersonalAccessTokenPermissionGroupCatalog permissionGroupCatalog =
+        mock(PersonalAccessTokenPermissionGroupCatalog.class);
     private final PersonalAccessTokenProperties properties = new PersonalAccessTokenProperties();
     private final AuditLogRepository auditLogRepository = mock(AuditLogRepository.class);
     private final PersonalAccessTokenApplicationService service = new PersonalAccessTokenApplicationService(
@@ -57,6 +59,7 @@ class PersonalAccessTokenApplicationServiceTest {
         effectivePermissionService,
         secretService,
         encryptionService,
+        permissionGroupCatalog,
         properties,
         auditLogRepository,
         CLOCK
@@ -110,6 +113,26 @@ class PersonalAccessTokenApplicationServiceTest {
 
         assertThat(created.token().getScopeMode()).isEqualTo(PersonalAccessTokenScopeMode.FOLLOW_ACCOUNT);
         assertThat(created.token().getPermissions()).isEmpty();
+    }
+
+    @Test
+    void returnsOnlyOwnedApiPermissionsInsideCatalogGroups() {
+        PersonalAccessTokenPermissionGroup group = new PersonalAccessTokenPermissionGroup(
+            "ACCOUNT_READ",
+            "账号信息查询",
+            PersonalAccessTokenPermissionRisk.LOW,
+            10,
+            List.of("USER_READ")
+        );
+        when(permissionGroupCatalog.intersect(Set.of("USER_READ"))).thenReturn(List.of(group));
+
+        List<AvailablePersonalAccessTokenPermissionGroup> result =
+            service.availablePermissionGroups(session());
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).group().id()).isEqualTo("ACCOUNT_READ");
+        assertThat(result.get(0).permissions()).extracting(Permission::getPermissionCode)
+            .containsExactly("USER_READ");
     }
 
     @Test

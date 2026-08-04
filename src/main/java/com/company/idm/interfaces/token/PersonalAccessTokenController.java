@@ -8,6 +8,7 @@ import com.company.idm.common.api.ApiResponse;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.util.ClientIpUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -56,6 +57,15 @@ public class PersonalAccessTokenController {
             .toList());
     }
 
+    @GetMapping("/available-permission-groups")
+    public ApiResponse<List<AvailableTokenPermissionGroupResponse>> availablePermissionGroups(
+        @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(applicationService.availablePermissionGroups(principal).stream()
+            .map(AvailableTokenPermissionGroupResponse::from)
+            .toList());
+    }
+
     @PostMapping
     public ApiResponse<CreatedPersonalAccessTokenResponse> create(
         @Valid @RequestBody CreatePersonalAccessTokenRequest request,
@@ -80,6 +90,48 @@ public class PersonalAccessTokenController {
     }
 
     @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(
+        @PathVariable Long id,
+        @AuthenticationPrincipal AuthenticatedUser principal,
+        HttpServletRequest httpServletRequest
+    ) {
+        applicationService.delete(principal, id, ClientIpUtil.getClientIp(httpServletRequest));
+        return ApiResponse.success();
+    }
+
+    @GetMapping("/{id}/secret")
+    public ApiResponse<PersonalAccessTokenSecretResponse> reveal(
+        @PathVariable Long id,
+        @AuthenticationPrincipal AuthenticatedUser principal,
+        HttpServletRequest httpServletRequest,
+        HttpServletResponse httpServletResponse
+    ) {
+        httpServletResponse.setHeader("Cache-Control", "no-store");
+        httpServletResponse.setHeader("Pragma", "no-cache");
+        httpServletResponse.setDateHeader("Expires", 0);
+        return ApiResponse.success(new PersonalAccessTokenSecretResponse(
+            applicationService.reveal(principal, id, ClientIpUtil.getClientIp(httpServletRequest))
+        ));
+    }
+
+    @PostMapping("/{id}/rotations")
+    public ApiResponse<CreatedPersonalAccessTokenResponse> rotate(
+        @PathVariable Long id,
+        @AuthenticationPrincipal AuthenticatedUser principal,
+        HttpServletRequest httpServletRequest
+    ) {
+        CreatedPersonalAccessToken rotated = applicationService.rotate(
+            principal,
+            id,
+            ClientIpUtil.getClientIp(httpServletRequest)
+        );
+        return ApiResponse.success(new CreatedPersonalAccessTokenResponse(
+            PersonalAccessTokenResponse.from(rotated.token(), LocalDateTime.now()),
+            rotated.secret()
+        ));
+    }
+
+    @PostMapping("/{id}/revocations")
     public ApiResponse<Void> revoke(
         @PathVariable Long id,
         @AuthenticationPrincipal AuthenticatedUser principal,

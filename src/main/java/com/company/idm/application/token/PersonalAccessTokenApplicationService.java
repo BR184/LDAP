@@ -36,6 +36,7 @@ public class PersonalAccessTokenApplicationService {
     private final EffectivePermissionService effectivePermissionService;
     private final PersonalAccessTokenSecretService secretService;
     private final PersonalAccessTokenEncryptionService encryptionService;
+    private final PersonalAccessTokenPermissionGroupCatalog permissionGroupCatalog;
     private final PersonalAccessTokenProperties properties;
     private final AuditLogRepository auditLogRepository;
     private final Clock clock;
@@ -48,6 +49,7 @@ public class PersonalAccessTokenApplicationService {
         EffectivePermissionService effectivePermissionService,
         PersonalAccessTokenSecretService secretService,
         PersonalAccessTokenEncryptionService encryptionService,
+        PersonalAccessTokenPermissionGroupCatalog permissionGroupCatalog,
         PersonalAccessTokenProperties properties,
         AuditLogRepository auditLogRepository
     ) {
@@ -58,6 +60,7 @@ public class PersonalAccessTokenApplicationService {
             effectivePermissionService,
             secretService,
             encryptionService,
+            permissionGroupCatalog,
             properties,
             auditLogRepository,
             Clock.systemDefaultZone()
@@ -71,6 +74,7 @@ public class PersonalAccessTokenApplicationService {
         EffectivePermissionService effectivePermissionService,
         PersonalAccessTokenSecretService secretService,
         PersonalAccessTokenEncryptionService encryptionService,
+        PersonalAccessTokenPermissionGroupCatalog permissionGroupCatalog,
         PersonalAccessTokenProperties properties,
         AuditLogRepository auditLogRepository,
         Clock clock
@@ -81,6 +85,7 @@ public class PersonalAccessTokenApplicationService {
         this.effectivePermissionService = effectivePermissionService;
         this.secretService = secretService;
         this.encryptionService = encryptionService;
+        this.permissionGroupCatalog = permissionGroupCatalog;
         this.properties = properties;
         this.auditLogRepository = auditLogRepository;
         this.clock = clock;
@@ -106,6 +111,20 @@ public class PersonalAccessTokenApplicationService {
             .filter(permission -> permission.getPermissionType() == PermissionType.API)
             .filter(permission -> Integer.valueOf(1).equals(permission.getStatus()))
             .filter(permission -> effectiveCodes.contains(permission.getPermissionCode()))
+            .toList();
+    }
+
+    public List<AvailablePersonalAccessTokenPermissionGroup> availablePermissionGroups(
+        AuthenticatedUser principal
+    ) {
+        List<Permission> available = availablePermissions(principal);
+        Map<String, Permission> byCode = available.stream()
+            .collect(Collectors.toMap(Permission::getPermissionCode, Function.identity()));
+        return permissionGroupCatalog.intersect(byCode.keySet()).stream()
+            .map(group -> new AvailablePersonalAccessTokenPermissionGroup(
+                group,
+                group.permissionCodes().stream().map(byCode::get).toList()
+            ))
             .toList();
     }
 
@@ -350,4 +369,5 @@ public class PersonalAccessTokenApplicationService {
             permission.getAction()
         );
     }
+
 }
