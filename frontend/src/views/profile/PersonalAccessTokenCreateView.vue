@@ -113,6 +113,23 @@ function groupIndeterminate(group: TokenPermissionGroup) {
   return selected > 0 && selected < group.permissions.length
 }
 
+function permissionChecked(permissionId: number) {
+  return !isFollowAccount.value && form.permissionIds.includes(permissionId)
+}
+
+function togglePermission(permissionId: number, checked: boolean | string | number) {
+  if (isFollowAccount.value) {
+    return
+  }
+  const selected = new Set(form.permissionIds)
+  if (checked) {
+    selected.add(permissionId)
+  } else {
+    selected.delete(permissionId)
+  }
+  form.permissionIds = [...selected].sort((left, right) => left - right)
+}
+
 function toggleGroup(group: TokenPermissionGroup, checked: boolean | string | number) {
   if (isFollowAccount.value) {
     return
@@ -125,7 +142,37 @@ function toggleGroup(group: TokenPermissionGroup, checked: boolean | string | nu
       selected.delete(permission.id)
     }
   })
-  form.permissionIds = [...selected]
+  form.permissionIds = [...selected].sort((left, right) => left - right)
+}
+
+function riskPermissionIds(risk: TokenPermissionRisk) {
+  return groups.value
+    .filter((group) => group.risk === risk)
+    .flatMap((group) => group.permissions.map((permission) => permission.id))
+}
+
+function riskAllSelected(risk: TokenPermissionRisk) {
+  const permissionIds = riskPermissionIds(risk)
+  return !isFollowAccount.value
+    && permissionIds.length > 0
+    && permissionIds.every((permissionId) => form.permissionIds.includes(permissionId))
+}
+
+function toggleRisk(risk: TokenPermissionRisk) {
+  if (isFollowAccount.value) {
+    return
+  }
+  const permissionIds = riskPermissionIds(risk)
+  const shouldSelect = !riskAllSelected(risk)
+  const selected = new Set(form.permissionIds)
+  permissionIds.forEach((permissionId) => {
+    if (shouldSelect) {
+      selected.add(permissionId)
+    } else {
+      selected.delete(permissionId)
+    }
+  })
+  form.permissionIds = [...selected].sort((left, right) => left - right)
 }
 
 function setScopeMode(value: boolean | string | number) {
@@ -153,7 +200,7 @@ async function handleCreate() {
     return
   }
   if (!isFollowAccount.value && form.permissionIds.length === 0) {
-    ElMessage.warning('请至少选择一个权限组')
+    ElMessage.warning('请至少选择一项 API 权限')
     return
   }
   const expiresAt = resolveExpiresAt()
@@ -288,7 +335,7 @@ function goBack() {
             <span class="section-heading__index">03</span>
             <div>
               <h2>权限范围</h2>
-              <p>按权限组授权。组内成员仅用于查看，提交时会展开为稳定的权限 ID。</p>
+              <p>可按权限组批量授权，也可展开分组后精确调整其中的 API 权限。</p>
             </div>
           </div>
           <div v-loading="loading" class="permission-scope">
@@ -302,9 +349,19 @@ function goBack() {
                   <strong>{{ riskMeta[risk].title }}</strong>
                   <span>{{ riskMeta[risk].description }}</span>
                 </div>
-                <el-tag :type="risk === 'HIGH' ? 'danger' : 'success'" effect="plain">
-                  {{ groupsByRisk[risk].length }} 组
-                </el-tag>
+                <div class="risk-section__actions">
+                  <el-button
+                    size="small"
+                    :icon="riskAllSelected(risk) ? Close : Check"
+                    :disabled="isFollowAccount || riskPermissionIds(risk).length === 0"
+                    @click="toggleRisk(risk)"
+                  >
+                    {{ riskAllSelected(risk) ? '取消全选' : '全选' }}
+                  </el-button>
+                  <el-tag :type="risk === 'HIGH' ? 'danger' : 'success'" effect="plain">
+                    {{ groupsByRisk[risk].length }} 组
+                  </el-tag>
+                </div>
               </header>
               <el-collapse v-model="expandedGroups" class="permission-groups">
                 <el-collapse-item
@@ -329,8 +386,16 @@ function goBack() {
                   </template>
                   <div class="permission-members">
                     <div v-for="permission in group.permissions" :key="permission.id" class="permission-member">
-                      <span>{{ permission.permissionName }}</span>
-                      <code>{{ permission.permissionCode }}</code>
+                      <el-checkbox
+                        :model-value="permissionChecked(permission.id)"
+                        :disabled="isFollowAccount"
+                        :aria-label="`选择权限：${permission.permissionName}`"
+                        @change="(value) => togglePermission(permission.id, value)"
+                      />
+                      <div class="permission-member__content">
+                        <span>{{ permission.permissionName }}</span>
+                        <code>{{ permission.permissionCode }}</code>
+                      </div>
                     </div>
                   </div>
                 </el-collapse-item>
@@ -385,7 +450,7 @@ function goBack() {
           <el-icon><Warning /></el-icon>
           <div>
             <strong>高风险权限需要明确授权</strong>
-            <p>默认按组收起，展开后可查看每个 API 成员。</p>
+            <p>默认按组收起，展开后可单独选择或取消每项 API 权限。</p>
           </div>
         </div>
       </aside>
@@ -556,65 +621,93 @@ function goBack() {
   color: #8e4e40;
 }
 
+.risk-section__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.risk-section__actions .el-button {
+  min-width: 76px;
+}
+
 .permission-groups {
   border-top: 1px solid #e5ecea;
 }
 
 .group-title {
   display: flex;
+  flex: 1;
   min-width: 0;
   align-items: center;
   gap: 8px;
+  line-height: 1.4;
 }
 
 .group-title > span {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .group-title strong {
   color: #2c3d39;
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.4;
 }
 
 .group-title small {
   color: #899590;
   font-size: 11px;
+  line-height: 1.3;
 }
 
 .permission-members {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1px 18px;
+  column-gap: 18px;
   padding: 2px 14px 14px 42px;
 }
 
 .permission-member {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
   min-width: 0;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 0;
   border-bottom: 1px solid #edf1f0;
 }
 
-.permission-member span,
-.permission-member code {
+.permission-member__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.permission-member__content span,
+.permission-member__content code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.permission-member span {
+.permission-member__content span {
   color: #4b5b56;
   font-size: 12px;
+  line-height: 1.5;
 }
 
-.permission-member code {
+.permission-member__content code {
   color: #8a9692;
   font-family: Consolas, monospace;
   font-size: 11px;
+  line-height: 1.5;
 }
 
 .form-actions {
@@ -722,9 +815,16 @@ function goBack() {
 }
 
 :deep(.el-collapse-item__header) {
-  height: 48px;
+  height: auto;
+  min-height: 54px;
+  padding: 7px 0;
   color: #3e504b;
   font-size: 13px;
+  line-height: 1.4;
+}
+
+:deep(.el-collapse-item__arrow) {
+  flex: 0 0 auto;
 }
 
 :deep(.el-collapse-item__wrap) {
