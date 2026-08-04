@@ -88,7 +88,7 @@ function handleForgotPassword() {
               <span class="login-view__field-label">
                 <span>用户ID</span>
                 <el-popover
-                  placement="left-start"
+                  placement="left"
                   :width="720"
                   trigger="hover"
                   :show-after="120"
