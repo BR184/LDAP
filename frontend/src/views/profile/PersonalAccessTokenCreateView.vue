@@ -5,10 +5,8 @@ import {
   ArrowLeft,
   Check,
   Close,
-  CopyDocument,
   Key,
   Search,
-  Warning,
 } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -29,8 +27,6 @@ const loading = ref(false)
 const submitting = ref(false)
 const groupKeyword = ref('')
 const expandedGroups = ref<string[]>([])
-const secretValue = ref('')
-const createdName = ref('')
 const customExpiry = ref<Date | null>(null)
 const groups = ref<TokenPermissionGroup[]>([])
 
@@ -211,41 +207,17 @@ async function handleCreate() {
 
   submitting.value = true
   try {
-    const created = await createPersonalAccessToken({
+    await createPersonalAccessToken({
       name: form.name.trim(),
       description: form.description.trim() || null,
       expiresAt,
       permissionIds: form.permissionIds,
       scopeMode: form.scopeMode,
     })
-    secretValue.value = created.secret
-    createdName.value = created.token.name
     ElMessage.success('访问密钥已创建')
+    await router.replace('/access-tokens')
   } finally {
     submitting.value = false
-  }
-}
-
-async function copySecret() {
-  if (!secretValue.value) {
-    return
-  }
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(secretValue.value)
-    } else {
-      const textarea = document.createElement('textarea')
-      textarea.value = secretValue.value
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-    }
-    ElMessage.success('完整密钥已复制')
-  } catch {
-    ElMessage.error('复制失败，请手动选择密钥')
   }
 }
 
@@ -417,57 +389,16 @@ function goBack() {
         </el-form>
       </section>
 
-      <aside class="token-create-aside">
-        <div class="aside-block aside-block--quiet">
-          <span class="aside-kicker">SECURITY NOTE</span>
-          <h2>一份密钥，一个清晰边界</h2>
-          <p>密钥始终受账号状态、角色权限和有效期约束。撤销或删除后，已发出的调用会立即失效。</p>
-        </div>
-        <div v-if="secretValue" class="aside-block secret-block">
-          <div class="secret-block__heading">
-            <span class="secret-block__icon"><el-icon><Check /></el-icon></span>
-            <div>
-              <span class="aside-kicker">CREATED</span>
-              <h2>{{ createdName }}</h2>
-            </div>
-          </div>
-          <el-alert
-            title="密钥已生成，可随时复制"
-            description="当前页面不会持久化完整密钥；离开此页后请从密钥清单执行查看。"
-            type="success"
-            :closable="false"
-            show-icon
-          />
-          <div class="secret-value">
-            <code>{{ secretValue }}</code>
-            <el-tooltip content="复制完整密钥" placement="top">
-              <el-button :icon="CopyDocument" circle @click="copySecret" />
-            </el-tooltip>
-          </div>
-          <el-button class="secret-block__back" text @click="goBack">返回密钥清单</el-button>
-        </div>
-        <div v-else class="aside-block aside-block--guide">
-          <el-icon><Warning /></el-icon>
-          <div>
-            <strong>高风险权限需要明确授权</strong>
-            <p>默认按组收起，展开后可单独选择或取消每项 API 权限。</p>
-          </div>
-        </div>
-      </aside>
     </div>
   </PageContainer>
 </template>
 
 <style scoped lang="scss">
 .token-create-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 24px;
-  align-items: start;
+  display: block;
 }
 
-.token-create-main,
-.aside-block {
+.token-create-main {
   border: 1px solid rgba(109, 130, 126, 0.18);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.86);
@@ -497,16 +428,14 @@ function goBack() {
   line-height: 1.8;
 }
 
-.section-heading h2,
-.aside-block h2 {
+.section-heading h2 {
   margin: 0;
   color: #1f2d2a;
   font-size: 17px;
   font-weight: 650;
 }
 
-.section-heading p,
-.aside-block p {
+.section-heading p {
   margin: 5px 0 0;
   color: #75837f;
   font-size: 12px;
@@ -719,97 +648,6 @@ function goBack() {
   border-top: 1px solid #e5ecea;
 }
 
-.token-create-aside {
-  display: grid;
-  gap: 16px;
-}
-
-.aside-block {
-  padding: 20px;
-}
-
-.aside-kicker {
-  display: block;
-  margin-bottom: 8px;
-  color: #81908b;
-  font-family: Consolas, monospace;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-}
-
-.aside-block--quiet {
-  background: rgba(244, 248, 247, 0.9);
-}
-
-.aside-block--guide {
-  display: flex;
-  gap: 12px;
-  color: #8e4e40;
-}
-
-.aside-block--guide > .el-icon {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  font-size: 18px;
-}
-
-.aside-block--guide strong {
-  color: #6f4c43;
-  font-size: 13px;
-}
-
-.secret-block {
-  border-color: rgba(21, 115, 107, 0.3);
-  background: rgba(241, 249, 246, 0.96);
-}
-
-.secret-block__heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.secret-block__heading h2 {
-  font-size: 15px;
-}
-
-.secret-block__icon {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 50%;
-  color: #fff;
-  background: #18856f;
-}
-
-.secret-value {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  margin-top: 14px;
-  padding: 10px;
-  border: 1px solid #c5ddd6;
-  border-radius: 6px;
-  background: #fff;
-}
-
-.secret-value code {
-  overflow-wrap: anywhere;
-  color: #17483f;
-  font-family: Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  user-select: all;
-}
-
-.secret-block__back {
-  margin-top: 8px;
-  padding-left: 0;
-}
-
 :deep(.el-alert) {
   margin-top: 14px;
 }
@@ -837,8 +675,7 @@ function goBack() {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .token-create-main,
-  .aside-block {
+  .token-create-main {
     transition: none;
   }
 }
