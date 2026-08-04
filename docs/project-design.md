@@ -3723,37 +3723,39 @@ LDAP 控制面页直接对接以下接口：
 
 #### 16.37.1 权威模型
 
-- 采用数据库托管的不透明令牌，格式为 `idm_pat_<tokenUid>_<secret>`。
-- `secret` 使用 `SecureRandom` 生成 256 位熵，数据库仅保存完整令牌的 SHA-256 摘要。
-- 明文只在创建成功响应返回一次；列表、日志、异常和审计均不返回明文或摘要。
-- 每份令牌保存创建时勾选的 API 权限 ID，创建后不因账号新增权限而扩张。
-- 请求有效权限为令牌所选权限与账号当前已启用权限的实时交集。
+- 令牌格式保持 `idm_pat_<tokenUid>_<secret>`，认证热路径只使用 SHA-256 摘要和恒定时间比较。
+- 新令牌同时保存 AES-256-GCM 密文、加密主密钥 ID 和摘要；随机 12 字节 IV，AAD 为 `ownerId:tokenUid`。
+- 主密钥只由环境变量提供，数据库备份和主密钥分开保管。列表、日志、异常和审计详情永不返回完整密钥、摘要或密文。
+- `FIXED` 保存创建时精确的 API 权限 ID；`FOLLOW_ACCOUNT` 每次请求按账号当前有效 API 权限计算，账号新增权限自动生效。
+- 现有 hash-only 记录迁移为 `FIXED`，无法恢复旧明文，只能删除或轮换。
+- 权限分组资源 `security/personal-access-token-permission-groups.json` 使用稳定 ID，风险分为 `LOW/HIGH`，每个启用 API 权限必须且只能归属一组；`MENU` 权限排除在 PAT 之外。
 
 #### 16.37.2 认证与授权
 
-- 统一 Bearer 过滤器按 `idm_pat_` 前缀显式选择 PAT 或 JWT 认证器。
-- JWT 的签名、过期、用户 ID、准入状态和 `tokenVersion` 校验保持不变。
+- Bearer 过滤器按 `idm_pat_` 前缀选择 PAT 认证器，JWT 认证链保持原有签名、过期、用户 ID、准入状态和 `tokenVersion` 校验。
 - PAT 每次请求读取令牌和账号权威状态，撤销、过期、账号禁用、离职或删除立即生效。
-- Casbin 策略对象统一为稳定 `permissionCode`，不再以路径和方法作为内部授权主键。
-- 用户查询与密码重置的多数据范围接口使用 `hasAny` 准入，并由业务服务按当前凭证有效权限执行二次范围校验。
-- 密码、本人菜单和个人访问密钥生命周期接口只允许网页登录会话。
+- `EffectivePermissionService` 对固定模式执行“令牌快照 ∩ 账号当前 API 权限”，对跟随模式执行“账号当前 API 权限 ∩ 分组目录 API 集合”。
+- 密码、本人菜单和 PAT 生命周期接口只允许网页登录会话。
+- 查看接口只允许所有者，设置 `Cache-Control: no-store`，并写入审计；轮换会立即使旧 tokenUid 失效。
 
 #### 16.37.3 数据与 API
 
-- Flyway `V46` 新增 `sys_personal_access_token` 和 `sys_personal_access_token_permission`。
-- `sys_audit_log` 新增可空的 `credential_type`、`credential_id`，旧审计数据与旧写入方不受影响。
-- 新增接口：
-  - `GET /api/v1/personal-access-tokens`
-  - `GET /api/v1/personal-access-tokens/available-permissions`
-  - `POST /api/v1/personal-access-tokens`
-  - `DELETE /api/v1/personal-access-tokens/{id}`
-- 现有登录、`/api/v1/auth/me`、用户、LDAP 路径、请求字段、响应字段和错误包络保持不变。
+- Flyway `V46` 建立 PAT 表，`V47` 增加 `description`、`scope_mode`、`secret_ciphertext`、`secret_key_id`，`V48` 按稳定权限编码修复中文元数据。
+- `sys_audit_log` 保存可空 `credential_type`、`credential_id`，审计保留在物理删除之后。
+- 保持既有列表和平铺权限接口字段，新增：
+  - `GET /api/v1/personal-access-tokens/available-permission-groups`
+  - `GET /api/v1/personal-access-tokens/{id}/secret`
+  - `POST /api/v1/personal-access-tokens/{id}/rotations`
+  - `POST /api/v1/personal-access-tokens/{id}/revocations`
+- `DELETE /api/v1/personal-access-tokens/{id}` 语义为事务内物理删除；撤销使用独立 endpoint。
+- 现有登录、`/api/v1/auth/me`、用户、LDAP 路径和响应字段保持不变。
 
 #### 16.37.4 运维边界
 
 - 每账号有效令牌上限由 `APP_PAT_MAX_ACTIVE_PER_USER` 配置，默认 `20`。
 - 最近使用信息由 `APP_PAT_LAST_USED_WRITE_INTERVAL_SECONDS` 节流，默认 `300` 秒。
-- 创建、撤销和失败认证写入审计；成功认证的最近使用信息先由进程内自动过期门闩合并同实例并发，再由数据库条件更新处理多实例竞争。
+- 创建不再要求当前密码；创建、查看、轮换、撤销、删除和失败认证均按操作写审计，审计内容禁止包含完整密钥。
+- JDBC 使用 `characterEncoding=utf8mb4` 与 `connectionCollation=utf8mb4_general_ci`，Flyway 使用 UTF-8；生产启动校验拒绝非 utf8mb4 MySQL 会话。
 - 使用与基准方法见 `docs/runbooks/personal-access-token-usage.md`。
 
 
