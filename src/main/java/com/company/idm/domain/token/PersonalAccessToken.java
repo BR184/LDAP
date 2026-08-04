@@ -19,8 +19,7 @@ public class PersonalAccessToken {
     private final String description;
     private final PersonalAccessTokenScopeMode scopeMode;
     private final String secretHash;
-    private final String secretCiphertext;
-    private final String secretKeyId;
+    private final String secretValue;
     private final Integer hashVersion;
     private final String tokenPrefix;
     private final LocalDateTime expiresAt;
@@ -42,7 +41,6 @@ public class PersonalAccessToken {
     }
 
     public boolean isSecretRecoverable() {
-        return secretCiphertext != null && !secretCiphertext.isBlank()
-            && secretKeyId != null && !secretKeyId.isBlank();
+        return secretValue != null && !secretValue.isBlank();
     }
 }

@@ -105,6 +105,7 @@ class PersonalAccessTokenControllerTest {
             .userId(7L)
             .name("automation")
             .secretHash("stored-hash")
+            .secretValue("idm_pat_uid_secret")
             .hashVersion(1)
             .tokenPrefix("idm_pat_uid_...")
             .gmtCreate(LocalDateTime.now())

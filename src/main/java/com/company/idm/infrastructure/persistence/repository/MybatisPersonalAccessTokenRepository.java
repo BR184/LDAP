@@ -137,8 +137,7 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
         PersonalAccessTokenDO changes = new PersonalAccessTokenDO();
         changes.setTokenUid(token.getTokenUid());
         changes.setSecretHash(token.getSecretHash());
-        changes.setSecretCiphertext(token.getSecretCiphertext());
-        changes.setSecretKeyId(token.getSecretKeyId());
+        changes.setSecretValue(token.getSecretValue());
         changes.setHashVersion(token.getHashVersion());
         changes.setTokenPrefix(token.getTokenPrefix());
         changes.setModifier(token.getModifier());
@@ -215,8 +214,7 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
             .description(dataObject.getDescription())
             .scopeMode(parseScopeMode(dataObject.getScopeMode()))
             .secretHash(dataObject.getSecretHash())
-            .secretCiphertext(dataObject.getSecretCiphertext())
-            .secretKeyId(dataObject.getSecretKeyId())
+            .secretValue(dataObject.getSecretValue())
             .hashVersion(dataObject.getHashVersion())
             .tokenPrefix(dataObject.getTokenPrefix())
             .expiresAt(dataObject.getExpiresAt())
@@ -252,8 +250,7 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
             ? PersonalAccessTokenScopeMode.FIXED
             : token.getScopeMode()).name());
         dataObject.setSecretHash(token.getSecretHash());
-        dataObject.setSecretCiphertext(token.getSecretCiphertext());
-        dataObject.setSecretKeyId(token.getSecretKeyId());
+        dataObject.setSecretValue(token.getSecretValue());
         dataObject.setHashVersion(token.getHashVersion());
         dataObject.setTokenPrefix(token.getTokenPrefix());
         dataObject.setExpiresAt(token.getExpiresAt());

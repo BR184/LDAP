@@ -59,16 +59,7 @@ if (Test-Path $feishuImportPath) {
     $dockerArgs += @('-v', "$($feishuImportPath):/docs/feishu-import")
 }
 
-$encryptionEnvArgs = @()
-if ($env:APP_PAT_ENCRYPTION_ACTIVE_KEY_ID) {
-    $encryptionEnvArgs += @(
-        '-e', 'APP_PAT_ENCRYPTION_ACTIVE_KEY_ID',
-        '-e', 'APP_PAT_ENCRYPTION_KEYS_V1'
-    )
-}
-
 $dockerArgs += @(
-    $encryptionEnvArgs
     'eclipse-temurin:17-jre-jammy',
     'java',
     '-jar',

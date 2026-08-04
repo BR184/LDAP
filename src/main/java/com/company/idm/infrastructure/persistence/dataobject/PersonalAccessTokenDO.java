@@ -20,8 +20,7 @@ public class PersonalAccessTokenDO {
     private String description;
     private String scopeMode;
     private String secretHash;
-    private String secretCiphertext;
-    private String secretKeyId;
+    private String secretValue;
     private Integer hashVersion;
     private String tokenPrefix;
     private LocalDateTime expiresAt;

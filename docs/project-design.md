@@ -3724,10 +3724,10 @@ LDAP 控制面页直接对接以下接口：
 #### 16.37.1 权威模型
 
 - 令牌格式保持 `idm_pat_<tokenUid>_<secret>`，认证热路径只使用 SHA-256 摘要和恒定时间比较。
-- 新令牌同时保存 AES-256-GCM 密文、加密主密钥 ID 和摘要；随机 12 字节 IV，AAD 为 `ownerId:tokenUid`。
-- 主密钥只由环境变量提供，数据库备份和主密钥分开保管。列表、日志、异常和审计详情永不返回完整密钥、摘要或密文。
+- 经业务确认，新令牌在数据库保存完整密钥明文和 SHA-256 摘要，不依赖额外主密钥；完整密钥只由所有者通过创建或查看接口获取。
+- 数据库备份包含可直接使用的完整密钥。列表、日志、异常和审计详情永不返回完整密钥或摘要。
 - `FIXED` 保存创建时精确的 API 权限 ID；`FOLLOW_ACCOUNT` 每次请求按账号当前有效 API 权限计算，账号新增权限自动生效。
-- 现有 hash-only 记录迁移为 `FIXED`，无法恢复旧明文，只能删除或轮换。
+- 现有 hash-only 记录迁移为 `FIXED`，无法恢复旧值，只能删除或轮换。
 - 权限分组资源 `security/personal-access-token-permission-groups.json` 使用稳定 ID，风险分为 `LOW/HIGH`，每个启用 API 权限必须且只能归属一组；`MENU` 权限排除在 PAT 之外。
 
 #### 16.37.2 认证与授权
@@ -3740,7 +3740,7 @@ LDAP 控制面页直接对接以下接口：
 
 #### 16.37.3 数据与 API
 
-- Flyway `V46` 建立 PAT 表，`V47` 增加 `description`、`scope_mode`、`secret_ciphertext`、`secret_key_id`，`V48` 按稳定权限编码修复中文元数据。
+- Flyway `V46` 建立 PAT 表，`V47` 增加描述、权限模式和旧加密字段，`V48` 修复中文元数据，`V49` 以 `secret_value` 取代旧加密字段。
 - `sys_audit_log` 保存可空 `credential_type`、`credential_id`，审计保留在物理删除之后。
 - 保持既有列表和平铺权限接口字段，新增：
   - `GET /api/v1/personal-access-tokens/available-permission-groups`

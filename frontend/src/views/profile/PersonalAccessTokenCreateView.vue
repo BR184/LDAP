@@ -433,7 +433,7 @@ function goBack() {
           </div>
           <el-alert
             title="密钥已生成，可随时复制"
-            description="完整密钥仅保存在当前页面内存中；离开此页后请从清单执行查看。"
+            description="当前页面不会持久化完整密钥；离开此页后请从密钥清单执行查看。"
             type="success"
             :closable="false"
             show-icon

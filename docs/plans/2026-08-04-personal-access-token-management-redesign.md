@@ -2,9 +2,9 @@
 
 > **For Codex:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Rebuild personal access token management with recoverable encrypted secrets, grouped risk-aware scopes, follow-account authorization, true deletion, and deterministic UTF-8 repair.
+**Goal:** Rebuild personal access token management with repeatedly viewable stored secrets, grouped risk-aware scopes, follow-account authorization, true deletion, and deterministic UTF-8 repair.
 
-**Architecture:** Keep SHA-256 as the authentication authority and add AES-GCM ciphertext only for owner-initiated reveal. Resolve token permissions through one `FIXED` or `FOLLOW_ACCOUNT` model, backed by a versioned JSON permission-group catalog. Preserve existing LDAP and business API contracts while directly replacing the newly introduced PAT lifecycle behavior.
+**Architecture:** Keep SHA-256 as the authentication authority and store the complete token value for owner-initiated reveal, as explicitly approved by the business. Resolve token permissions through one `FIXED` or `FOLLOW_ACCOUNT` model, backed by a versioned JSON permission-group catalog. Preserve existing LDAP and business API contracts while directly replacing the newly introduced PAT lifecycle behavior.
 
 **Tech Stack:** Java 17, Spring Boot 3.3, Spring Security, MyBatis-Plus, Flyway/MySQL 8, Jackson, Vue 3, TypeScript, Element Plus.
 
@@ -28,25 +28,25 @@
 - Modify: token domain, DO and repository files under `domain/token` and `infrastructure/persistence`.
 - Test: `MybatisPersonalAccessTokenRepositoryTest`.
 
-1. Write failing repository tests for description, `FIXED/FOLLOW_ACCOUNT`, ciphertext/key ID, rotation and physical deletion.
-2. Add nullable ciphertext/key ID, description and non-null `scope_mode DEFAULT 'FIXED'`.
+1. Write failing repository tests for description, `FIXED/FOLLOW_ACCOUNT`, rotation and physical deletion.
+2. Add description and non-null `scope_mode DEFAULT 'FIXED'` while keeping deployed migration history immutable.
 3. Implement direct repository mappings and delete/rotate operations.
 4. Add deterministic permission-name repair by stable permission code.
 5. Run focused repository tests and commit `feat: persist recoverable access token state`.
 
-### Task 3: Implement versioned AES-GCM secret protection
+### Task 3: Persist repeatable secret values
 
 **Files:**
-- Create: `PersonalAccessTokenEncryptionProperties.java`.
-- Create: `PersonalAccessTokenEncryptionService.java` and AES-GCM implementation.
-- Test: encryption service tests.
-- Modify: `application.yml`, development start script and deployment env example.
+- Modify: token domain, persistence mapping and lifecycle service.
+- Create: `V49__store_personal_access_token_secret.sql`.
+- Test: application and repository tests.
+- Modify: `application.yml`, development start script and deployment documentation.
 
-1. Write failing tests for random IVs, successful decrypt, wrong AAD, wrong key, key ID selection and missing configuration.
-2. Bind an active key ID and environment-provided key ring.
-3. Encrypt with AES-256-GCM and AAD composed from owner ID plus token UID.
-4. Keep authentication on SHA-256 only.
-5. Run tests and commit `feat: encrypt retrievable access token secrets`.
+1. Write failing tests for create, reveal, rotation and historical unrecoverable records.
+2. Persist generated complete tokens in `secret_value` without a separate deployment key.
+3. Keep authentication on SHA-256 only and prevent complete tokens from entering list responses, logs or audit details.
+4. Remove the superseded AES service, configuration and tests.
+5. Run tests and commit `refactor: store retrievable access token secrets`.
 
 ### Task 4: Establish the permission-group catalog
 
@@ -70,7 +70,7 @@
 
 1. Add failing tests for password-free create, fixed permissions, follow-account growth/shrink, reveal ownership, legacy unrecoverable tokens, rotation, revocation and deletion.
 2. Remove password-verification dependency and input from token creation.
-3. Encrypt every newly generated token while retaining its SHA-256 digest.
+3. Store every newly generated token value while retaining its SHA-256 digest for authentication.
 4. Carry `scopeMode` in the authenticated principal and resolve `FOLLOW_ACCOUNT` directly from current account permissions.
 5. Add audited reveal, rotation, revocation and physical deletion services.
 6. Run token/security tests and commit `feat: manage recoverable access tokens`.
@@ -142,7 +142,7 @@
 **Files:**
 - Modify: `docs/runbooks/personal-access-token-usage.md`, `docs/project-design.md`, `build-versions.txt`.
 
-1. Document encryption key generation, backup separation, HTTPS and old-token rotation.
+1. Document plaintext database storage, backup access control, HTTPS and old-token rotation.
 2. Run `scripts/build-with-version-tracking.ps1` after an implementation commit so the record contains the correct hash and V48.
 3. Restart backend, verify Flyway V47/V48 and schema, then rebuild/restart frontend.
 4. Verify health, API proxy and zero active benchmark tokens without browser use.

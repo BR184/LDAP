@@ -58,8 +58,7 @@ class MybatisPersonalAccessTokenRepositoryTest {
             .containsExactly("SECOND", "FIRST");
         assertThat(created.getDescription()).isEqualTo("deployment automation");
         assertThat(created.getScopeMode()).isEqualTo(PersonalAccessTokenScopeMode.FIXED);
-        assertThat(created.getSecretCiphertext()).isEqualTo("ciphertext");
-        assertThat(created.getSecretKeyId()).isEqualTo("key-2026-08");
+        assertThat(created.getSecretValue()).isEqualTo("idm_pat_token-uid_secret");
     }
 
     @Test
@@ -68,15 +67,16 @@ class MybatisPersonalAccessTokenRepositoryTest {
             .id(10L)
             .tokenUid("new-token-uid")
             .secretHash("new-hash")
-            .secretCiphertext("new-ciphertext")
-            .secretKeyId("key-2026-09")
+            .secretValue("idm_pat_new-token-uid_secret")
             .gmtModified(LocalDateTime.of(2026, 8, 4, 10, 0))
             .build();
         when(tokenMapper.update(any(PersonalAccessTokenDO.class), any())).thenReturn(1);
 
         assertThat(repository.rotateOwned(rotated)).isTrue();
 
-        verify(tokenMapper).update(any(PersonalAccessTokenDO.class), any());
+        ArgumentCaptor<PersonalAccessTokenDO> changesCaptor = ArgumentCaptor.forClass(PersonalAccessTokenDO.class);
+        verify(tokenMapper).update(changesCaptor.capture(), any());
+        assertThat(changesCaptor.getValue().getSecretValue()).isEqualTo("idm_pat_new-token-uid_secret");
     }
 
     @Test
@@ -126,8 +126,7 @@ class MybatisPersonalAccessTokenRepositoryTest {
             .secretHash("hash")
             .hashVersion(1)
             .tokenPrefix("idm_pat_token-uid_...")
-            .secretCiphertext("ciphertext")
-            .secretKeyId("key-2026-08")
+            .secretValue("idm_pat_token-uid_secret")
             .scopeMode(PersonalAccessTokenScopeMode.FIXED)
             .creator("employee")
             .modifier("employee")
@@ -150,8 +149,7 @@ class MybatisPersonalAccessTokenRepositoryTest {
         dataObject.setSecretHash("hash");
         dataObject.setHashVersion(1);
         dataObject.setTokenPrefix("idm_pat_token-uid_...");
-        dataObject.setSecretCiphertext("ciphertext");
-        dataObject.setSecretKeyId("key-2026-08");
+        dataObject.setSecretValue("idm_pat_token-uid_secret");
         dataObject.setScopeMode(PersonalAccessTokenScopeMode.FIXED.name());
         dataObject.setCreator("employee");
         dataObject.setModifier("employee");

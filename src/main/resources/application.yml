@@ -50,11 +50,6 @@ app:
   personal-access-token:
     max-active-per-user: ${APP_PAT_MAX_ACTIVE_PER_USER:20}
     last-used-write-interval-seconds: ${APP_PAT_LAST_USED_WRITE_INTERVAL_SECONDS:300}
-    encryption:
-      # 生产环境只通过环境变量注入主密钥，数据库和镜像不保存主密钥。
-      active-key-id: ${APP_PAT_ENCRYPTION_ACTIVE_KEY_ID:}
-      # Spring Boot 会将 APP_PAT_ENCRYPTION_KEYS_<KEY_ID> 绑定为 keys map 成员。
-      keys: {}
   sql-log:
     # SQL 日志默认开启，便于当前阶段联调和问题排查。
     enabled: ${APP_SQL_LOG_ENABLED:true}

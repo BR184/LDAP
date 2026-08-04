@@ -35,7 +35,6 @@ public class PersonalAccessTokenApplicationService {
     private final UserRepository userRepository;
     private final EffectivePermissionService effectivePermissionService;
     private final PersonalAccessTokenSecretService secretService;
-    private final PersonalAccessTokenEncryptionService encryptionService;
     private final PersonalAccessTokenPermissionGroupCatalog permissionGroupCatalog;
     private final PersonalAccessTokenProperties properties;
     private final AuditLogRepository auditLogRepository;
@@ -48,7 +47,6 @@ public class PersonalAccessTokenApplicationService {
         UserRepository userRepository,
         EffectivePermissionService effectivePermissionService,
         PersonalAccessTokenSecretService secretService,
-        PersonalAccessTokenEncryptionService encryptionService,
         PersonalAccessTokenPermissionGroupCatalog permissionGroupCatalog,
         PersonalAccessTokenProperties properties,
         AuditLogRepository auditLogRepository
@@ -59,7 +57,6 @@ public class PersonalAccessTokenApplicationService {
             userRepository,
             effectivePermissionService,
             secretService,
-            encryptionService,
             permissionGroupCatalog,
             properties,
             auditLogRepository,
@@ -73,7 +70,6 @@ public class PersonalAccessTokenApplicationService {
         UserRepository userRepository,
         EffectivePermissionService effectivePermissionService,
         PersonalAccessTokenSecretService secretService,
-        PersonalAccessTokenEncryptionService encryptionService,
         PersonalAccessTokenPermissionGroupCatalog permissionGroupCatalog,
         PersonalAccessTokenProperties properties,
         AuditLogRepository auditLogRepository,
@@ -84,7 +80,6 @@ public class PersonalAccessTokenApplicationService {
         this.userRepository = userRepository;
         this.effectivePermissionService = effectivePermissionService;
         this.secretService = secretService;
-        this.encryptionService = encryptionService;
         this.permissionGroupCatalog = permissionGroupCatalog;
         this.properties = properties;
         this.auditLogRepository = auditLogRepository;
@@ -157,11 +152,6 @@ public class PersonalAccessTokenApplicationService {
             .map(this::toTokenPermission)
             .toList();
         GeneratedPersonalAccessTokenSecret generated = secretService.generate();
-        EncryptedPersonalAccessTokenSecret encrypted = encryptionService.encrypt(
-            generated.rawToken(),
-            principal.id(),
-            generated.tokenUid()
-        );
         String name = normalizeName(command.name());
         PersonalAccessToken persisted = tokenRepository.create(PersonalAccessToken.builder()
             .tokenUid(generated.tokenUid())
@@ -170,8 +160,7 @@ public class PersonalAccessTokenApplicationService {
             .description(normalizeDescription(command.description()))
             .scopeMode(scopeMode)
             .secretHash(generated.secretHash())
-            .secretCiphertext(encrypted.ciphertext())
-            .secretKeyId(encrypted.keyId())
+            .secretValue(generated.rawToken())
             .hashVersion(generated.hashVersion())
             .tokenPrefix(generated.displayPrefix())
             .expiresAt(command.expiresAt())
@@ -208,16 +197,10 @@ public class PersonalAccessTokenApplicationService {
             throw new BizException("PAT_NOT_ACTIVE", "只有有效的个人访问密钥可以轮换");
         }
         GeneratedPersonalAccessTokenSecret generated = secretService.generate();
-        EncryptedPersonalAccessTokenSecret encrypted = encryptionService.encrypt(
-            generated.rawToken(),
-            principal.id(),
-            generated.tokenUid()
-        );
         PersonalAccessToken rotated = existing.toBuilder()
             .tokenUid(generated.tokenUid())
             .secretHash(generated.secretHash())
-            .secretCiphertext(encrypted.ciphertext())
-            .secretKeyId(encrypted.keyId())
+            .secretValue(generated.rawToken())
             .hashVersion(generated.hashVersion())
             .tokenPrefix(generated.displayPrefix())
             .modifier(principal.userId())
@@ -244,12 +227,10 @@ public class PersonalAccessTokenApplicationService {
         if (!token.isActiveAt(LocalDateTime.now(clock))) {
             throw new BizException("PAT_NOT_ACTIVE", "只有有效的个人访问密钥可以查看");
         }
-        String secret = encryptionService.decrypt(
-            token.getSecretCiphertext(),
-            token.getSecretKeyId(),
-            principal.id(),
-            token.getTokenUid()
-        );
+        String secret = token.getSecretValue();
+        if (secret == null || secret.isBlank()) {
+            throw new BizException("PAT_SECRET_UNRECOVERABLE", "当前个人访问密钥不可恢复");
+        }
         auditLogRepository.save(AuditLog.builder()
             .operator(principal.userId())
             .operatorIp(sourceIp)

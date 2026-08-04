@@ -46,8 +46,6 @@ class PersonalAccessTokenApplicationServiceTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final EffectivePermissionService effectivePermissionService = mock(EffectivePermissionService.class);
     private final PersonalAccessTokenSecretService secretService = mock(PersonalAccessTokenSecretService.class);
-    private final PersonalAccessTokenEncryptionService encryptionService =
-        mock(PersonalAccessTokenEncryptionService.class);
     private final PersonalAccessTokenPermissionGroupCatalog permissionGroupCatalog =
         mock(PersonalAccessTokenPermissionGroupCatalog.class);
     private final PersonalAccessTokenProperties properties = new PersonalAccessTokenProperties();
@@ -58,7 +56,6 @@ class PersonalAccessTokenApplicationServiceTest {
         userRepository,
         effectivePermissionService,
         secretService,
-        encryptionService,
         permissionGroupCatalog,
         properties,
         auditLogRepository,
@@ -78,8 +75,6 @@ class PersonalAccessTokenApplicationServiceTest {
             1,
             "idm_pat_uid_..."
         ));
-        when(encryptionService.encrypt("idm_pat_uid_secret", 7L, "uid"))
-            .thenReturn(new EncryptedPersonalAccessTokenSecret("ciphertext", "key-v1"));
         when(tokenRepository.create(any())).thenAnswer(invocation -> invocation.<PersonalAccessToken>getArgument(0)
             .toBuilder()
             .id(11L)
@@ -87,7 +82,7 @@ class PersonalAccessTokenApplicationServiceTest {
     }
 
     @Test
-    void createsAnEncryptedFixedScopeWithoutPasswordVerification() {
+    void createsAStoredFixedScopeWithoutPasswordVerification() {
         CreatedPersonalAccessToken created = service.create(
             session(),
             command("automation", "deployment automation", PersonalAccessTokenScopeMode.FIXED,
@@ -96,8 +91,7 @@ class PersonalAccessTokenApplicationServiceTest {
 
         assertThat(created.secret()).isEqualTo("idm_pat_uid_secret");
         assertThat(created.token().getSecretHash()).isEqualTo("hash");
-        assertThat(created.token().getSecretCiphertext()).isEqualTo("ciphertext");
-        assertThat(created.token().getSecretKeyId()).isEqualTo("key-v1");
+        assertThat(created.token().getSecretValue()).isEqualTo("idm_pat_uid_secret");
         assertThat(created.token().getDescription()).isEqualTo("deployment automation");
         assertThat(created.token().getScopeMode()).isEqualTo(PersonalAccessTokenScopeMode.FIXED);
         assertThat(created.token().getPermissions()).extracting(permission -> permission.code())
@@ -207,16 +201,29 @@ class PersonalAccessTokenApplicationServiceTest {
             .id(11L)
             .userId(7L)
             .tokenUid("uid")
-            .secretCiphertext("ciphertext")
-            .secretKeyId("key-v1")
+            .secretValue("idm_pat_uid_secret")
             .expiresAt(now().plusDays(1))
             .build();
         when(tokenRepository.findOwnedById(11L, 7L)).thenReturn(Optional.of(existing));
-        when(encryptionService.decrypt("ciphertext", "key-v1", 7L, "uid"))
-            .thenReturn("idm_pat_uid_secret");
 
         assertThat(service.reveal(session(), 11L, "127.0.0.1"))
             .isEqualTo("idm_pat_uid_secret");
+    }
+
+    @Test
+    void rejectsRevealWhenAnExistingTokenHasNoStoredSecret() {
+        PersonalAccessToken existing = PersonalAccessToken.builder()
+            .id(11L)
+            .userId(7L)
+            .tokenUid("uid")
+            .expiresAt(now().plusDays(1))
+            .build();
+        when(tokenRepository.findOwnedById(11L, 7L)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.reveal(session(), 11L, "127.0.0.1"))
+            .isInstanceOf(BizException.class)
+            .extracting(exception -> ((BizException) exception).getCode())
+            .isEqualTo("PAT_SECRET_UNRECOVERABLE");
     }
 
     @Test
