@@ -7,6 +7,7 @@ import {
   Close,
   Key,
   Search,
+  Setting,
 } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -27,6 +28,8 @@ const loading = ref(false)
 const submitting = ref(false)
 const groupKeyword = ref('')
 const expandedGroups = ref<string[]>([])
+const permissionDialogVisible = ref(false)
+const permissionDraftIds = ref<number[]>([])
 const customExpiry = ref<Date | null>(null)
 const groups = ref<TokenPermissionGroup[]>([])
 
@@ -54,6 +57,7 @@ const riskMeta: Record<TokenPermissionRisk, { title: string; description: string
 
 const isFollowAccount = computed(() => form.scopeMode === 'FOLLOW_ACCOUNT')
 const selectedCount = computed(() => form.permissionIds.length)
+const draftSelectedCount = computed(() => permissionDraftIds.value.length)
 
 const filteredGroups = computed(() => {
   const keyword = groupKeyword.value.trim().toLowerCase()
@@ -96,41 +100,34 @@ async function loadGroups() {
 }
 
 function groupChecked(group: TokenPermissionGroup) {
-  return !isFollowAccount.value
-    && group.permissions.length > 0
-    && group.permissions.every((permission) => form.permissionIds.includes(permission.id))
+  return group.permissions.length > 0
+    && group.permissions.every((permission) => permissionDraftIds.value.includes(permission.id))
 }
 
 function groupIndeterminate(group: TokenPermissionGroup) {
-  if (isFollowAccount.value || group.permissions.length === 0) {
+  if (group.permissions.length === 0) {
     return false
   }
-  const selected = group.permissions.filter((permission) => form.permissionIds.includes(permission.id)).length
+  const selected = group.permissions.filter((permission) => permissionDraftIds.value.includes(permission.id)).length
   return selected > 0 && selected < group.permissions.length
 }
 
 function permissionChecked(permissionId: number) {
-  return !isFollowAccount.value && form.permissionIds.includes(permissionId)
+  return permissionDraftIds.value.includes(permissionId)
 }
 
 function togglePermission(permissionId: number, checked: boolean | string | number) {
-  if (isFollowAccount.value) {
-    return
-  }
-  const selected = new Set(form.permissionIds)
+  const selected = new Set(permissionDraftIds.value)
   if (checked) {
     selected.add(permissionId)
   } else {
     selected.delete(permissionId)
   }
-  form.permissionIds = [...selected].sort((left, right) => left - right)
+  permissionDraftIds.value = [...selected].sort((left, right) => left - right)
 }
 
 function toggleGroup(group: TokenPermissionGroup, checked: boolean | string | number) {
-  if (isFollowAccount.value) {
-    return
-  }
-  const selected = new Set(form.permissionIds)
+  const selected = new Set(permissionDraftIds.value)
   group.permissions.forEach((permission) => {
     if (checked) {
       selected.add(permission.id)
@@ -138,7 +135,7 @@ function toggleGroup(group: TokenPermissionGroup, checked: boolean | string | nu
       selected.delete(permission.id)
     }
   })
-  form.permissionIds = [...selected].sort((left, right) => left - right)
+  permissionDraftIds.value = [...selected].sort((left, right) => left - right)
 }
 
 function riskPermissionIds(risk: TokenPermissionRisk) {
@@ -149,18 +146,14 @@ function riskPermissionIds(risk: TokenPermissionRisk) {
 
 function riskAllSelected(risk: TokenPermissionRisk) {
   const permissionIds = riskPermissionIds(risk)
-  return !isFollowAccount.value
-    && permissionIds.length > 0
-    && permissionIds.every((permissionId) => form.permissionIds.includes(permissionId))
+  return permissionIds.length > 0
+    && permissionIds.every((permissionId) => permissionDraftIds.value.includes(permissionId))
 }
 
 function toggleRisk(risk: TokenPermissionRisk) {
-  if (isFollowAccount.value) {
-    return
-  }
   const permissionIds = riskPermissionIds(risk)
   const shouldSelect = !riskAllSelected(risk)
-  const selected = new Set(form.permissionIds)
+  const selected = new Set(permissionDraftIds.value)
   permissionIds.forEach((permissionId) => {
     if (shouldSelect) {
       selected.add(permissionId)
@@ -168,14 +161,39 @@ function toggleRisk(risk: TokenPermissionRisk) {
       selected.delete(permissionId)
     }
   })
-  form.permissionIds = [...selected].sort((left, right) => left - right)
+  permissionDraftIds.value = [...selected].sort((left, right) => left - right)
 }
 
 function setScopeMode(value: boolean | string | number) {
   form.scopeMode = value ? 'FOLLOW_ACCOUNT' : 'FIXED'
   if (form.scopeMode === 'FOLLOW_ACCOUNT') {
     form.permissionIds = []
+    permissionDraftIds.value = []
+    permissionDialogVisible.value = false
   }
+}
+
+function openPermissionDialog() {
+  if (isFollowAccount.value) {
+    return
+  }
+  permissionDraftIds.value = [...form.permissionIds]
+  groupKeyword.value = ''
+  expandedGroups.value = []
+  permissionDialogVisible.value = true
+}
+
+function closePermissionDialog() {
+  permissionDialogVisible.value = false
+}
+
+function confirmPermissionDialog() {
+  if (permissionDraftIds.value.length === 0) {
+    ElMessage.warning('请至少选择一项 API 权限')
+    return
+  }
+  form.permissionIds = [...permissionDraftIds.value]
+  permissionDialogVisible.value = false
 }
 
 function resolveExpiresAt() {
@@ -197,6 +215,7 @@ async function handleCreate() {
   }
   if (!isFollowAccount.value && form.permissionIds.length === 0) {
     ElMessage.warning('请至少选择一项 API 权限')
+    openPermissionDialog()
     return
   }
   const expiresAt = resolveExpiresAt()
@@ -307,14 +326,60 @@ function goBack() {
             <span class="section-heading__index">03</span>
             <div>
               <h2>权限范围</h2>
-              <p>可按权限组批量授权，也可展开分组后精确调整其中的 API 权限。</p>
+              <p>配置密钥可调用的 API，最终权限不会超过当前账号已有权限。</p>
             </div>
           </div>
-          <div v-loading="loading" class="permission-scope">
-            <div class="permission-scope__toolbar">
-              <el-input v-model="groupKeyword" :prefix-icon="Search" clearable placeholder="搜索权限组、名称或编码" />
-              <span>{{ isFollowAccount ? '自动跟随账号权限' : `已选择 ${selectedCount} 项 API 权限` }}</span>
+          <div :class="['permission-summary', { 'permission-summary--follow': isFollowAccount }]">
+            <span class="permission-summary__icon"><el-icon><Key /></el-icon></span>
+            <div class="permission-summary__content">
+              <span>当前权限范围</span>
+              <strong>{{ isFollowAccount ? '自动跟随账号权限' : `已配置 ${selectedCount} 项 API 权限` }}</strong>
+              <p>
+                {{ isFollowAccount
+                  ? '账号权限新增或回收时，此密钥权限同步变化。'
+                  : selectedCount > 0
+                    ? '可重新配置权限组或精确调整单项 API 权限。'
+                    : '尚未配置权限，创建密钥前至少选择一项 API 权限。' }}
+              </p>
             </div>
+            <el-tag v-if="isFollowAccount" type="success" effect="plain">自动跟随</el-tag>
+            <el-button
+              v-else
+              type="primary"
+              plain
+              :icon="Setting"
+              :loading="loading"
+              @click="openPermissionDialog"
+            >
+              配置权限
+            </el-button>
+          </div>
+
+          <div class="form-actions">
+            <el-button @click="goBack">取消</el-button>
+            <el-button type="primary" :loading="submitting" :icon="Key" @click="handleCreate">
+              创建访问密钥
+            </el-button>
+          </div>
+        </el-form>
+      </section>
+    </div>
+
+    <el-dialog
+      v-model="permissionDialogVisible"
+      class="permission-config-dialog"
+      title="配置权限范围"
+      width="1040px"
+      append-to-body
+      :close-on-click-modal="false"
+    >
+      <div v-loading="loading" class="permission-dialog__content">
+        <div class="permission-scope__toolbar">
+          <el-input v-model="groupKeyword" :prefix-icon="Search" clearable placeholder="搜索权限组、名称或编码" />
+          <span>已选择 {{ draftSelectedCount }} 项 API 权限</span>
+        </div>
+        <div class="permission-dialog__scroll">
+            <div class="permission-dialog__hint">点击权限组标题可展开或收起，复选框用于整组选择。</div>
             <div v-for="risk in (['LOW', 'HIGH'] as TokenPermissionRisk[])" :key="risk" class="risk-section">
               <header :class="['risk-section__header', `risk-section__header--${risk.toLowerCase()}`]">
                 <div>
@@ -325,7 +390,7 @@ function goBack() {
                   <el-button
                     size="small"
                     :icon="riskAllSelected(risk) ? Close : Check"
-                    :disabled="isFollowAccount || riskPermissionIds(risk).length === 0"
+                    :disabled="riskPermissionIds(risk).length === 0"
                     @click="toggleRisk(risk)"
                   >
                     {{ riskAllSelected(risk) ? '取消全选' : '全选' }}
@@ -340,14 +405,13 @@ function goBack() {
                   v-for="group in groupsByRisk[risk]"
                   :key="group.id"
                   :name="group.id"
-                  :disabled="isFollowAccount"
                 >
                   <template #title>
-                    <div class="group-title" @click.stop>
+                    <div class="group-title">
                       <el-checkbox
                         :model-value="groupChecked(group)"
                         :indeterminate="groupIndeterminate(group)"
-                        :disabled="isFollowAccount"
+                        @click.stop
                         @change="(value) => toggleGroup(group, value)"
                       />
                       <span>
@@ -360,7 +424,6 @@ function goBack() {
                     <div v-for="permission in group.permissions" :key="permission.id" class="permission-member">
                       <el-checkbox
                         :model-value="permissionChecked(permission.id)"
-                        :disabled="isFollowAccount"
                         :aria-label="`选择权限：${permission.permissionName}`"
                         @change="(value) => togglePermission(permission.id, value)"
                       />
@@ -379,17 +442,17 @@ function goBack() {
               />
             </div>
           </div>
-
-          <div class="form-actions">
-            <el-button @click="goBack">取消</el-button>
-            <el-button type="primary" :loading="submitting" :icon="Key" @click="handleCreate">
-              创建访问密钥
-            </el-button>
+        </div>
+      <template #footer>
+        <div class="permission-dialog__footer">
+          <span>已选择 {{ draftSelectedCount }} 项 API 权限</span>
+          <div>
+            <el-button @click="closePermissionDialog">取消</el-button>
+            <el-button type="primary" @click="confirmPermissionDialog">确认配置</el-button>
           </div>
-        </el-form>
-      </section>
-
-    </div>
+        </div>
+      </template>
+    </el-dialog>
   </PageContainer>
 </template>
 
@@ -490,8 +553,61 @@ function goBack() {
   line-height: 1.5;
 }
 
-.permission-scope {
+.permission-summary {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
   margin-top: 18px;
+  border: 1px solid #dbe5e2;
+  border-radius: 8px;
+  padding: 16px 18px;
+  background: #f8fbfa;
+}
+
+.permission-summary--follow {
+  border-color: #c7dfd9;
+  background: #f2f8f6;
+}
+
+.permission-summary__icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #c9ddd8;
+  border-radius: 8px;
+  color: #15736b;
+  background: #edf6f4;
+  font-size: 19px;
+}
+
+.permission-summary__content {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.permission-summary__content > span {
+  color: #7b8985;
+  font-size: 11px;
+}
+
+.permission-summary__content strong {
+  color: #253733;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.permission-summary__content p {
+  margin: 0;
+  color: #71807c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.permission-dialog__content {
+  overflow: hidden;
   border: 1px solid #dbe5e2;
   border-radius: 8px;
   background: #fbfcfc;
@@ -513,6 +629,35 @@ function goBack() {
   margin-left: auto;
   color: #667773;
   font-size: 12px;
+}
+
+.permission-dialog__scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.permission-dialog__hint {
+  padding: 10px 16px 0;
+  color: #7b8985;
+  font-size: 12px;
+}
+
+.permission-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.permission-dialog__footer > span {
+  color: #687773;
+  font-size: 12px;
+}
+
+.permission-dialog__footer > div {
+  display: flex;
+  gap: 10px;
 }
 
 .risk-section {
@@ -571,6 +716,7 @@ function goBack() {
   min-width: 0;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
   line-height: 1.4;
 }
 

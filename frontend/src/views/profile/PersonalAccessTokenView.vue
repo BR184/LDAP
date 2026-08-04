@@ -239,12 +239,10 @@ function permissionSummary(token: PersonalAccessTokenItem) {
       </header>
 
       <el-table v-loading="loading" :data="tokens" class="token-table" empty-text="暂无访问密钥">
-        <el-table-column label="名称与前缀" min-width="230">
+        <el-table-column label="名称" min-width="230">
           <template #default="{ row }: { row: PersonalAccessTokenItem }">
             <div class="token-name-cell">
               <strong>{{ row.name }}</strong>
-              <span v-if="row.description">{{ row.description }}</span>
-              <code>{{ row.tokenPrefix }}</code>
             </div>
           </template>
         </el-table-column>
@@ -385,8 +383,7 @@ function permissionSummary(token: PersonalAccessTokenItem) {
 .token-table :deep(td.el-table__cell) { padding: 14px 0; }
 .token-name-cell, .scope-cell, .last-used-cell { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
 .token-name-cell strong { overflow: hidden; color: #1f2d2a; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-.token-name-cell span, .token-name-cell code, .scope-cell small, .last-used-cell small { overflow: hidden; color: #7b8985; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.token-name-cell code { font-family: Consolas, monospace; }
+.scope-cell small, .last-used-cell small { overflow: hidden; color: #7b8985; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .scope-cell > span { color: #315b56; font-size: 13px; font-weight: 600; }
 .token-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
 .token-surface__footer { display: flex; justify-content: flex-end; padding: 14px 20px; border-top: 1px solid rgba(109, 130, 126, 0.12); }

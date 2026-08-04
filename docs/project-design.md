@@ -3749,6 +3749,7 @@ LDAP 控制面页直接对接以下接口：
   - `POST /api/v1/personal-access-tokens/{id}/revocations`
 - `DELETE /api/v1/personal-access-tokens/{id}` 语义为事务内物理删除；撤销使用独立 endpoint。
 - 前端创建成功后直接返回密钥清单，不保留创建完成页；所有者通过清单的查看操作获取和复制完整密钥。
+- 创建页只展示权限摘要，固定权限范围在带确认/取消语义的弹窗中配置；密钥清单不展示内部密钥前缀。
 - 现有登录、`/api/v1/auth/me`、用户、LDAP 路径和响应字段保持不变。
 
 #### 16.37.4 运维边界
