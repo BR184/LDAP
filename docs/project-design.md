@@ -3755,7 +3755,7 @@ LDAP 控制面页直接对接以下接口：
 - 每账号有效令牌上限由 `APP_PAT_MAX_ACTIVE_PER_USER` 配置，默认 `20`。
 - 最近使用信息由 `APP_PAT_LAST_USED_WRITE_INTERVAL_SECONDS` 节流，默认 `300` 秒。
 - 创建不再要求当前密码；创建、查看、轮换、撤销、删除和失败认证均按操作写审计，审计内容禁止包含完整密钥。
-- JDBC 使用 `characterEncoding=utf8mb4` 与 `connectionCollation=utf8mb4_general_ci`，Flyway 使用 UTF-8；生产启动校验拒绝非 utf8mb4 MySQL 会话。
+- JDBC 使用 Java 字符集 `characterEncoding=UTF-8` 与 MySQL 会话排序规则 `connectionCollation=utf8mb4_general_ci`，Flyway 使用 UTF-8；生产启动校验拒绝非 utf8mb4 MySQL 会话。
 - 使用与基准方法见 `docs/runbooks/personal-access-token-usage.md`。
 
 

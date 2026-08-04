@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: ${APP_DB_URL:jdbc:mysql://127.0.0.1:3307/corp_idm?useUnicode=true&characterEncoding=utf8mb4&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    url: ${APP_DB_URL:jdbc:mysql://127.0.0.1:3307/corp_idm?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${APP_DB_USERNAME:corp_idm}
     password: ${APP_DB_PASSWORD:corp_idm}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -12,6 +12,7 @@ spring:
       minimum-idle: ${APP_DB_MIN_IDLE:5}
       connection-timeout: ${APP_DB_CONNECTION_TIMEOUT_MS:30000}
       validation-timeout: ${APP_DB_VALIDATION_TIMEOUT_MS:5000}
+      connection-init-sql: SET NAMES utf8mb4 COLLATE utf8mb4_general_ci
   h2:
     console:
       enabled: false

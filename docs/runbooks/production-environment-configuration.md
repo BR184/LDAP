@@ -195,7 +195,7 @@ java -jar corp-idm-platform.jar
 如果当前部署方式尚未接入统一 Secret 平台，可退而求其次使用受控环境文件，例如：
 
 ```powershell
-APP_DB_URL=jdbc:mysql://10.0.0.10:3306/corp_idm?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+APP_DB_URL=jdbc:mysql://10.0.0.10:3306/corp_idm?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai&useSSL=false
 APP_DB_USERNAME=corp_idm
 APP_DB_PASSWORD=****** 
 APP_LDAP_URL=ldap://10.0.0.20:389
@@ -227,7 +227,7 @@ APP_JWT_SECRET=******
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE='prod'
-$env:APP_DB_URL='jdbc:mysql://10.0.0.10:3306/corp_idm?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false'
+$env:APP_DB_URL='jdbc:mysql://10.0.0.10:3306/corp_idm?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai&useSSL=false'
 $env:APP_DB_USERNAME='corp_idm'
 $env:APP_DB_PASSWORD='***'
 $env:APP_LDAP_URL='ldap://10.0.0.20:389'

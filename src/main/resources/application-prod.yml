@@ -14,6 +14,7 @@ spring:
       minimum-idle: ${APP_DB_MIN_IDLE:8}
       connection-timeout: ${APP_DB_CONNECTION_TIMEOUT_MS:30000}
       validation-timeout: ${APP_DB_VALIDATION_TIMEOUT_MS:5000}
+      connection-init-sql: SET NAMES utf8mb4 COLLATE utf8mb4_general_ci
   h2:
     console:
       enabled: false
