@@ -3,11 +3,13 @@ package com.company.idm.infrastructure.persistence.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.domain.token.PersonalAccessTokenPermission;
+import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
 import com.company.idm.infrastructure.persistence.dataobject.PersonalAccessTokenDO;
 import com.company.idm.infrastructure.persistence.dataobject.PersonalAccessTokenPermissionDO;
 import com.company.idm.infrastructure.persistence.mapper.PersonalAccessTokenMapper;
@@ -54,6 +56,53 @@ class MybatisPersonalAccessTokenRepositoryTest {
             .containsExactly(2L, 1L);
         assertThat(created.getPermissions()).extracting(PersonalAccessTokenPermission::code)
             .containsExactly("SECOND", "FIRST");
+        assertThat(created.getDescription()).isEqualTo("deployment automation");
+        assertThat(created.getScopeMode()).isEqualTo(PersonalAccessTokenScopeMode.FIXED);
+        assertThat(created.getSecretCiphertext()).isEqualTo("ciphertext");
+        assertThat(created.getSecretKeyId()).isEqualTo("key-2026-08");
+    }
+
+    @Test
+    void rotatesSecretMaterialWithoutChangingOwnership() {
+        PersonalAccessToken rotated = token(List.of()).toBuilder()
+            .id(10L)
+            .tokenUid("new-token-uid")
+            .secretHash("new-hash")
+            .secretCiphertext("new-ciphertext")
+            .secretKeyId("key-2026-09")
+            .gmtModified(LocalDateTime.of(2026, 8, 4, 10, 0))
+            .build();
+        when(tokenMapper.update(any(PersonalAccessTokenDO.class), any())).thenReturn(1);
+
+        assertThat(repository.rotateOwned(rotated)).isTrue();
+
+        verify(tokenMapper).update(any(PersonalAccessTokenDO.class), any());
+    }
+
+    @Test
+    void rejectsRotationWithoutModificationTimestamp() {
+        PersonalAccessToken rotated = token(List.of()).toBuilder()
+            .id(10L)
+            .tokenUid("new-token-uid")
+            .secretHash("new-hash")
+            .gmtModified(null)
+            .build();
+
+        assertThat(repository.rotateOwned(rotated)).isFalse();
+        verify(tokenMapper, times(0)).update(any(PersonalAccessTokenDO.class), any());
+    }
+
+    @Test
+    void physicallyDeletesOwnedTokenAndPermissionRelations() {
+        PersonalAccessTokenDO owned = persistedToken();
+        when(tokenMapper.selectOne(any())).thenReturn(owned);
+        when(permissionMapper.delete(any())).thenReturn(2);
+        when(tokenMapper.delete(any())).thenReturn(1);
+
+        assertThat(repository.deleteOwned(10L, 7L)).isTrue();
+
+        verify(permissionMapper, times(1)).delete(any());
+        verify(tokenMapper, times(1)).delete(any());
     }
 
     @Test
@@ -73,11 +122,16 @@ class MybatisPersonalAccessTokenRepositoryTest {
             .tokenUid("token-uid")
             .userId(7L)
             .name("automation")
+            .description("deployment automation")
             .secretHash("hash")
             .hashVersion(1)
             .tokenPrefix("idm_pat_token-uid_...")
+            .secretCiphertext("ciphertext")
+            .secretKeyId("key-2026-08")
+            .scopeMode(PersonalAccessTokenScopeMode.FIXED)
             .creator("employee")
             .modifier("employee")
+            .gmtModified(LocalDateTime.of(2026, 8, 4, 10, 0))
             .permissions(permissions)
             .build();
     }
@@ -92,9 +146,13 @@ class MybatisPersonalAccessTokenRepositoryTest {
         dataObject.setTokenUid("token-uid");
         dataObject.setUserId(7L);
         dataObject.setName("automation");
+        dataObject.setDescription("deployment automation");
         dataObject.setSecretHash("hash");
         dataObject.setHashVersion(1);
         dataObject.setTokenPrefix("idm_pat_token-uid_...");
+        dataObject.setSecretCiphertext("ciphertext");
+        dataObject.setSecretKeyId("key-2026-08");
+        dataObject.setScopeMode(PersonalAccessTokenScopeMode.FIXED.name());
         dataObject.setCreator("employee");
         dataObject.setModifier("employee");
         return dataObject;

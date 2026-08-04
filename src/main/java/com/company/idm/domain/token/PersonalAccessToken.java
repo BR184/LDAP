@@ -16,7 +16,11 @@ public class PersonalAccessToken {
     private final String tokenUid;
     private final Long userId;
     private final String name;
+    private final String description;
+    private final PersonalAccessTokenScopeMode scopeMode;
     private final String secretHash;
+    private final String secretCiphertext;
+    private final String secretKeyId;
     private final Integer hashVersion;
     private final String tokenPrefix;
     private final LocalDateTime expiresAt;
@@ -35,5 +39,10 @@ public class PersonalAccessToken {
 
     public boolean isActiveAt(LocalDateTime now) {
         return revokedAt == null && (expiresAt == null || expiresAt.isAfter(now));
+    }
+
+    public boolean isSecretRecoverable() {
+        return secretCiphertext != null && !secretCiphertext.isBlank()
+            && secretKeyId != null && !secretKeyId.isBlank();
     }
 }

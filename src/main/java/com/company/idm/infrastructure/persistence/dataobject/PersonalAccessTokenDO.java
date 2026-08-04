@@ -17,7 +17,11 @@ public class PersonalAccessTokenDO {
     private String tokenUid;
     private Long userId;
     private String name;
+    private String description;
+    private String scopeMode;
     private String secretHash;
+    private String secretCiphertext;
+    private String secretKeyId;
     private Integer hashVersion;
     private String tokenPrefix;
     private LocalDateTime expiresAt;

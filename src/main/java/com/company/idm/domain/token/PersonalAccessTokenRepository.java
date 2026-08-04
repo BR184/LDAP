@@ -20,6 +20,10 @@ public interface PersonalAccessTokenRepository {
 
     boolean revokeOwned(Long tokenId, Long userId, LocalDateTime revokedAt, String modifier);
 
+    boolean rotateOwned(PersonalAccessToken token);
+
+    boolean deleteOwned(Long tokenId, Long userId);
+
     boolean updateLastUsedIfBefore(
         Long tokenId,
         LocalDateTime usedAt,
