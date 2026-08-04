@@ -41,7 +41,7 @@ if ($existingContainerId) {
 }
 
 $datasourceUrl = "jdbc:mysql://$($DbHost):3306/$DbName" `
-    + "?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai" `
+    + "?useUnicode=true&characterEncoding=utf8mb4&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai" `
     + "&allowPublicKeyRetrieval=true&useSSL=false"
 $ldapUrl = "ldap://$($LdapHost):$LdapPort"
 

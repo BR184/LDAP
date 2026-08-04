@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: ${APP_DB_URL:jdbc:mysql://127.0.0.1:3307/corp_idm?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    url: ${APP_DB_URL:jdbc:mysql://127.0.0.1:3307/corp_idm?useUnicode=true&characterEncoding=utf8mb4&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${APP_DB_USERNAME:corp_idm}
     password: ${APP_DB_PASSWORD:corp_idm}
     driver-class-name: com.mysql.cj.jdbc.Driver

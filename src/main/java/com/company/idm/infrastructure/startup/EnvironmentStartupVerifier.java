@@ -4,6 +4,8 @@ import com.company.idm.infrastructure.config.AppLdapProperties;
 import com.company.idm.infrastructure.config.StartupCheckProperties;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.List;
 import javax.sql.DataSource;
 import lombok.RequiredArgsConstructor;
@@ -43,8 +45,31 @@ public class EnvironmentStartupVerifier implements ApplicationRunner {
             if (!connection.isValid(startupCheckProperties.getDbValidationTimeoutSeconds())) {
                 throw new IllegalStateException("Database startup verification failed: connection is invalid.");
             }
+            verifyMysqlSessionEncoding(connection);
         } catch (SQLException exception) {
             throw new IllegalStateException("Database startup verification failed.", exception);
+        }
+    }
+
+    private void verifyMysqlSessionEncoding(Connection connection) throws SQLException {
+        if (!"MySQL".equalsIgnoreCase(connection.getMetaData().getDatabaseProductName())) {
+            return;
+        }
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(
+                 "SELECT @@character_set_client, @@character_set_connection, "
+                     + "@@character_set_results, @@collation_connection"
+             )) {
+            if (!resultSet.next()
+                || !"utf8mb4".equalsIgnoreCase(resultSet.getString(1))
+                || !"utf8mb4".equalsIgnoreCase(resultSet.getString(2))
+                || !"utf8mb4".equalsIgnoreCase(resultSet.getString(3))
+                || resultSet.getString(4) == null
+                || !resultSet.getString(4).toLowerCase(java.util.Locale.ROOT).startsWith("utf8mb4_")) {
+                throw new IllegalStateException(
+                    "Database startup verification failed: MySQL session character set must be utf8mb4."
+                );
+            }
         }
     }
 
