@@ -3,10 +3,12 @@ package com.company.idm.interfaces.auth;
 import com.company.idm.application.auth.AuthApplicationService;
 import com.company.idm.application.auth.LoginCommand;
 import com.company.idm.application.auth.LoginResult;
+import com.company.idm.application.rbac.EffectivePermissionService;
 import com.company.idm.application.user.ForgotPasswordCommand;
 import com.company.idm.application.user.PasswordResetApplicationService;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.domain.user.User;
+import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.util.ClientIpUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -20,7 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 鎻愪緵鐧诲綍涓庡綋鍓嶇敤鎴蜂俊鎭帴鍙ｃ€?
+ * 提供登录与当前用户信息接口。
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -29,6 +31,7 @@ public class AuthController {
 
     private final AuthApplicationService authApplicationService;
     private final PasswordResetApplicationService passwordResetApplicationService;
+    private final EffectivePermissionService effectivePermissionService;
 
     @PostMapping("/login")
     public ApiResponse<AuthLoginResponse> login(@Valid @RequestBody AuthLoginRequest request) {
@@ -71,6 +74,16 @@ public class AuthController {
             user.getDeptName(),
             user.getDepartmentPath(),
             user.getRoleCodes()
+        ));
+    }
+
+    @GetMapping("/capabilities")
+    @PreAuthorize("@credentialAccessService.isSession(authentication)")
+    public ApiResponse<CurrentCapabilitiesResponse> capabilities(
+        @AuthenticationPrincipal AuthenticatedUser principal
+    ) {
+        return ApiResponse.success(new CurrentCapabilitiesResponse(
+            effectivePermissionService.resolve(principal).stream().sorted().toList()
         ));
     }
 
