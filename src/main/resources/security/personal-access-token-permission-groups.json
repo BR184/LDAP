@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "id": "ACCOUNT_READ",
+      "name": "账号信息查询",
+      "risk": "LOW",
+      "sort": 10,
+      "permissionCodes": ["AUTH_ME", "USER_READ", "USER_READ_SELF_AND_SUBORDINATE_TREE", "USER_DETAIL"]
+    },
+    {
+      "id": "ORG_READ",
+      "name": "组织架构查询",
+      "risk": "LOW",
+      "sort": 20,
+      "permissionCodes": ["DEPT_TREE", "DEPT_DETAIL"]
+    },
+    {
+      "id": "ROLE_READ",
+      "name": "角色权限查询",
+      "risk": "LOW",
+      "sort": 30,
+      "permissionCodes": ["ROLE_READ", "ROLE_DETAIL", "ROLE_PERMISSION_READ_BINDINGS", "PERMISSION_TREE"]
+    },
+    {
+      "id": "MENU_READ",
+      "name": "菜单配置查询",
+      "risk": "LOW",
+      "sort": 40,
+      "permissionCodes": ["MENU_TREE", "MENU_DETAIL"]
+    },
+    {
+      "id": "IMPORT_READ",
+      "name": "导入计划查询",
+      "risk": "LOW",
+      "sort": 50,
+      "permissionCodes": ["IMPORT_PLAN_READ", "IMPORT_PLAN_DETAIL"]
+    },
+    {
+      "id": "SYNC_READ",
+      "name": "同步任务查询",
+      "risk": "LOW",
+      "sort": 60,
+      "permissionCodes": ["SYNC_BATCH_DETAIL", "SYNC_JOB_LIST", "SYNC_FEISHU_PREVIEW", "SYNC_RECONCILE_PREVIEW"]
+    },
+    {
+      "id": "INTEGRATION_READ",
+      "name": "LDAP 接入查询",
+      "risk": "LOW",
+      "sort": 70,
+      "permissionCodes": ["LDAP_FRAMEWORK_READ", "LDAP_TEMPLATE_READ"]
+    },
+    {
+      "id": "MAIL_READ",
+      "name": "邮件配置查询",
+      "risk": "LOW",
+      "sort": 80,
+      "permissionCodes": ["MAIL_CONFIG_READ"]
+    },
+    {
+      "id": "USER_ADMIN",
+      "name": "用户信息管理",
+      "risk": "HIGH",
+      "sort": 110,
+      "permissionCodes": ["USER_CREATE", "USER_UPDATE", "USER_DELETE", "USER_BATCH_DELETE", "USER_ACCESS_UPDATE", "USER_ROLE_ASSIGN", "USER_SYNC_LDAP", "USER_FEISHU_SYNC"]
+    },
+    {
+      "id": "PASSWORD_ADMIN",
+      "name": "密码管理",
+      "risk": "HIGH",
+      "sort": 120,
+      "permissionCodes": ["USER_PASSWORD_RESET_ALL", "USER_PASSWORD_RESET_DIRECT", "USER_PASSWORD_RESET_TREE"]
+    },
+    {
+      "id": "ORG_ADMIN",
+      "name": "组织架构管理",
+      "risk": "HIGH",
+      "sort": 130,
+      "permissionCodes": ["DEPT_CREATE", "DEPT_UPDATE", "DEPT_DELETE", "DEPT_FEISHU_SYNC", "DEPT_SYNC_LDAP"]
+    },
+    {
+      "id": "ROLE_ADMIN",
+      "name": "角色权限管理",
+      "risk": "HIGH",
+      "sort": 140,
+      "permissionCodes": ["ROLE_CREATE", "ROLE_UPDATE", "ROLE_DELETE", "ROLE_BATCH_DELETE", "ROLE_STATUS", "ROLE_PERMISSION_ASSIGN"]
+    },
+    {
+      "id": "MENU_ADMIN",
+      "name": "菜单配置管理",
+      "risk": "HIGH",
+      "sort": 150,
+      "permissionCodes": ["MENU_CREATE", "MENU_UPDATE", "MENU_DELETE"]
+    },
+    {
+      "id": "IMPORT_EXECUTE",
+      "name": "文件导入执行",
+      "risk": "HIGH",
+      "sort": 160,
+      "permissionCodes": ["IMPORT_PLAN_CREATE", "IMPORT_PLAN_CANCEL", "IMPORT_PLAN_CONFIRM", "IMPORT_PLAN_EXECUTE", "IMPORT_PLAN_ROLLBACK", "IMPORT_PLAN_RETRY_LDAP", "IMPORT_PLAN_CONFLICT_MERGE", "IMPORT_PLAN_CONFLICT_RESOLVE"]
+    },
+    {
+      "id": "LDAP_PRECHECK",
+      "name": "LDAP 预检执行",
+      "risk": "HIGH",
+      "sort": 170,
+      "permissionCodes": ["LDAP_PRECHECK_EXECUTE"]
+    },
+    {
+      "id": "MAIL_ADMIN",
+      "name": "邮件配置管理",
+      "risk": "HIGH",
+      "sort": 180,
+      "permissionCodes": ["MAIL_CONFIG_SAVE", "MAIL_CONFIG_TEST"]
+    },
+    {
+      "id": "SYNC_EXECUTE",
+      "name": "同步任务执行",
+      "risk": "HIGH",
+      "sort": 190,
+      "permissionCodes": ["SYNC_FEISHU_EXECUTE", "SYNC_JOB_RETRY", "SYNC_RECONCILE_EXECUTE"]
+    }
+  ]
+}
