@@ -134,7 +134,7 @@ public class ImportExecutionApplicationService {
             .map(User::getId)
             .filter(java.util.Objects::nonNull)
             .collect(java.util.stream.Collectors.toSet());
-        userRepository.syncRoleBindings(role.getId(), activeUserIds);
+        userRepository.syncRoleBindings(role.getId(), activeUserIds, "system:file-import");
     }
 
     private void executeResign(ChangeItem item) {

@@ -23,6 +23,12 @@ public interface UserRepository {
 
     List<User> findByConditions(String keyword, String deptCode, Boolean accessAllowed);
 
+    List<PublicUser> searchPublicUsers(String realNameKeyword, int limit);
+
+    List<PublicUser> findPublicUsersByRoleId(Long roleId);
+
+    List<Long> findRoleIdsByUserId(Long userId);
+
     User save(User user);
 
     void updateProfile(User user);
@@ -33,11 +39,15 @@ public interface UserRepository {
 
     void bumpTokenVersion(Long id, Integer tokenVersion);
 
-    void assignRoles(Long userId, List<Long> roleIds);
+    void assignRoles(Long userId, List<Long> roleIds, String operator);
 
-    void syncRoleBindings(Long roleId, Set<Long> expectedUserIds);
+    void syncRoleBindings(Long roleId, Set<Long> expectedUserIds, String operator);
 
-    void removeAllRoles(Long userId);
+    void removeAllRoles(Long userId, String operator);
+
+    void addRole(Long userId, Long roleId, String operator);
+
+    void removeRole(Long userId, Long roleId, String operator);
 
     Set<String> findRoleCodesByUserId(String userId);
 

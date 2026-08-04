@@ -8,3 +8,11 @@ export interface PermissionTreeNode {
   parentId: number
   children: PermissionTreeNode[]
 }
+
+export interface RolePermissionBundle {
+  id: string
+  name: string
+  sort: number
+  permissionIds: number[]
+  permissionCodes: string[]
+}

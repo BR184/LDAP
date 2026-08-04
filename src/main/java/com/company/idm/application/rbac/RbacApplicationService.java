@@ -11,6 +11,8 @@ import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
+import com.company.idm.domain.rbac.RoleScope;
+import com.company.idm.application.rolegroup.DelegatedPermissionPairPolicy;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import java.util.HashMap;
@@ -37,6 +39,7 @@ public class RbacApplicationService {
     private final PolicyRefreshService policyRefreshService;
     private final PermissionLevelRuleService permissionLevelRuleService;
     private final MenuVisibilityPermissionService menuVisibilityPermissionService;
+    private final DelegatedPermissionPairPolicy delegatedPermissionPairPolicy;
 
     public List<Role> listRoles() {
         return roleRepository.findAll();
@@ -109,6 +112,8 @@ public class RbacApplicationService {
             .builtIn(0)
             .remark(command.remark())
             .status(1)
+            .roleScope(RoleScope.SYSTEM)
+            .roleGroupId(null)
             .build());
         applyDefaultAccessGrants(role, true);
         auditLogRepository.save(AuditLog.builder()
@@ -135,6 +140,8 @@ public class RbacApplicationService {
             .builtIn(role.getBuiltIn())
             .status(role.getStatus())
             .remark(command.remark())
+            .roleScope(role.getRoleScope())
+            .roleGroupId(role.getRoleGroupId())
             .build());
         applyDefaultAccessGrants(updated, false);
         auditLogRepository.save(AuditLog.builder()
@@ -213,16 +220,34 @@ public class RbacApplicationService {
 
     @Transactional
     public void grantPermissions(GrantRolePermissionsCommand command) {
-        roleRepository.findById(command.roleId())
+        Role role = roleRepository.findById(command.roleId())
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
-        roleRepository.assignPermissions(command.roleId(), command.permissionIds());
+        List<Permission> allPermissions = permissionRepository.findAll();
+        Map<Long, Permission> permissionsById = allPermissions.stream()
+            .collect(java.util.stream.Collectors.toMap(Permission::getId, permission -> permission));
+        List<Long> requestedIds = command.permissionIds() == null
+            ? List.of()
+            : command.permissionIds().stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (requestedIds.stream().anyMatch(permissionId -> !permissionsById.containsKey(permissionId))) {
+            throw new BizException("PERMISSION_NOT_FOUND", "部分权限不存在或已停用");
+        }
+        if (role.getRoleScope() == RoleScope.GROUP && !requestedIds.isEmpty()) {
+            throw new BizException("GROUP_ROLE_PERMISSION_FORBIDDEN", "组角色不能绑定平台权限");
+        }
+        Set<String> requestedCodes = requestedIds.stream()
+            .map(permissionsById::get)
+            .map(Permission::getPermissionCode)
+            .collect(java.util.stream.Collectors.toSet());
+        delegatedPermissionPairPolicy.validate(requestedCodes);
+        List<Long> synchronizedIds = synchronizeDelegatedMenuPermission(requestedIds, requestedCodes, allPermissions);
+        roleRepository.assignPermissions(command.roleId(), synchronizedIds);
         policyRefreshService.refresh();
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
             .operationType("ROLE_PERMISSION_GRANT")
             .bizType("ROLE")
             .bizId(String.valueOf(command.roleId()))
-            .afterJson(String.valueOf(command.permissionIds()))
+            .afterJson(String.valueOf(synchronizedIds))
             .result("SUCCESS")
             .build());
     }
@@ -237,7 +262,7 @@ public class RbacApplicationService {
         }
         ensureRolesEnabled(roles);
         permissionLevelRuleService.checkCanAssignRoles(command.operator(), user, roles);
-        userRepository.assignRoles(command.userId(), command.roleIds());
+        userRepository.assignRoles(command.userId(), command.roleIds(), command.operator());
         policyRefreshService.refresh();
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
@@ -446,5 +471,26 @@ public class RbacApplicationService {
                 roleRepository.assignPermissions(role.getId(), List.of(permission.getId()));
                 policyRefreshService.refresh();
             });
+    }
+
+    private List<Long> synchronizeDelegatedMenuPermission(
+        List<Long> permissionIds,
+        Set<String> permissionCodes,
+        List<Permission> allPermissions
+    ) {
+        Permission menuPermission = allPermissions.stream()
+            .filter(permission -> DelegatedPermissionPairPolicy.ROLE_GROUP_MENU_VIEW.equals(permission.getPermissionCode()))
+            .findFirst()
+            .orElseThrow(() -> new BizException(
+                "ROLE_GROUP_MENU_PERMISSION_MISSING",
+                "角色组管理菜单权限未初始化"
+            ));
+        LinkedHashSet<Long> synchronizedIds = new LinkedHashSet<>(permissionIds);
+        if (delegatedPermissionPairPolicy.isDelegated(permissionCodes)) {
+            synchronizedIds.add(menuPermission.getId());
+        } else {
+            synchronizedIds.remove(menuPermission.getId());
+        }
+        return List.copyOf(synchronizedIds);
     }
 }

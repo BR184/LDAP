@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Download, Hide, View, Edit, User, StarFilled, Postcard, Avatar, Message, OfficeBuilding } from '@element-plus/icons-vue'
+import { Download, Hide, View, Edit, User, StarFilled, Postcard, Avatar, Message, OfficeBuilding, Collection, Lock } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { useMutation } from '@tanstack/vue-query'
+import { useMutation, useQuery } from '@tanstack/vue-query'
 import { changeMyPassword, verifyMyPassword } from '@/api/modules/user'
+import { fetchPersonalRoleContext } from '@/api/modules/role-group'
 import { useAuthStore } from '@/stores/auth'
 
 declare global {
@@ -25,6 +26,7 @@ declare global {
 }
 
 const authStore = useAuthStore()
+const roleContextQuery = useQuery({ queryKey: ['profile', 'role-context'], queryFn: fetchPersonalRoleContext })
 
 const passwordVisible = ref(false)
 const passwordConfirmVisible = ref(false)
@@ -249,6 +251,38 @@ async function downloadCredentialFile() {
           </div>
         </div>
       </el-card>
+
+      <section class="profile-access">
+        <div class="access-panel">
+          <div class="access-panel__header">
+            <div class="access-panel__icon"><el-icon><Lock /></el-icon></div>
+            <div><h3>我的角色</h3><span>{{ roleContextQuery.data.value?.roles.length || 0 }}</span></div>
+          </div>
+          <el-skeleton v-if="roleContextQuery.isLoading.value" :rows="3" animated />
+          <el-empty v-else-if="!roleContextQuery.data.value?.roles.length" description="暂无角色" :image-size="64" />
+          <div v-else class="access-list">
+            <div v-for="role in roleContextQuery.data.value.roles" :key="role.id" class="access-list__item">
+              <div><strong>{{ role.roleName }}</strong><span>{{ role.roleCode }}</span></div>
+              <el-tag effect="plain">{{ role.roleGroupName || (role.roleScope === 'GLOBAL' ? '全局' : '系统级') }}</el-tag>
+            </div>
+          </div>
+        </div>
+
+        <div class="access-panel">
+          <div class="access-panel__header">
+            <div class="access-panel__icon is-group"><el-icon><Collection /></el-icon></div>
+            <div><h3>参与的角色组</h3><span>{{ roleContextQuery.data.value?.roleGroups.length || 0 }}</span></div>
+          </div>
+          <el-skeleton v-if="roleContextQuery.isLoading.value" :rows="3" animated />
+          <el-empty v-else-if="!roleContextQuery.data.value?.roleGroups.length" description="暂无参与的角色组" :image-size="64" />
+          <div v-else class="access-list">
+            <div v-for="group in roleContextQuery.data.value.roleGroups" :key="group.id" class="access-list__item">
+              <div><strong>{{ group.groupName }}</strong></div>
+              <el-tag effect="plain">{{ group.memberRole === 'OWNER' ? '所有者' : '协管员' }}</el-tag>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
 
     <!-- 修改密码对话框 -->
@@ -332,6 +366,82 @@ async function downloadCredentialFile() {
   :deep(.el-card__body) {
     padding: var(--idm-padding-lg);
   }
+}
+
+.profile-access {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.access-panel {
+  padding: 22px;
+  border: 1px solid var(--idm-border-color-lighter);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 14px 34px rgba(31, 48, 38, 0.07);
+}
+
+.access-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.access-panel__header > div:last-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.access-panel__header h3 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.access-panel__header span,
+.access-list__item span {
+  color: var(--idm-text-secondary);
+  font-size: 12px;
+}
+
+.access-panel__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  background: #e8efe9;
+  color: #315b3e;
+}
+
+.access-panel__icon.is-group {
+  background: #fff0df;
+  color: #a85c17;
+}
+
+.access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.access-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--idm-border-color-lighter);
+}
+
+.access-list__item > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .profile-header {

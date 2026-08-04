@@ -1,6 +1,7 @@
 package com.company.idm.infrastructure.security;
 
 import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import java.util.Set;
 
 /**
@@ -14,7 +15,9 @@ public record AuthenticatedUser(
     CredentialType credentialType,
     Long credentialId,
     Set<String> selectedPermissionCodes,
-    PersonalAccessTokenScopeMode personalAccessTokenScopeMode
+    PersonalAccessTokenScopeMode personalAccessTokenScopeMode,
+    PersonalAccessTokenSubjectType tokenSubjectType,
+    Long tokenSubjectId
 ) {
 }
 

@@ -12,6 +12,7 @@ import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.user.UserRepository;
+import com.company.idm.application.rolegroup.DelegatedPermissionPairPolicy;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,8 @@ class RbacApplicationServiceMenuVisibilityTest {
             mock(AuditLogRepository.class),
             mock(PolicyRefreshService.class),
             mock(PermissionLevelRuleService.class),
-            mock(MenuVisibilityPermissionService.class)
+            mock(MenuVisibilityPermissionService.class),
+            new DelegatedPermissionPairPolicy()
         );
 
         Menu root = menu(1L, 0L, "UINIT0");
@@ -65,7 +67,8 @@ class RbacApplicationServiceMenuVisibilityTest {
             mock(AuditLogRepository.class),
             mock(PolicyRefreshService.class),
             mock(PermissionLevelRuleService.class),
-            mock(MenuVisibilityPermissionService.class)
+            mock(MenuVisibilityPermissionService.class),
+            new DelegatedPermissionPairPolicy()
         );
 
         Set<String> permissionCodes = Set.of("USER_READ");

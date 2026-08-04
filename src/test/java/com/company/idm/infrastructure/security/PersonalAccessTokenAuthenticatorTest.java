@@ -12,6 +12,7 @@ import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.domain.token.PersonalAccessTokenPermission;
 import com.company.idm.domain.token.PersonalAccessTokenRepository;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserAccessPolicy;
 import com.company.idm.domain.user.UserRepository;
@@ -94,6 +95,30 @@ class PersonalAccessTokenAuthenticatorTest {
             .build()));
 
         assertThat(authenticator.authenticate(rawToken, "127.0.0.1")).isEmpty();
+    }
+
+    @Test
+    void authenticatesRoleGroupTokensWithoutInheritingAUserIdentity() {
+        String rawToken = "group-token";
+        PersonalAccessToken token = activeToken().toBuilder()
+            .userId(null)
+            .subjectType(PersonalAccessTokenSubjectType.ROLE_GROUP)
+            .subjectId(19L)
+            .permissions(List.of())
+            .build();
+        when(secretService.extractTokenUid(rawToken)).thenReturn(Optional.of("uid"));
+        when(tokenRepository.findByTokenUid("uid")).thenReturn(Optional.of(token));
+        when(secretService.verify(rawToken, "hash", 1)).thenReturn(true);
+
+        AuthenticatedUser principal = authenticator.authenticate(rawToken, "127.0.0.1").orElseThrow();
+
+        assertThat(principal.id()).isNull();
+        assertThat(principal.userId()).isEqualTo("role-supply:group:19");
+        assertThat(principal.roleCodes()).isEmpty();
+        assertThat(principal.selectedPermissionCodes()).isEmpty();
+        assertThat(principal.tokenSubjectType()).isEqualTo(PersonalAccessTokenSubjectType.ROLE_GROUP);
+        assertThat(principal.tokenSubjectId()).isEqualTo(19L);
+        verifyNoInteractions(userRepository);
     }
 
     private PersonalAccessToken activeToken() {

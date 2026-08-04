@@ -15,6 +15,8 @@ public class PersonalAccessToken {
     private final Long id;
     private final String tokenUid;
     private final Long userId;
+    private final PersonalAccessTokenSubjectType subjectType;
+    private final Long subjectId;
     private final String name;
     private final String description;
     private final PersonalAccessTokenScopeMode scopeMode;
@@ -42,5 +44,15 @@ public class PersonalAccessToken {
 
     public boolean isSecretRecoverable() {
         return secretValue != null && !secretValue.isBlank();
+    }
+
+    public PersonalAccessTokenSubjectType getSubjectType() {
+        return subjectType == null ? PersonalAccessTokenSubjectType.USER : subjectType;
+    }
+
+    public Long getSubjectId() {
+        return getSubjectType() == PersonalAccessTokenSubjectType.USER && subjectId == null
+            ? userId
+            : subjectId;
     }
 }

@@ -38,5 +38,14 @@ public interface UserRoleMapper extends BaseMapper<UserRoleDO> {
         WHERE ur.role_id = #{roleId} AND u.deleted = 0
         """)
     long countActiveBindingsByRoleId(Long roleId);
+
+    @Select("""
+        SELECT u.id AS userId, u.real_name AS realName
+        FROM sys_user_role ur
+        INNER JOIN sys_user u ON u.id = ur.user_id
+        WHERE ur.role_id = #{roleId} AND u.deleted = 0
+        ORDER BY u.real_name, u.id
+        """)
+    List<com.company.idm.infrastructure.persistence.record.PublicUserRecord> selectPublicUsersByRoleId(Long roleId);
 }
 

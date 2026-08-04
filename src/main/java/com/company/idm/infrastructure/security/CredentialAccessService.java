@@ -11,4 +11,12 @@ public class CredentialAccessService {
             && authentication.getPrincipal() instanceof AuthenticatedUser principal
             && principal.credentialType() == CredentialType.SESSION;
     }
+
+    public boolean isRoleSupplyToken(Authentication authentication) {
+        return authentication != null
+            && authentication.getPrincipal() instanceof AuthenticatedUser principal
+            && principal.credentialType() == CredentialType.PERSONAL_ACCESS_TOKEN
+            && principal.tokenSubjectType() != null
+            && principal.tokenSubjectType() != com.company.idm.domain.token.PersonalAccessTokenSubjectType.USER;
+    }
 }

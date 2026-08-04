@@ -3,6 +3,8 @@ package com.company.idm.infrastructure.persistence.repository;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
+import com.company.idm.domain.rbac.RoleScope;
+import com.company.idm.common.exception.BizException;
 import com.company.idm.infrastructure.persistence.dataobject.RoleDO;
 import com.company.idm.infrastructure.persistence.dataobject.RolePermissionDO;
 import com.company.idm.infrastructure.persistence.dataobject.UserRoleDO;
@@ -72,6 +74,36 @@ public class MybatisRoleRepository implements RoleRepository {
     }
 
     @Override
+    public List<Role> findByScope(RoleScope roleScope) {
+        if (roleScope == null) {
+            return List.of();
+        }
+        return roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
+                .eq(RoleDO::getRoleScope, roleScope.name())
+                .eq(RoleDO::getStatus, 1)
+                .orderByAsc(RoleDO::getRoleName)
+                .orderByAsc(RoleDO::getId))
+            .stream()
+            .map(this::toDomain)
+            .toList();
+    }
+
+    @Override
+    public List<Role> findByGroupId(Long roleGroupId) {
+        if (roleGroupId == null) {
+            return List.of();
+        }
+        return roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
+                .eq(RoleDO::getRoleScope, RoleScope.GROUP.name())
+                .eq(RoleDO::getRoleGroupId, roleGroupId)
+                .orderByAsc(RoleDO::getRoleName)
+                .orderByAsc(RoleDO::getId))
+            .stream()
+            .map(this::toDomain)
+            .toList();
+    }
+
+    @Override
     public Role save(Role role) {
         RoleDO dataObject = toDataObject(role);
         if (dataObject.getId() == null) {
@@ -102,8 +134,15 @@ public class MybatisRoleRepository implements RoleRepository {
 
     @Override
     public void assignPermissions(Long roleId, List<Long> permissionIds) {
+        RoleDO role = roleMapper.selectById(roleId);
+        if (role != null
+            && RoleScope.GROUP.name().equals(role.getRoleScope())
+            && permissionIds != null
+            && !permissionIds.isEmpty()) {
+            throw new BizException("GROUP_ROLE_PERMISSION_FORBIDDEN", "组角色不能绑定平台权限");
+        }
         rolePermissionMapper.delete(new LambdaQueryWrapper<RolePermissionDO>().eq(RolePermissionDO::getRoleId, roleId));
-        for (Long permissionId : permissionIds) {
+        for (Long permissionId : permissionIds == null ? List.<Long>of() : permissionIds) {
             RolePermissionDO relation = new RolePermissionDO();
             relation.setRoleId(roleId);
             relation.setPermissionId(permissionId);
@@ -119,6 +158,10 @@ public class MybatisRoleRepository implements RoleRepository {
             return;
         }
         for (Long roleId : roleIds) {
+            RoleDO role = roleMapper.selectById(roleId);
+            if (role != null && RoleScope.GROUP.name().equals(role.getRoleScope())) {
+                continue;
+            }
             long existingCount = rolePermissionMapper.selectCount(new LambdaQueryWrapper<RolePermissionDO>()
                 .eq(RolePermissionDO::getRoleId, roleId)
                 .eq(RolePermissionDO::getPermissionId, permissionId));
@@ -164,6 +207,8 @@ public class MybatisRoleRepository implements RoleRepository {
             .builtIn(dataObject.getBuiltIn())
             .status(dataObject.getStatus())
             .remark(dataObject.getRemark())
+            .roleScope(dataObject.getRoleScope() == null ? RoleScope.SYSTEM : RoleScope.valueOf(dataObject.getRoleScope()))
+            .roleGroupId(dataObject.getRoleGroupId())
             .build();
     }
 
@@ -176,6 +221,8 @@ public class MybatisRoleRepository implements RoleRepository {
         dataObject.setBuiltIn(role.getBuiltIn());
         dataObject.setStatus(role.getStatus());
         dataObject.setRemark(role.getRemark());
+        dataObject.setRoleScope((role.getRoleScope() == null ? RoleScope.SYSTEM : role.getRoleScope()).name());
+        dataObject.setRoleGroupId(role.getRoleGroupId());
         dataObject.setCreator("system");
         dataObject.setModifier("system");
         return dataObject;

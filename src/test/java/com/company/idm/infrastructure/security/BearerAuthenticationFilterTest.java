@@ -10,6 +10,7 @@ import jakarta.servlet.FilterChain;
 import java.util.Optional;
 import java.util.Set;
 import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -50,6 +51,9 @@ class BearerAuthenticationFilterTest {
 
     @Test
     void rejectsPatOnInteractiveOnlyEndpoints() throws Exception {
+        AuthenticatedUser principal = principal(CredentialType.PERSONAL_ACCESS_TOKEN);
+        when(patAuthenticator.authenticate("idm_pat_token", "127.0.0.1"))
+            .thenReturn(Optional.of(principal));
         MockHttpServletRequest request = request(
             "/api/v1/personal-access-tokens",
             "Bearer idm_pat_token"
@@ -60,10 +64,7 @@ class BearerAuthenticationFilterTest {
         filter.doFilterInternal(request, response, chain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        verify(patAuthenticator, never()).authenticate(
-            org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.anyString()
-        );
+        verify(patAuthenticator).authenticate("idm_pat_token", "127.0.0.1");
         verify(chain).doFilter(request, response);
     }
 
@@ -75,7 +76,17 @@ class BearerAuthenticationFilterTest {
     }
 
     private AuthenticatedUser principal(CredentialType type) {
-        return new AuthenticatedUser(1L, "employee", 0, Set.of(), type, null, Set.of(),
-            type == CredentialType.PERSONAL_ACCESS_TOKEN ? PersonalAccessTokenScopeMode.FIXED : null);
+        return new AuthenticatedUser(
+            1L,
+            "employee",
+            0,
+            Set.of(),
+            type,
+            null,
+            Set.of(),
+            type == CredentialType.PERSONAL_ACCESS_TOKEN ? PersonalAccessTokenScopeMode.FIXED : null,
+            PersonalAccessTokenSubjectType.USER,
+            1L
+        );
     }
 }

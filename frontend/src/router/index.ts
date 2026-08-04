@@ -74,6 +74,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '个人中心', hideInMenu: true },
       },
       {
+        path: 'role-groups',
+        name: 'role-groups',
+        component: () => import('@/views/role-group/RoleGroupManagementView.vue'),
+        meta: { title: '角色组管理' },
+      },
+      {
         path: 'access-tokens',
         name: 'access-tokens',
         component: () => import('@/views/profile/PersonalAccessTokenView.vue'),

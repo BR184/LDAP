@@ -8,6 +8,7 @@ import com.company.idm.application.rbac.EffectivePermissionService;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
 import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import java.util.Set;
 import org.casbin.jcasbin.main.Enforcer;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,9 @@ class CasbinAccessServiceTest {
             CredentialType.PERSONAL_ACCESS_TOKEN,
             99L,
             Set.of("AUTH_ME", "USER_READ"),
-            PersonalAccessTokenScopeMode.FIXED
+            PersonalAccessTokenScopeMode.FIXED,
+            PersonalAccessTokenSubjectType.USER,
+            1L
         );
     }
 }

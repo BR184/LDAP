@@ -112,7 +112,7 @@ public class UserApplicationService {
         saved = userRepository.save(saved.toBuilder().ldapDn(ldapDn).build());
         syncLdapAccessState(saved);
         syncUserDepartmentGroups(saved);
-        userRepository.assignRoles(saved.getId(), command.roleIds());
+        userRepository.assignRoles(saved.getId(), command.roleIds(), command.operator());
         saved = saved.toBuilder()
             .roleCodes(roles.stream().map(Role::getRoleCode).collect(java.util.stream.Collectors.toSet()))
             .permissionLevel(resolvePermissionLevel(roles))
@@ -664,7 +664,7 @@ public class UserApplicationService {
 
     private void deleteUserInternal(User user, String operator) {
         cleanupLdapUser(user.getUserId());
-        userRepository.removeAllRoles(user.getId());
+        userRepository.removeAllRoles(user.getId(), operator);
         userRepository.logicalDelete(user.getId(), buildRecycledUsername(user), nextTokenVersion(user));
         auditLogRepository.save(AuditLog.builder()
             .operator(operator)

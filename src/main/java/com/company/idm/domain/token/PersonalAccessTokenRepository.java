@@ -10,19 +10,38 @@ public interface PersonalAccessTokenRepository {
 
     Optional<PersonalAccessToken> findByTokenUid(String tokenUid);
 
-    Optional<PersonalAccessToken> findOwnedById(Long tokenId, Long userId);
+    Optional<PersonalAccessToken> findByIdAndSubject(
+        Long tokenId,
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId
+    );
 
-    List<PersonalAccessToken> findByUserId(Long userId, long offset, int limit);
+    List<PersonalAccessToken> findBySubject(
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId,
+        long offset,
+        int limit
+    );
 
-    long countByUserId(Long userId);
+    long countBySubject(PersonalAccessTokenSubjectType subjectType, Long subjectId);
 
-    long countActiveByUserId(Long userId, LocalDateTime now);
+    long countActiveBySubject(
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId,
+        LocalDateTime now
+    );
 
-    boolean revokeOwned(Long tokenId, Long userId, LocalDateTime revokedAt, String modifier);
+    boolean revoke(
+        Long tokenId,
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId,
+        LocalDateTime revokedAt,
+        String modifier
+    );
 
-    boolean rotateOwned(PersonalAccessToken token);
+    boolean rotate(PersonalAccessToken token);
 
-    boolean deleteOwned(Long tokenId, Long userId);
+    boolean delete(Long tokenId, PersonalAccessTokenSubjectType subjectType, Long subjectId);
 
     boolean updateLastUsedIfBefore(
         Long tokenId,

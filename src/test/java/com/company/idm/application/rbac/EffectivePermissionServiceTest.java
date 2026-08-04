@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.application.token.PersonalAccessTokenPermissionGroupCatalog;
 import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
 import java.util.Set;
@@ -34,7 +35,9 @@ class EffectivePermissionServiceTest {
             CredentialType.SESSION,
             null,
             Set.of(),
-            null
+            null,
+            PersonalAccessTokenSubjectType.USER,
+            1L
         );
 
         assertThat(service.resolve(principal)).containsExactlyInAnyOrder("AUTH_ME", "USER_READ");
@@ -52,7 +55,9 @@ class EffectivePermissionServiceTest {
             CredentialType.PERSONAL_ACCESS_TOKEN,
             99L,
             Set.of("AUTH_ME", "USER_READ"),
-            PersonalAccessTokenScopeMode.FIXED
+            PersonalAccessTokenScopeMode.FIXED,
+            PersonalAccessTokenSubjectType.USER,
+            1L
         );
 
         assertThat(service.resolve(principal)).containsExactlyInAnyOrder("AUTH_ME", "USER_READ");
@@ -70,7 +75,9 @@ class EffectivePermissionServiceTest {
             CredentialType.PERSONAL_ACCESS_TOKEN,
             99L,
             Set.of("AUTH_ME"),
-            PersonalAccessTokenScopeMode.FIXED
+            PersonalAccessTokenScopeMode.FIXED,
+            PersonalAccessTokenSubjectType.USER,
+            1L
         );
 
         assertThat(service.resolve(principal)).containsExactly("AUTH_ME");
@@ -89,7 +96,9 @@ class EffectivePermissionServiceTest {
             CredentialType.PERSONAL_ACCESS_TOKEN,
             99L,
             Set.of(),
-            PersonalAccessTokenScopeMode.FOLLOW_ACCOUNT
+            PersonalAccessTokenScopeMode.FOLLOW_ACCOUNT,
+            PersonalAccessTokenSubjectType.USER,
+            1L
         );
 
         assertThat(service.resolve(principal)).containsExactlyInAnyOrder("AUTH_ME", "USER_READ");

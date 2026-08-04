@@ -104,7 +104,7 @@ public class LeaderRoleDerivationService {
     private void syncRole(String roleCode, Set<Long> expectedUserIds) {
         Role role = roleRepository.findByCode(roleCode)
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "组织派生角色不存在：" + roleCode));
-        userRepository.syncRoleBindings(role.getId(), expectedUserIds);
+        userRepository.syncRoleBindings(role.getId(), expectedUserIds, "system:leader-role-derivation");
     }
 
     private String normalize(String value) {

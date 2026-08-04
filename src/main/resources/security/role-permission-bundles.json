@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "bundles": [
+    {
+      "id": "ROLE_GROUP_MANAGEMENT_FULL",
+      "name": "角色组管理完整权限",
+      "sort": 10,
+      "permissionCodes": [
+        "ROLE_GROUP_MANAGE",
+        "ROLE_GROUP_USER_ASSIGN",
+        "MENU_VIEW_ROLE_GROUP_MANAGEMENT"
+      ]
+    },
+    {
+      "id": "USER_MANAGEMENT_READ_ONLY",
+      "name": "用户管理只读权限",
+      "sort": 20,
+      "permissionCodes": [
+        "USER_READ",
+        "USER_DETAIL",
+        "ROLE_READ",
+        "DEPT_TREE",
+        "MENU_VIEW_USER_MANAGEMENT"
+      ]
+    },
+    {
+      "id": "ROLE_MANAGEMENT_FULL",
+      "name": "角色管理完整权限",
+      "sort": 30,
+      "permissionCodes": [
+        "ROLE_READ",
+        "ROLE_DETAIL",
+        "ROLE_PERMISSION_READ_BINDINGS",
+        "PERMISSION_TREE",
+        "ROLE_CREATE",
+        "ROLE_UPDATE",
+        "ROLE_DELETE",
+        "ROLE_BATCH_DELETE",
+        "ROLE_STATUS",
+        "ROLE_PERMISSION_ASSIGN",
+        "ROLE_SCOPE_MANAGE",
+        "MENU_VIEW_ROLE_MANAGEMENT"
+      ]
+    }
+  ]
+}

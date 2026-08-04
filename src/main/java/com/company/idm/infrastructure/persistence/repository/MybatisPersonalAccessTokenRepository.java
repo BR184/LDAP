@@ -6,6 +6,7 @@ import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.domain.token.PersonalAccessTokenPermission;
 import com.company.idm.domain.token.PersonalAccessTokenRepository;
 import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import com.company.idm.infrastructure.persistence.dataobject.PersonalAccessTokenDO;
 import com.company.idm.infrastructure.persistence.dataobject.PersonalAccessTokenPermissionDO;
 import com.company.idm.infrastructure.persistence.mapper.PersonalAccessTokenMapper;
@@ -61,25 +62,33 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
     }
 
     @Override
-    public Optional<PersonalAccessToken> findOwnedById(Long tokenId, Long userId) {
-        if (tokenId == null || userId == null) {
+    public Optional<PersonalAccessToken> findByIdAndSubject(
+        Long tokenId,
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId
+    ) {
+        if (tokenId == null || !isValidSubject(subjectType, subjectId)) {
             return Optional.empty();
         }
-        PersonalAccessTokenDO token = tokenMapper.selectOne(new LambdaQueryWrapper<PersonalAccessTokenDO>()
-            .eq(PersonalAccessTokenDO::getId, tokenId)
-            .eq(PersonalAccessTokenDO::getUserId, userId));
+        LambdaQueryWrapper<PersonalAccessTokenDO> query = subjectQuery(subjectType, subjectId)
+            .eq(PersonalAccessTokenDO::getId, tokenId);
+        PersonalAccessTokenDO token = tokenMapper.selectOne(query);
         return Optional.ofNullable(token).map(item -> toDomain(item, permissionsByTokenIds(List.of(item.getId()))));
     }
 
     @Override
-    public List<PersonalAccessToken> findByUserId(Long userId, long offset, int limit) {
-        if (userId == null) {
+    public List<PersonalAccessToken> findBySubject(
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId,
+        long offset,
+        int limit
+    ) {
+        if (!isValidSubject(subjectType, subjectId)) {
             return List.of();
         }
         long safeOffset = Math.max(0, offset);
         int safeLimit = Math.max(1, Math.min(limit, 100));
-        List<PersonalAccessTokenDO> tokens = tokenMapper.selectList(new LambdaQueryWrapper<PersonalAccessTokenDO>()
-            .eq(PersonalAccessTokenDO::getUserId, userId)
+        List<PersonalAccessTokenDO> tokens = tokenMapper.selectList(subjectQuery(subjectType, subjectId)
             .orderByDesc(PersonalAccessTokenDO::getGmtCreate)
             .orderByDesc(PersonalAccessTokenDO::getId)
             .last("LIMIT " + safeOffset + ", " + safeLimit));
@@ -93,21 +102,23 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
     }
 
     @Override
-    public long countByUserId(Long userId) {
-        if (userId == null) {
+    public long countBySubject(PersonalAccessTokenSubjectType subjectType, Long subjectId) {
+        if (!isValidSubject(subjectType, subjectId)) {
             return 0;
         }
-        return tokenMapper.selectCount(new LambdaQueryWrapper<PersonalAccessTokenDO>()
-            .eq(PersonalAccessTokenDO::getUserId, userId));
+        return tokenMapper.selectCount(subjectQuery(subjectType, subjectId));
     }
 
     @Override
-    public long countActiveByUserId(Long userId, LocalDateTime now) {
-        if (userId == null || now == null) {
+    public long countActiveBySubject(
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId,
+        LocalDateTime now
+    ) {
+        if (!isValidSubject(subjectType, subjectId) || now == null) {
             return 0;
         }
-        return tokenMapper.selectCount(new LambdaQueryWrapper<PersonalAccessTokenDO>()
-            .eq(PersonalAccessTokenDO::getUserId, userId)
+        return tokenMapper.selectCount(subjectQuery(subjectType, subjectId)
             .isNull(PersonalAccessTokenDO::getRevokedAt)
             .and(expiry -> expiry.isNull(PersonalAccessTokenDO::getExpiresAt)
                 .or()
@@ -115,22 +126,29 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
     }
 
     @Override
-    public boolean revokeOwned(Long tokenId, Long userId, LocalDateTime revokedAt, String modifier) {
-        if (tokenId == null || userId == null || revokedAt == null) {
+    public boolean revoke(
+        Long tokenId,
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId,
+        LocalDateTime revokedAt,
+        String modifier
+    ) {
+        if (tokenId == null || !isValidSubject(subjectType, subjectId) || revokedAt == null) {
             return false;
         }
-        return tokenMapper.update(null, new LambdaUpdateWrapper<PersonalAccessTokenDO>()
+        LambdaUpdateWrapper<PersonalAccessTokenDO> update = subjectUpdate(subjectType, subjectId)
             .eq(PersonalAccessTokenDO::getId, tokenId)
-            .eq(PersonalAccessTokenDO::getUserId, userId)
             .isNull(PersonalAccessTokenDO::getRevokedAt)
             .set(PersonalAccessTokenDO::getRevokedAt, revokedAt)
             .set(PersonalAccessTokenDO::getModifier, modifier)
-            .set(PersonalAccessTokenDO::getGmtModified, revokedAt)) > 0;
+            .set(PersonalAccessTokenDO::getGmtModified, revokedAt);
+        return tokenMapper.update(null, update) > 0;
     }
 
     @Override
-    public boolean rotateOwned(PersonalAccessToken token) {
-        if (token == null || token.getId() == null || token.getUserId() == null
+    public boolean rotate(PersonalAccessToken token) {
+        if (token == null || token.getId() == null
+            || !isValidSubject(token.getSubjectType(), token.getSubjectId())
             || token.getGmtModified() == null) {
             return false;
         }
@@ -142,32 +160,32 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
         changes.setTokenPrefix(token.getTokenPrefix());
         changes.setModifier(token.getModifier());
         changes.setGmtModified(token.getGmtModified());
-        return tokenMapper.update(changes, new LambdaUpdateWrapper<PersonalAccessTokenDO>()
+        LambdaUpdateWrapper<PersonalAccessTokenDO> update = subjectUpdate(
+            token.getSubjectType(), token.getSubjectId()
+        )
             .eq(PersonalAccessTokenDO::getId, token.getId())
-            .eq(PersonalAccessTokenDO::getUserId, token.getUserId())
             .isNull(PersonalAccessTokenDO::getRevokedAt)
             .and(expiry -> expiry.isNull(PersonalAccessTokenDO::getExpiresAt)
                 .or()
-                .gt(PersonalAccessTokenDO::getExpiresAt, token.getGmtModified()))) > 0;
+                .gt(PersonalAccessTokenDO::getExpiresAt, token.getGmtModified()));
+        return tokenMapper.update(changes, update) > 0;
     }
 
     @Override
     @Transactional
-    public boolean deleteOwned(Long tokenId, Long userId) {
-        if (tokenId == null || userId == null) {
+    public boolean delete(Long tokenId, PersonalAccessTokenSubjectType subjectType, Long subjectId) {
+        if (tokenId == null || !isValidSubject(subjectType, subjectId)) {
             return false;
         }
-        PersonalAccessTokenDO owned = tokenMapper.selectOne(new LambdaQueryWrapper<PersonalAccessTokenDO>()
-            .eq(PersonalAccessTokenDO::getId, tokenId)
-            .eq(PersonalAccessTokenDO::getUserId, userId));
+        PersonalAccessTokenDO owned = tokenMapper.selectOne(subjectQuery(subjectType, subjectId)
+            .eq(PersonalAccessTokenDO::getId, tokenId));
         if (owned == null) {
             return false;
         }
         permissionMapper.delete(new LambdaQueryWrapper<PersonalAccessTokenPermissionDO>()
             .eq(PersonalAccessTokenPermissionDO::getTokenId, tokenId));
-        return tokenMapper.delete(new LambdaQueryWrapper<PersonalAccessTokenDO>()
-            .eq(PersonalAccessTokenDO::getId, tokenId)
-            .eq(PersonalAccessTokenDO::getUserId, userId)) > 0;
+        return tokenMapper.delete(subjectQuery(subjectType, subjectId)
+            .eq(PersonalAccessTokenDO::getId, tokenId)) > 0;
     }
 
     @Override
@@ -210,6 +228,8 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
             .id(dataObject.getId())
             .tokenUid(dataObject.getTokenUid())
             .userId(dataObject.getUserId())
+            .subjectType(parseSubjectType(dataObject.getSubjectType()))
+            .subjectId(dataObject.getSubjectId() == null ? dataObject.getUserId() : dataObject.getSubjectId())
             .name(dataObject.getName())
             .description(dataObject.getDescription())
             .scopeMode(parseScopeMode(dataObject.getScopeMode()))
@@ -244,6 +264,9 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
         dataObject.setId(token.getId());
         dataObject.setTokenUid(token.getTokenUid());
         dataObject.setUserId(token.getUserId());
+        PersonalAccessTokenSubjectType subjectType = token.getSubjectType();
+        dataObject.setSubjectType(subjectType.name());
+        dataObject.setSubjectId(subjectType == PersonalAccessTokenSubjectType.GLOBAL ? null : token.getSubjectId());
         dataObject.setName(token.getName());
         dataObject.setDescription(token.getDescription());
         dataObject.setScopeMode((token.getScopeMode() == null
@@ -268,5 +291,38 @@ public class MybatisPersonalAccessTokenRepository implements PersonalAccessToken
         return value == null || value.isBlank()
             ? PersonalAccessTokenScopeMode.FIXED
             : PersonalAccessTokenScopeMode.valueOf(value);
+    }
+
+    private PersonalAccessTokenSubjectType parseSubjectType(String value) {
+        return value == null || value.isBlank()
+            ? PersonalAccessTokenSubjectType.USER
+            : PersonalAccessTokenSubjectType.valueOf(value);
+    }
+
+    private boolean isValidSubject(PersonalAccessTokenSubjectType subjectType, Long subjectId) {
+        return subjectType != null
+            && (subjectType == PersonalAccessTokenSubjectType.GLOBAL || subjectId != null);
+    }
+
+    private LambdaQueryWrapper<PersonalAccessTokenDO> subjectQuery(
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId
+    ) {
+        LambdaQueryWrapper<PersonalAccessTokenDO> query = new LambdaQueryWrapper<PersonalAccessTokenDO>()
+            .eq(PersonalAccessTokenDO::getSubjectType, subjectType.name());
+        return subjectType == PersonalAccessTokenSubjectType.GLOBAL
+            ? query.isNull(PersonalAccessTokenDO::getSubjectId)
+            : query.eq(PersonalAccessTokenDO::getSubjectId, subjectId);
+    }
+
+    private LambdaUpdateWrapper<PersonalAccessTokenDO> subjectUpdate(
+        PersonalAccessTokenSubjectType subjectType,
+        Long subjectId
+    ) {
+        LambdaUpdateWrapper<PersonalAccessTokenDO> update = new LambdaUpdateWrapper<PersonalAccessTokenDO>()
+            .eq(PersonalAccessTokenDO::getSubjectType, subjectType.name());
+        return subjectType == PersonalAccessTokenSubjectType.GLOBAL
+            ? update.isNull(PersonalAccessTokenDO::getSubjectId)
+            : update.eq(PersonalAccessTokenDO::getSubjectId, subjectId);
     }
 }

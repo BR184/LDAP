@@ -8,6 +8,7 @@ import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.domain.token.PersonalAccessTokenPermission;
 import com.company.idm.domain.token.PersonalAccessTokenRepository;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserAccessPolicy;
 import com.company.idm.domain.user.UserRepository;
@@ -83,25 +84,38 @@ public class PersonalAccessTokenAuthenticator implements BearerCredentialAuthent
             auditFailure(token, tokenUid.get(), sourceIp);
             return Optional.empty();
         }
-        User owner = userRepository.findById(token.getUserId()).orElse(null);
-        if (!userAccessPolicy.canAuthenticate(owner)) {
-            auditFailure(token, tokenUid.get(), sourceIp);
-            return Optional.empty();
+        PersonalAccessTokenSubjectType subjectType = token.getSubjectType();
+        User owner = null;
+        if (subjectType == PersonalAccessTokenSubjectType.USER) {
+            owner = userRepository.findById(token.getSubjectId()).orElse(null);
+            if (!userAccessPolicy.canAuthenticate(owner)) {
+                auditFailure(token, tokenUid.get(), sourceIp);
+                return Optional.empty();
+            }
         }
         Set<String> selectedPermissionCodes = token.getPermissions().stream()
             .map(PersonalAccessTokenPermission::code)
             .collect(Collectors.toUnmodifiableSet());
         usageService.recordSuccessfulUse(token, sourceIp);
         return Optional.of(new AuthenticatedUser(
-            owner.getId(),
-            owner.getUserId(),
-            owner.getTokenVersion(),
-            owner.getRoleCodes(),
+            owner == null ? null : owner.getId(),
+            owner == null ? subjectPrincipalName(subjectType, token.getSubjectId()) : owner.getUserId(),
+            owner == null ? 0 : owner.getTokenVersion(),
+            owner == null ? Set.of() : owner.getRoleCodes(),
             CredentialType.PERSONAL_ACCESS_TOKEN,
             token.getId(),
             selectedPermissionCodes,
-            token.getScopeMode()
+            token.getScopeMode(),
+            subjectType,
+            token.getSubjectId()
         ));
+    }
+
+    private String subjectPrincipalName(PersonalAccessTokenSubjectType subjectType, Long subjectId) {
+        if (subjectType == PersonalAccessTokenSubjectType.GLOBAL) {
+            return "role-supply:global";
+        }
+        return "role-supply:group:" + subjectId;
     }
 
     private void auditFailure(PersonalAccessToken token, String tokenUid, String sourceIp) {

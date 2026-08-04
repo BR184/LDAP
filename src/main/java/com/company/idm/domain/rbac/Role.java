@@ -21,5 +21,7 @@ public class Role {
     private Integer builtIn;
     private Integer status;
     private String remark;
+    private RoleScope roleScope;
+    private Long roleGroupId;
 }
 

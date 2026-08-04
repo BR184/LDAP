@@ -3,7 +3,9 @@ import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Search } from '@element-plus/icons-vue'
-import { fetchPermissionTree } from '@/api/modules/permission'
+import { fetchPermissionTree, fetchRolePermissionBundles } from '@/api/modules/permission'
+import { fetchGovernedRoles, fetchRoleGroups, updateGovernedRoleScope } from '@/api/modules/role-group'
+import { useAuthStore } from '@/stores/auth'
 import {
   batchDeleteRoles,
   createRole,
@@ -17,25 +19,30 @@ import {
 import RoleFormDrawer from '@/views/role/components/RoleFormDrawer.vue'
 import RolePermissionDrawer from '@/views/role/components/RolePermissionDrawer.vue'
 import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
-import type { PermissionTreeNode } from '@/types/permission'
+import type { PermissionTreeNode, RolePermissionBundle } from '@/types/permission'
 import type { CreateRolePayload, RoleItem, UpdateRolePayload } from '@/types/role'
+import type { GovernedRoleItem, RoleScope } from '@/types/role-group'
 
 const SUPER_ADMIN_ROLE_CODE = 'SUPER_ADMIN'
 
 const queryClient = useQueryClient()
+const authStore = useAuthStore()
 const tableRef = ref<{ clearSelection?: () => void } | null>(null)
 
 const searchForm = reactive<{
   roleCode: string
   status: number | undefined
+  roleScopes: RoleScope[]
 }>({
   roleCode: '',
   status: undefined,
+  roleScopes: [],
 })
 
 const appliedQuery = reactive({
   roleCode: '',
   status: undefined as number | undefined,
+  roleScopes: [] as RoleScope[],
 })
 
 const pagination = reactive({
@@ -51,12 +58,22 @@ const permissionDrawerVisible = ref(false)
 const permissionDrawerLoading = ref(false)
 const permissionDrawerRole = ref<RoleItem | null>(null)
 const checkedPermissionIds = ref<number[]>([])
+const scopeDialogVisible = ref(false)
+const scopeTargetRole = ref<GovernedRoleItem | null>(null)
+const scopeTargetGroupId = ref<number | null>(null)
 
 const selectedRoles = ref<RoleItem[]>([])
 
 const rolesQuery = useQuery({
   queryKey: ['roles'],
   queryFn: fetchRoles,
+  enabled: computed(() => !authStore.isAdmin),
+})
+
+const governedRolesQuery = useQuery({
+  queryKey: ['role-governance', 'roles'],
+  queryFn: fetchGovernedRoles,
+  enabled: computed(() => authStore.isAdmin),
 })
 
 const permissionTreeQuery = useQuery({
@@ -118,8 +135,32 @@ const grantPermissionsMutation = useMutation({
   },
 })
 
-const roles = computed(() => rolesQuery.data.value || [])
+const permissionBundlesQuery = useQuery({
+  queryKey: ['permissions', 'bundles'],
+  queryFn: fetchRolePermissionBundles,
+})
+
+const roleGroupsQuery = useQuery({
+  queryKey: ['role-groups', 'scope-targets'],
+  queryFn: fetchRoleGroups,
+  enabled: computed(() => authStore.isAdmin),
+})
+
+const updateScopeMutation = useMutation({
+  mutationFn: ({ roleId, roleScope, roleGroupId }: { roleId: number; roleScope: RoleScope; roleGroupId: number | null }) =>
+    updateGovernedRoleScope(roleId, roleScope, roleGroupId),
+  onSuccess: async () => {
+    scopeDialogVisible.value = false
+    ElMessage.success('角色作用域已更新')
+    await refreshRoles()
+  },
+})
+
+const roles = computed<Array<RoleItem | GovernedRoleItem>>(() =>
+  authStore.isAdmin ? governedRolesQuery.data.value || [] : rolesQuery.data.value || [],
+)
 const permissionTree = computed<PermissionTreeNode[]>(() => permissionTreeQuery.data.value || [])
+const permissionBundles = computed<RolePermissionBundle[]>(() => permissionBundlesQuery.data.value || [])
 const hasSelectedRoles = computed(() => selectedRoles.value.length > 0)
 
 const filteredRoles = computed(() =>
@@ -128,7 +169,9 @@ const filteredRoles = computed(() =>
       ? role.roleCode.toLowerCase().includes(appliedQuery.roleCode.toLowerCase())
       : true
     const matchesStatus = typeof appliedQuery.status === 'number' ? role.status === appliedQuery.status : true
-    return matchesRoleCode && matchesStatus
+    const matchesScope = !appliedQuery.roleScopes.length
+      || ('roleScope' in role && appliedQuery.roleScopes.includes(role.roleScope))
+    return matchesRoleCode && matchesStatus && matchesScope
   }),
 )
 
@@ -146,17 +189,22 @@ function normalizeText(value: string) {
 function applySearch() {
   appliedQuery.roleCode = normalizeText(searchForm.roleCode)
   appliedQuery.status = typeof searchForm.status === 'number' ? searchForm.status : undefined
+  appliedQuery.roleScopes = [...searchForm.roleScopes]
   pagination.page = 1
 }
 
 function resetSearch() {
   searchForm.roleCode = ''
   searchForm.status = undefined
+  searchForm.roleScopes = []
   applySearch()
 }
 
 async function refreshRoles() {
-  await queryClient.invalidateQueries({ queryKey: ['roles'] })
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['roles'] }),
+    queryClient.invalidateQueries({ queryKey: ['role-governance', 'roles'] }),
+  ])
 }
 
 function handleSelectionChange(rows: RoleItem[]) {
@@ -304,6 +352,32 @@ function statusText(status: number) {
 function statusTagType(status: number) {
   return status === 1 ? 'success' : 'danger'
 }
+
+async function handleScopeChange(role: GovernedRoleItem, roleScope: RoleScope) {
+  if (roleScope === role.roleScope) return
+  if (roleScope === 'GROUP') {
+    scopeTargetRole.value = role
+    scopeTargetGroupId.value = null
+    scopeDialogVisible.value = true
+    return
+  }
+  await updateScopeMutation.mutateAsync({ roleId: role.id, roleScope, roleGroupId: null })
+}
+
+async function confirmGroupScope() {
+  if (!scopeTargetRole.value || scopeTargetGroupId.value === null) return
+  await updateScopeMutation.mutateAsync({
+    roleId: scopeTargetRole.value.id,
+    roleScope: 'GROUP',
+    roleGroupId: scopeTargetGroupId.value,
+  })
+}
+
+function scopeText(scope: RoleScope) {
+  if (scope === 'GLOBAL') return '全局'
+  if (scope === 'GROUP') return '角色组'
+  return '系统级'
+}
 </script>
 
 <template>
@@ -317,6 +391,21 @@ function statusTagType(status: number) {
           <el-select v-model="searchForm.status" clearable placeholder="全部状态" style="width: 160px">
             <el-option label="启用" :value="1" />
             <el-option label="禁用" :value="0" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="authStore.isAdmin" label="作用域">
+          <el-select
+            v-model="searchForm.roleScopes"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            clearable
+            placeholder="全部作用域"
+            style="width: 240px"
+          >
+            <el-option label="系统级" value="SYSTEM" />
+            <el-option label="全局" value="GLOBAL" />
+            <el-option label="角色组" value="GROUP" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -352,7 +441,7 @@ function statusTagType(status: number) {
       <PersistentTableScrollFrame>
         <el-table
           ref="tableRef"
-          v-loading="rolesQuery.isLoading.value || rolesQuery.isFetching.value"
+          v-loading="rolesQuery.isLoading.value || governedRolesQuery.isLoading.value || rolesQuery.isFetching.value || governedRolesQuery.isFetching.value"
           :data="pagedRoles"
           border
           @selection-change="handleSelectionChange"
@@ -361,6 +450,20 @@ function statusTagType(status: number) {
         <el-table-column prop="roleCode" label="角色编码" min-width="160" />
         <el-table-column prop="roleName" label="角色名称" min-width="160" />
         <el-table-column prop="permissionLevel" label="权限等级" width="120" align="center" />
+        <el-table-column v-if="authStore.isAdmin" label="作用域" width="150" align="center">
+          <template #default="{ row }">
+            <el-select
+              :model-value="row.roleScope"
+              size="small"
+              :loading="updateScopeMutation.isPending.value"
+              @change="(value: RoleScope) => handleScopeChange(row, value)"
+            >
+              <el-option label="系统级" value="SYSTEM" />
+              <el-option label="全局" value="GLOBAL" />
+              <el-option :label="scopeText('GROUP')" value="GROUP" />
+            </el-select>
+          </template>
+        </el-table-column>
         <el-table-column label="类型" width="120" align="center">
           <template #default="{ row }">
             <el-tag :type="builtInTagType(row.builtIn)">{{ builtInText(row.builtIn) }}</el-tag>
@@ -376,7 +479,7 @@ function statusTagType(status: number) {
           <template #default="{ row }">
             <el-space wrap>
               <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-              <el-button link type="success" @click="openGrantPermissions(row)">授权权限</el-button>
+              <el-button v-if="row.roleScope !== 'GROUP'" link type="success" @click="openGrantPermissions(row)">授权权限</el-button>
               <el-button link type="info" @click="handleToggleStatus(row)">
                 {{ row.status === 1 ? '禁用' : '启用' }}
               </el-button>
@@ -415,9 +518,45 @@ function statusTagType(status: number) {
       :initializing="permissionDrawerLoading || permissionTreeQuery.isLoading.value"
       :loading="grantPermissionsMutation.isPending.value"
       :permission-tree="permissionTree"
+      :permission-bundles="permissionBundles"
       :role="permissionDrawerRole"
       @submit="handleGrantPermissions"
     />
+
+    <el-dialog v-model="scopeDialogVisible" title="选择目标角色组" width="520px">
+      <p class="scope-dialog__summary">
+        角色“{{ scopeTargetRole?.roleName }}”将变更为角色组作用域。该角色必须未绑定平台权限。
+      </p>
+      <el-form label-position="top">
+        <el-form-item label="目标角色组" required>
+          <el-select
+            v-model="scopeTargetGroupId"
+            filterable
+            placeholder="请选择角色组"
+            style="width: 100%"
+            :loading="roleGroupsQuery.isLoading.value"
+          >
+            <el-option
+              v-for="group in roleGroupsQuery.data.value || []"
+              :key="group.id"
+              :label="group.groupName"
+              :value="group.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="scopeDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :disabled="scopeTargetGroupId === null"
+          :loading="updateScopeMutation.isPending.value"
+          @click="confirmGroupScope"
+        >
+          确认变更
+        </el-button>
+      </template>
+    </el-dialog>
   </PageContainer>
 </template>
 
@@ -444,5 +583,11 @@ function statusTagType(status: number) {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.scope-dialog__summary {
+  margin: 0 0 18px;
+  color: var(--idm-text-secondary);
+  line-height: 1.7;
 }
 </style>

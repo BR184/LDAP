@@ -1,6 +1,8 @@
 package com.company.idm.interfaces.permission;
 
 import com.company.idm.application.rbac.RbacApplicationService;
+import com.company.idm.application.rbac.RolePermissionBundle;
+import com.company.idm.application.rbac.RolePermissionBundleCatalog;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.domain.rbac.Permission;
 import java.util.ArrayList;
@@ -22,6 +24,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class PermissionController {
 
     private final RbacApplicationService rbacApplicationService;
+    private final RolePermissionBundleCatalog rolePermissionBundleCatalog;
+
+    @GetMapping("/bundles")
+    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'PERMISSION_TREE')")
+    public ApiResponse<List<RolePermissionBundleResponse>> bundles() {
+        return ApiResponse.success(rolePermissionBundleCatalog.bundles().stream()
+            .map(this::toResponse)
+            .toList());
+    }
 
     @GetMapping("/tree")
     @PreAuthorize("@casbinAccessService.hasAny(authentication, 'PERMISSION_TREE')")
@@ -53,6 +64,21 @@ public class PermissionController {
             }
         }
         return ApiResponse.success(roots);
+    }
+
+    private RolePermissionBundleResponse toResponse(RolePermissionBundle bundle) {
+        return new RolePermissionBundleResponse(
+            bundle.id(), bundle.name(), bundle.sort(), bundle.permissionIds(), bundle.permissionCodes()
+        );
+    }
+
+    public record RolePermissionBundleResponse(
+        String id,
+        String name,
+        int sort,
+        List<Long> permissionIds,
+        List<String> permissionCodes
+    ) {
     }
 }
 

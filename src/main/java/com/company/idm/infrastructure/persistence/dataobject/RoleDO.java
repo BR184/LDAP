@@ -19,6 +19,8 @@ public class RoleDO {
     private Integer builtIn;
     private Integer status;
     private String remark;
+    private String roleScope;
+    private Long roleGroupId;
     private String creator;
     private String modifier;
     private LocalDateTime gmtCreate;
@@ -78,6 +80,22 @@ public class RoleDO {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public String getRoleScope() {
+        return roleScope;
+    }
+
+    public void setRoleScope(String roleScope) {
+        this.roleScope = roleScope;
+    }
+
+    public Long getRoleGroupId() {
+        return roleGroupId;
+    }
+
+    public void setRoleGroupId(Long roleGroupId) {
+        this.roleGroupId = roleGroupId;
     }
 
     public String getCreator() {

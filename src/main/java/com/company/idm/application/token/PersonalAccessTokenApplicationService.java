@@ -11,6 +11,7 @@ import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.domain.token.PersonalAccessTokenPermission;
 import com.company.idm.domain.token.PersonalAccessTokenRepository;
 import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.PersonalAccessTokenProperties;
@@ -92,8 +93,8 @@ public class PersonalAccessTokenApplicationService {
         int safePageSize = Math.max(1, Math.min(pageSize, 100));
         long offset = (long) (safePage - 1) * safePageSize;
         return new PersonalAccessTokenPage(
-            tokenRepository.findByUserId(principal.id(), offset, safePageSize),
-            tokenRepository.countByUserId(principal.id()),
+            tokenRepository.findBySubject(PersonalAccessTokenSubjectType.USER, principal.id(), offset, safePageSize),
+            tokenRepository.countBySubject(PersonalAccessTokenSubjectType.USER, principal.id()),
             safePage,
             safePageSize
         );
@@ -132,7 +133,9 @@ public class PersonalAccessTokenApplicationService {
         User owner = requireOwner(principal);
         LocalDateTime now = LocalDateTime.now(clock);
         validateExpiry(command.expiresAt(), now);
-        if (tokenRepository.countActiveByUserId(principal.id(), now) >= properties.getMaxActivePerUser()) {
+        if (tokenRepository.countActiveBySubject(
+            PersonalAccessTokenSubjectType.USER, principal.id(), now
+        ) >= properties.getMaxActivePerUser()) {
             throw new BizException("PAT_ACTIVE_LIMIT_EXCEEDED", "有效个人访问令牌数量已达到上限");
         }
 
@@ -156,6 +159,8 @@ public class PersonalAccessTokenApplicationService {
         PersonalAccessToken persisted = tokenRepository.create(PersonalAccessToken.builder()
             .tokenUid(generated.tokenUid())
             .userId(principal.id())
+            .subjectType(PersonalAccessTokenSubjectType.USER)
+            .subjectId(principal.id())
             .name(name)
             .description(normalizeDescription(command.description()))
             .scopeMode(scopeMode)
@@ -190,7 +195,8 @@ public class PersonalAccessTokenApplicationService {
         String sourceIp
     ) {
         requireSession(principal);
-        PersonalAccessToken existing = tokenRepository.findOwnedById(tokenId, principal.id())
+        PersonalAccessToken existing = tokenRepository.findByIdAndSubject(
+                tokenId, PersonalAccessTokenSubjectType.USER, principal.id())
             .orElseThrow(() -> new BizException("PAT_NOT_FOUND", "个人访问密钥不存在"));
         LocalDateTime now = LocalDateTime.now(clock);
         if (!existing.isActiveAt(now)) {
@@ -206,7 +212,7 @@ public class PersonalAccessTokenApplicationService {
             .modifier(principal.userId())
             .gmtModified(now)
             .build();
-        if (!tokenRepository.rotateOwned(rotated)) {
+        if (!tokenRepository.rotate(rotated)) {
             throw new BizException("PAT_ROTATION_CONFLICT", "个人访问密钥状态已变化，请刷新后重试");
         }
         auditLogRepository.save(AuditLog.builder()
@@ -222,7 +228,8 @@ public class PersonalAccessTokenApplicationService {
 
     public String reveal(AuthenticatedUser principal, Long tokenId, String sourceIp) {
         requireSession(principal);
-        PersonalAccessToken token = tokenRepository.findOwnedById(tokenId, principal.id())
+        PersonalAccessToken token = tokenRepository.findByIdAndSubject(
+                tokenId, PersonalAccessTokenSubjectType.USER, principal.id())
             .orElseThrow(() -> new BizException("PAT_NOT_FOUND", "个人访问密钥不存在"));
         if (!token.isActiveAt(LocalDateTime.now(clock))) {
             throw new BizException("PAT_NOT_ACTIVE", "只有有效的个人访问密钥可以查看");
@@ -245,12 +252,15 @@ public class PersonalAccessTokenApplicationService {
     @Transactional
     public void revoke(AuthenticatedUser principal, Long tokenId, String sourceIp) {
         requireSession(principal);
-        PersonalAccessToken token = tokenRepository.findOwnedById(tokenId, principal.id()).orElse(null);
+        PersonalAccessToken token = tokenRepository.findByIdAndSubject(
+            tokenId, PersonalAccessTokenSubjectType.USER, principal.id()).orElse(null);
         if (token == null || token.getRevokedAt() != null) {
             return;
         }
         LocalDateTime revokedAt = LocalDateTime.now(clock);
-        if (tokenRepository.revokeOwned(tokenId, principal.id(), revokedAt, principal.userId())) {
+        if (tokenRepository.revoke(
+            tokenId, PersonalAccessTokenSubjectType.USER, principal.id(), revokedAt, principal.userId()
+        )) {
             auditLogRepository.save(AuditLog.builder()
                 .operator(principal.userId())
                 .operatorIp(sourceIp)
@@ -265,7 +275,7 @@ public class PersonalAccessTokenApplicationService {
     @Transactional
     public void delete(AuthenticatedUser principal, Long tokenId, String sourceIp) {
         requireSession(principal);
-        if (!tokenRepository.deleteOwned(tokenId, principal.id())) {
+        if (!tokenRepository.delete(tokenId, PersonalAccessTokenSubjectType.USER, principal.id())) {
             throw new BizException("PAT_NOT_FOUND", "个人访问密钥不存在");
         }
         auditLogRepository.save(AuditLog.builder()

@@ -55,10 +55,8 @@ public class BearerAuthenticationFilter extends OncePerRequestFilter {
 
     private Optional<AuthenticatedUser> authenticate(String credential, String servletPath, String sourceIp) {
         if (credential.startsWith(PERSONAL_ACCESS_TOKEN_PREFIX)) {
-            if (!personalAccessTokenRequestPolicy.allows(servletPath)) {
-                return Optional.empty();
-            }
-            return personalAccessTokenAuthenticator.authenticate(credential, sourceIp);
+            Optional<AuthenticatedUser> principal = personalAccessTokenAuthenticator.authenticate(credential, sourceIp);
+            return principal.filter(authenticated -> personalAccessTokenRequestPolicy.allows(authenticated, servletPath));
         }
         return jwtAuthenticator.authenticate(credential, sourceIp);
     }

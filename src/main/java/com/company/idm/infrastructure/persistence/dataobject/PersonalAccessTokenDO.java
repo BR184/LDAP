@@ -16,6 +16,8 @@ public class PersonalAccessTokenDO {
     private Long id;
     private String tokenUid;
     private Long userId;
+    private String subjectType;
+    private Long subjectId;
     private String name;
     private String description;
     private String scopeMode;

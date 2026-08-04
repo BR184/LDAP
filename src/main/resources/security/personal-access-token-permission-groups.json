@@ -83,7 +83,14 @@
       "name": "角色权限管理",
       "risk": "HIGH",
       "sort": 140,
-      "permissionCodes": ["ROLE_CREATE", "ROLE_UPDATE", "ROLE_DELETE", "ROLE_BATCH_DELETE", "ROLE_STATUS", "ROLE_PERMISSION_ASSIGN"]
+      "permissionCodes": ["ROLE_CREATE", "ROLE_UPDATE", "ROLE_DELETE", "ROLE_BATCH_DELETE", "ROLE_STATUS", "ROLE_PERMISSION_ASSIGN", "ROLE_SCOPE_MANAGE"]
+    },
+    {
+      "id": "DELEGATED_ROLE_ADMIN",
+      "name": "委派角色组管理",
+      "risk": "HIGH",
+      "sort": 145,
+      "permissionCodes": ["ROLE_GROUP_MANAGE", "ROLE_GROUP_USER_ASSIGN"]
     },
     {
       "id": "MENU_ADMIN",

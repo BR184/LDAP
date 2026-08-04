@@ -120,7 +120,7 @@ class ImportExecutionApplicationServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(ImportBatchStatus.FAILED);
         assertThat(item.getStatus()).isEqualTo(ChangeItemStatus.LDAP_FAILED);
-        verify(userRepository).syncRoleBindings(2L, Set.of(10L, 11L));
+        verify(userRepository).syncRoleBindings(2L, Set.of(10L, 11L), "system:file-import");
         verify(ldapDirectoryService).createOrUpdateUser(any(User.class), eq("123456"));
         verify(policyRefreshService).refresh();
     }

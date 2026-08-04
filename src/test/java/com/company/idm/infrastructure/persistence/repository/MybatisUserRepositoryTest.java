@@ -15,6 +15,8 @@ import com.company.idm.infrastructure.persistence.dataobject.UserPartTimeDepartm
 import com.company.idm.infrastructure.persistence.mapper.UserMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserPartTimeDepartmentMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserRoleMapper;
+import com.company.idm.infrastructure.persistence.mapper.RoleMapper;
+import com.company.idm.infrastructure.persistence.mapper.RoleMembershipChangeMapper;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -27,7 +29,9 @@ class MybatisUserRepositoryTest {
     private final MybatisUserRepository repository = new MybatisUserRepository(
         userMapper,
         userRoleMapper,
-        partTimeDepartmentMapper
+        partTimeDepartmentMapper,
+        mock(RoleMapper.class),
+        mock(RoleMembershipChangeMapper.class)
     );
 
     @Test

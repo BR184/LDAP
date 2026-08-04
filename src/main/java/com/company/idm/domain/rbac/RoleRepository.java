@@ -19,6 +19,10 @@ public interface RoleRepository {
 
     List<Role> findByIds(List<Long> roleIds);
 
+    List<Role> findByScope(RoleScope roleScope);
+
+    List<Role> findByGroupId(Long roleGroupId);
+
     Role save(Role role);
 
     void updateStatus(Long id, Integer status);

@@ -19,6 +19,7 @@ import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.domain.token.PersonalAccessTokenRepository;
 import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.PersonalAccessTokenProperties;
@@ -67,7 +68,7 @@ class PersonalAccessTokenApplicationServiceTest {
         when(userRepository.findById(7L)).thenReturn(Optional.of(owner()));
         when(effectivePermissionService.resolve(session())).thenReturn(Set.of("USER_READ"));
         when(permissionRepository.findAll()).thenReturn(List.of(permission(1L, "USER_READ")));
-        when(tokenRepository.countActiveByUserId(7L, now())).thenReturn(0L);
+        when(tokenRepository.countActiveBySubject(PersonalAccessTokenSubjectType.USER, 7L, now())).thenReturn(0L);
         when(secretService.generate()).thenReturn(new GeneratedPersonalAccessTokenSecret(
             "uid",
             "idm_pat_uid_secret",
@@ -166,7 +167,7 @@ class PersonalAccessTokenApplicationServiceTest {
             command("automation", null, PersonalAccessTokenScopeMode.FIXED, List.of(1L), now())
         )).isInstanceOf(BizException.class).hasMessageContaining("有效期");
 
-        when(tokenRepository.countActiveByUserId(7L, now())).thenReturn(20L);
+        when(tokenRepository.countActiveBySubject(PersonalAccessTokenSubjectType.USER, 7L, now())).thenReturn(20L);
         assertThatThrownBy(() -> service.create(
             session(),
             command("automation", null, PersonalAccessTokenScopeMode.FIXED, List.of(1L), null)
@@ -178,6 +179,8 @@ class PersonalAccessTokenApplicationServiceTest {
         PersonalAccessToken existing = PersonalAccessToken.builder()
             .id(11L)
             .userId(7L)
+            .subjectType(PersonalAccessTokenSubjectType.USER)
+            .subjectId(7L)
             .tokenUid("old-uid")
             .secretHash("old-hash")
             .hashVersion(1)
@@ -185,14 +188,15 @@ class PersonalAccessTokenApplicationServiceTest {
             .scopeMode(PersonalAccessTokenScopeMode.FIXED)
             .permissions(List.of())
             .build();
-        when(tokenRepository.findOwnedById(11L, 7L)).thenReturn(Optional.of(existing));
-        when(tokenRepository.rotateOwned(any())).thenReturn(true);
+        when(tokenRepository.findByIdAndSubject(
+            11L, PersonalAccessTokenSubjectType.USER, 7L)).thenReturn(Optional.of(existing));
+        when(tokenRepository.rotate(any())).thenReturn(true);
 
         CreatedPersonalAccessToken rotated = service.rotate(session(), 11L, "127.0.0.1");
 
         assertThat(rotated.secret()).isEqualTo("idm_pat_uid_secret");
         assertThat(rotated.token().getTokenUid()).isEqualTo("uid");
-        verify(tokenRepository).rotateOwned(any());
+        verify(tokenRepository).rotate(any());
     }
 
     @Test
@@ -200,11 +204,14 @@ class PersonalAccessTokenApplicationServiceTest {
         PersonalAccessToken existing = PersonalAccessToken.builder()
             .id(11L)
             .userId(7L)
+            .subjectType(PersonalAccessTokenSubjectType.USER)
+            .subjectId(7L)
             .tokenUid("uid")
             .secretValue("idm_pat_uid_secret")
             .expiresAt(now().plusDays(1))
             .build();
-        when(tokenRepository.findOwnedById(11L, 7L)).thenReturn(Optional.of(existing));
+        when(tokenRepository.findByIdAndSubject(
+            11L, PersonalAccessTokenSubjectType.USER, 7L)).thenReturn(Optional.of(existing));
 
         assertThat(service.reveal(session(), 11L, "127.0.0.1"))
             .isEqualTo("idm_pat_uid_secret");
@@ -215,10 +222,13 @@ class PersonalAccessTokenApplicationServiceTest {
         PersonalAccessToken existing = PersonalAccessToken.builder()
             .id(11L)
             .userId(7L)
+            .subjectType(PersonalAccessTokenSubjectType.USER)
+            .subjectId(7L)
             .tokenUid("uid")
             .expiresAt(now().plusDays(1))
             .build();
-        when(tokenRepository.findOwnedById(11L, 7L)).thenReturn(Optional.of(existing));
+        when(tokenRepository.findByIdAndSubject(
+            11L, PersonalAccessTokenSubjectType.USER, 7L)).thenReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> service.reveal(session(), 11L, "127.0.0.1"))
             .isInstanceOf(BizException.class)
@@ -228,23 +238,31 @@ class PersonalAccessTokenApplicationServiceTest {
 
     @Test
     void physicallyDeletesOnlyAnOwnedToken() {
-        when(tokenRepository.deleteOwned(11L, 7L)).thenReturn(true);
+        when(tokenRepository.delete(11L, PersonalAccessTokenSubjectType.USER, 7L)).thenReturn(true);
 
         service.delete(session(), 11L, "127.0.0.1");
 
-        verify(tokenRepository).deleteOwned(11L, 7L);
+        verify(tokenRepository).delete(11L, PersonalAccessTokenSubjectType.USER, 7L);
     }
 
     @Test
     void revokeIsOwnedAndIdempotent() {
-        when(tokenRepository.findOwnedById(11L, 7L)).thenReturn(Optional.empty());
+        when(tokenRepository.findByIdAndSubject(
+            11L, PersonalAccessTokenSubjectType.USER, 7L)).thenReturn(Optional.empty());
         service.revoke(session(), 11L, "127.0.0.1");
-        verify(tokenRepository, never()).revokeOwned(any(), any(), any(), any());
+        verify(tokenRepository, never()).revoke(any(), any(), any(), any(), any());
 
-        PersonalAccessToken active = PersonalAccessToken.builder().id(11L).userId(7L).build();
-        when(tokenRepository.findOwnedById(11L, 7L)).thenReturn(Optional.of(active));
+        PersonalAccessToken active = PersonalAccessToken.builder()
+            .id(11L)
+            .userId(7L)
+            .subjectType(PersonalAccessTokenSubjectType.USER)
+            .subjectId(7L)
+            .build();
+        when(tokenRepository.findByIdAndSubject(
+            11L, PersonalAccessTokenSubjectType.USER, 7L)).thenReturn(Optional.of(active));
         service.revoke(session(), 11L, "127.0.0.1");
-        verify(tokenRepository).revokeOwned(11L, 7L, now(), "employee");
+        verify(tokenRepository).revoke(
+            11L, PersonalAccessTokenSubjectType.USER, 7L, now(), "employee");
     }
 
     @Test
@@ -257,7 +275,9 @@ class PersonalAccessTokenApplicationServiceTest {
             CredentialType.PERSONAL_ACCESS_TOKEN,
             11L,
             Set.of("USER_READ"),
-            PersonalAccessTokenScopeMode.FIXED
+            PersonalAccessTokenScopeMode.FIXED,
+            PersonalAccessTokenSubjectType.USER,
+            7L
         );
 
         assertThatThrownBy(() -> service.list(pat, 1, 20))
@@ -283,7 +303,10 @@ class PersonalAccessTokenApplicationServiceTest {
     }
 
     private AuthenticatedUser session() {
-        return new AuthenticatedUser(7L, "employee", 0, Set.of(), CredentialType.SESSION, null, Set.of(), null);
+        return new AuthenticatedUser(
+            7L, "employee", 0, Set.of(), CredentialType.SESSION, null, Set.of(), null,
+            PersonalAccessTokenSubjectType.USER, 7L
+        );
     }
 
     private User owner() {

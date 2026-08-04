@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.domain.token.PersonalAccessTokenPermission;
 import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import com.company.idm.infrastructure.persistence.dataobject.PersonalAccessTokenDO;
 import com.company.idm.infrastructure.persistence.dataobject.PersonalAccessTokenPermissionDO;
 import com.company.idm.infrastructure.persistence.mapper.PersonalAccessTokenMapper;
@@ -72,7 +73,7 @@ class MybatisPersonalAccessTokenRepositoryTest {
             .build();
         when(tokenMapper.update(any(PersonalAccessTokenDO.class), any())).thenReturn(1);
 
-        assertThat(repository.rotateOwned(rotated)).isTrue();
+        assertThat(repository.rotate(rotated)).isTrue();
 
         ArgumentCaptor<PersonalAccessTokenDO> changesCaptor = ArgumentCaptor.forClass(PersonalAccessTokenDO.class);
         verify(tokenMapper).update(changesCaptor.capture(), any());
@@ -88,7 +89,7 @@ class MybatisPersonalAccessTokenRepositoryTest {
             .gmtModified(null)
             .build();
 
-        assertThat(repository.rotateOwned(rotated)).isFalse();
+        assertThat(repository.rotate(rotated)).isFalse();
         verify(tokenMapper, times(0)).update(any(PersonalAccessTokenDO.class), any());
     }
 
@@ -99,7 +100,7 @@ class MybatisPersonalAccessTokenRepositoryTest {
         when(permissionMapper.delete(any())).thenReturn(2);
         when(tokenMapper.delete(any())).thenReturn(1);
 
-        assertThat(repository.deleteOwned(10L, 7L)).isTrue();
+        assertThat(repository.delete(10L, PersonalAccessTokenSubjectType.USER, 7L)).isTrue();
 
         verify(permissionMapper, times(1)).delete(any());
         verify(tokenMapper, times(1)).delete(any());
@@ -121,6 +122,8 @@ class MybatisPersonalAccessTokenRepositoryTest {
         return PersonalAccessToken.builder()
             .tokenUid("token-uid")
             .userId(7L)
+            .subjectType(PersonalAccessTokenSubjectType.USER)
+            .subjectId(7L)
             .name("automation")
             .description("deployment automation")
             .secretHash("hash")
@@ -144,6 +147,8 @@ class MybatisPersonalAccessTokenRepositoryTest {
         dataObject.setId(10L);
         dataObject.setTokenUid("token-uid");
         dataObject.setUserId(7L);
+        dataObject.setSubjectType(PersonalAccessTokenSubjectType.USER.name());
+        dataObject.setSubjectId(7L);
         dataObject.setName("automation");
         dataObject.setDescription("deployment automation");
         dataObject.setSecretHash("hash");

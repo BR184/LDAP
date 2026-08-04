@@ -9,6 +9,7 @@ import com.company.idm.domain.user.UserRepository;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -39,7 +40,9 @@ public class JwtBearerCredentialAuthenticator implements BearerCredentialAuthent
             CredentialType.SESSION,
             null,
             Set.of(),
-            null
+            null,
+            PersonalAccessTokenSubjectType.USER,
+            user.getId()
         ));
     }
 }

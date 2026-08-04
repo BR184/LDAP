@@ -2,6 +2,7 @@ import {
   Connection,
   FolderOpened,
   Lock,
+  Collection,
   Menu as MenuIcon,
   Message,
   OfficeBuilding,
@@ -41,6 +42,12 @@ export const flatNavigationItems: NavigationItem[] = [
     path: '/roles',
     icon: Lock,
     description: '维护角色基础信息与权限授权',
+  },
+  {
+    title: '角色组管理',
+    path: '/role-groups',
+    icon: Collection,
+    description: '委派维护角色成员关系与对外供给令牌',
   },
   {
     title: '菜单管理',
@@ -108,6 +115,12 @@ export const sidebarNavigationGroups: NavigationGroup[] = [
         path: '/roles',
         icon: Lock,
         description: '维护角色基础信息与权限授权',
+      },
+      {
+        title: '角色组管理',
+        path: '/role-groups',
+        icon: Collection,
+        description: '委派维护角色成员关系与对外供给令牌',
       },
       {
         title: 'LDAP 控制面',

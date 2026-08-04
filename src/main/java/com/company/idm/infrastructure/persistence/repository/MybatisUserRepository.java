@@ -4,11 +4,16 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.domain.user.User;
+import com.company.idm.domain.user.PublicUser;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.domain.user.UserRoleBinding;
 import com.company.idm.infrastructure.persistence.dataobject.UserPartTimeDepartmentDO;
 import com.company.idm.infrastructure.persistence.dataobject.UserDO;
 import com.company.idm.infrastructure.persistence.dataobject.UserRoleDO;
+import com.company.idm.infrastructure.persistence.dataobject.RoleDO;
+import com.company.idm.infrastructure.persistence.dataobject.RoleMembershipChangeDO;
+import com.company.idm.infrastructure.persistence.mapper.RoleMapper;
+import com.company.idm.infrastructure.persistence.mapper.RoleMembershipChangeMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserPartTimeDepartmentMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserRoleMapper;
@@ -34,6 +39,8 @@ public class MybatisUserRepository implements UserRepository {
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
     private final UserPartTimeDepartmentMapper userPartTimeDepartmentMapper;
+    private final RoleMapper roleMapper;
+    private final RoleMembershipChangeMapper roleMembershipChangeMapper;
 
     @Override
     public Optional<User> findById(Long id) {
@@ -110,6 +117,48 @@ public class MybatisUserRepository implements UserRepository {
         }
 
         return toDomains(userMapper.selectList(queryWrapper));
+    }
+
+    @Override
+    public List<PublicUser> searchPublicUsers(String realNameKeyword, int limit) {
+        String keyword = realNameKeyword == null ? "" : realNameKeyword.trim();
+        int boundedLimit = Math.max(1, Math.min(limit, 50));
+        LambdaQueryWrapper<UserDO> query = new LambdaQueryWrapper<UserDO>()
+            .select(UserDO::getId, UserDO::getRealName)
+            .eq(UserDO::getDeleted, 0)
+            .eq(UserDO::getEmploymentStatus, EmploymentStatus.ACTIVE.name())
+            .orderByAsc(UserDO::getRealName)
+            .orderByAsc(UserDO::getId)
+            .last("LIMIT " + boundedLimit);
+        if (!keyword.isBlank()) {
+            query.like(UserDO::getRealName, keyword);
+        }
+        return userMapper.selectList(query).stream()
+            .map(user -> new PublicUser(user.getId(), user.getRealName()))
+            .toList();
+    }
+
+    @Override
+    public List<PublicUser> findPublicUsersByRoleId(Long roleId) {
+        if (roleId == null) {
+            return List.of();
+        }
+        return userRoleMapper.selectPublicUsersByRoleId(roleId).stream()
+            .map(user -> new PublicUser(user.userId(), user.realName()))
+            .toList();
+    }
+
+    @Override
+    public List<Long> findRoleIdsByUserId(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
+        return userRoleMapper.selectList(new LambdaQueryWrapper<UserRoleDO>()
+                .eq(UserRoleDO::getUserId, userId))
+            .stream()
+            .map(UserRoleDO::getRoleId)
+            .distinct()
+            .toList();
     }
 
     @Override
@@ -194,28 +243,35 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
-    public void assignRoles(Long userId, List<Long> roleIds) {
-        userRoleMapper.delete(new LambdaQueryWrapper<UserRoleDO>().eq(UserRoleDO::getUserId, userId));
-        for (Long roleId : roleIds) {
-            UserRoleDO relation = new UserRoleDO();
-            relation.setUserId(userId);
-            relation.setRoleId(roleId);
-            relation.setCreator("system");
-            relation.setGmtCreate(LocalDateTime.now());
-            userRoleMapper.insert(relation);
+    @Transactional
+    public void assignRoles(Long userId, List<Long> roleIds, String operator) {
+        Set<Long> expected = roleIds == null ? Set.of() : new HashSet<>(roleIds);
+        Set<Long> current = userRoleMapper.selectList(new LambdaQueryWrapper<UserRoleDO>()
+                .eq(UserRoleDO::getUserId, userId))
+            .stream()
+            .map(UserRoleDO::getRoleId)
+            .collect(java.util.stream.Collectors.toSet());
+        for (Long roleId : current) {
+            if (!expected.contains(roleId)) {
+                removeRole(userId, roleId, operator);
+            }
+        }
+        for (Long roleId : expected) {
+            if (!current.contains(roleId)) {
+                addRole(userId, roleId, operator);
+            }
         }
     }
 
     @Override
-    public void syncRoleBindings(Long roleId, Set<Long> expectedUserIds) {
+    @Transactional
+    public void syncRoleBindings(Long roleId, Set<Long> expectedUserIds, String operator) {
         Set<Long> expected = expectedUserIds == null ? Set.of() : new HashSet<>(expectedUserIds);
         List<UserRoleDO> currentBindings = userRoleMapper.selectList(new LambdaQueryWrapper<UserRoleDO>()
             .eq(UserRoleDO::getRoleId, roleId));
         for (UserRoleDO binding : currentBindings) {
             if (!expected.contains(binding.getUserId())) {
-                userRoleMapper.delete(new LambdaQueryWrapper<UserRoleDO>()
-                    .eq(UserRoleDO::getUserId, binding.getUserId())
-                    .eq(UserRoleDO::getRoleId, roleId));
+                removeRole(binding.getUserId(), roleId, operator);
             }
         }
         Set<Long> currentUserIds = currentBindings.stream()
@@ -225,18 +281,48 @@ public class MybatisUserRepository implements UserRepository {
             if (currentUserIds.contains(userId)) {
                 continue;
             }
-            UserRoleDO relation = new UserRoleDO();
-            relation.setUserId(userId);
-            relation.setRoleId(roleId);
-            relation.setCreator("system");
-            relation.setGmtCreate(LocalDateTime.now());
-            userRoleMapper.insert(relation);
+            addRole(userId, roleId, operator);
         }
     }
 
     @Override
-    public void removeAllRoles(Long userId) {
-        userRoleMapper.delete(new LambdaQueryWrapper<UserRoleDO>().eq(UserRoleDO::getUserId, userId));
+    @Transactional
+    public void removeAllRoles(Long userId, String operator) {
+        List<Long> roleIds = userRoleMapper.selectList(new LambdaQueryWrapper<UserRoleDO>()
+                .eq(UserRoleDO::getUserId, userId))
+            .stream()
+            .map(UserRoleDO::getRoleId)
+            .toList();
+        roleIds.forEach(roleId -> removeRole(userId, roleId, operator));
+    }
+
+    @Override
+    @Transactional
+    public void addRole(Long userId, Long roleId, String operator) {
+        long existing = userRoleMapper.selectCount(new LambdaQueryWrapper<UserRoleDO>()
+            .eq(UserRoleDO::getUserId, userId)
+            .eq(UserRoleDO::getRoleId, roleId));
+        if (existing > 0) {
+            return;
+        }
+        UserRoleDO relation = new UserRoleDO();
+        relation.setUserId(userId);
+        relation.setRoleId(roleId);
+        relation.setCreator(normalizeOperator(operator));
+        relation.setGmtCreate(LocalDateTime.now());
+        userRoleMapper.insert(relation);
+        recordMembershipChange(userId, roleId, "ADDED", operator);
+    }
+
+    @Override
+    @Transactional
+    public void removeRole(Long userId, Long roleId, String operator) {
+        int deleted = userRoleMapper.delete(new LambdaQueryWrapper<UserRoleDO>()
+            .eq(UserRoleDO::getUserId, userId)
+            .eq(UserRoleDO::getRoleId, roleId));
+        if (deleted > 0) {
+            recordMembershipChange(userId, roleId, "REMOVED", operator);
+        }
     }
 
     @Override
@@ -385,5 +471,29 @@ public class MybatisUserRepository implements UserRepository {
             .filter(code -> !code.equals(mainDeptCode))
             .distinct()
             .toList();
+    }
+
+    private void recordMembershipChange(Long userId, Long roleId, String changeType, String operator) {
+        UserDO user = userMapper.selectById(userId);
+        RoleDO role = roleMapper.selectById(roleId);
+        if (user == null || role == null) {
+            throw new IllegalStateException("Cannot record role membership change without user and role snapshots");
+        }
+        RoleMembershipChangeDO change = new RoleMembershipChangeDO();
+        change.setRoleId(roleId);
+        change.setRoleCode(role.getRoleCode());
+        change.setRoleName(role.getRoleName());
+        change.setRoleScope(role.getRoleScope());
+        change.setRoleGroupId(role.getRoleGroupId());
+        change.setUserId(userId);
+        change.setMemberName(user.getRealName());
+        change.setChangeType(changeType);
+        change.setOperator(normalizeOperator(operator));
+        change.setGmtCreate(LocalDateTime.now());
+        roleMembershipChangeMapper.insert(change);
+    }
+
+    private String normalizeOperator(String operator) {
+        return operator == null || operator.isBlank() ? "system" : operator.trim();
     }
 }

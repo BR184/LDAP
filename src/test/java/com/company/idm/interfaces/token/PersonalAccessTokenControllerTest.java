@@ -12,6 +12,7 @@ import com.company.idm.domain.token.PersonalAccessToken;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
 import com.company.idm.domain.token.PersonalAccessTokenScopeMode;
+import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -103,6 +104,8 @@ class PersonalAccessTokenControllerTest {
             .id(11L)
             .tokenUid("uid")
             .userId(7L)
+            .subjectType(PersonalAccessTokenSubjectType.USER)
+            .subjectId(7L)
             .name("automation")
             .secretHash("stored-hash")
             .secretValue("idm_pat_uid_secret")
@@ -114,6 +117,9 @@ class PersonalAccessTokenControllerTest {
     }
 
     private AuthenticatedUser principal() {
-        return new AuthenticatedUser(7L, "employee", 0, Set.of(), CredentialType.SESSION, null, Set.of(), null);
+        return new AuthenticatedUser(
+            7L, "employee", 0, Set.of(), CredentialType.SESSION, null, Set.of(), null,
+            PersonalAccessTokenSubjectType.USER, 7L
+        );
     }
 }
