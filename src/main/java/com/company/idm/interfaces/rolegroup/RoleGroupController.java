@@ -30,12 +30,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/role-groups")
 @RequiredArgsConstructor
-@PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_GROUP_MANAGE')")
 public class RoleGroupController {
+
+    private static final String READ_OR_MANAGE =
+        "@casbinAccessService.hasAny(authentication, 'ROLE_GROUP_READ', 'ROLE_GROUP_MANAGE')";
+    private static final String MANAGE =
+        "@casbinAccessService.hasAny(authentication, 'ROLE_GROUP_MANAGE')";
+    private static final String MANAGE_AND_ASSIGN =
+        "@casbinAccessService.hasAny(authentication, 'ROLE_GROUP_MANAGE')"
+            + " and @casbinAccessService.hasAny(authentication, 'ROLE_GROUP_USER_ASSIGN')";
 
     private final RoleGroupApplicationService roleGroupApplicationService;
 
     @GetMapping
+    @PreAuthorize(READ_OR_MANAGE)
     public ApiResponse<List<RoleGroupResponse>> list(@AuthenticationPrincipal AuthenticatedUser principal) {
         return ApiResponse.success(roleGroupApplicationService.listGroups(principal).stream()
             .map(this::toResponse)
@@ -43,6 +51,7 @@ public class RoleGroupController {
     }
 
     @GetMapping("/{groupId}")
+    @PreAuthorize(READ_OR_MANAGE)
     public ApiResponse<RoleGroupResponse> detail(
         @PathVariable Long groupId,
         @AuthenticationPrincipal AuthenticatedUser principal
@@ -51,6 +60,7 @@ public class RoleGroupController {
     }
 
     @PostMapping
+    @PreAuthorize(MANAGE)
     public ApiResponse<RoleGroupResponse> create(
         @Valid @RequestBody SaveRoleGroupRequest request,
         @AuthenticationPrincipal AuthenticatedUser principal
@@ -61,6 +71,7 @@ public class RoleGroupController {
     }
 
     @PutMapping("/{groupId}")
+    @PreAuthorize(MANAGE)
     public ApiResponse<RoleGroupResponse> update(
         @PathVariable Long groupId,
         @Valid @RequestBody SaveRoleGroupRequest request,
@@ -72,6 +83,7 @@ public class RoleGroupController {
     }
 
     @DeleteMapping("/{groupId}")
+    @PreAuthorize(MANAGE)
     public ApiResponse<Void> delete(
         @PathVariable Long groupId,
         @AuthenticationPrincipal AuthenticatedUser principal
@@ -81,6 +93,7 @@ public class RoleGroupController {
     }
 
     @GetMapping("/{groupId}/collaborators")
+    @PreAuthorize(READ_OR_MANAGE)
     public ApiResponse<List<RoleGroupMemberResponse>> collaborators(
         @PathVariable Long groupId,
         @AuthenticationPrincipal AuthenticatedUser principal
@@ -91,6 +104,7 @@ public class RoleGroupController {
     }
 
     @PutMapping("/{groupId}/collaborators/{userId}")
+    @PreAuthorize(MANAGE)
     public ApiResponse<RoleGroupMemberResponse> saveCollaborator(
         @PathVariable Long groupId,
         @PathVariable Long userId,
@@ -103,6 +117,7 @@ public class RoleGroupController {
     }
 
     @DeleteMapping("/{groupId}/collaborators/{userId}")
+    @PreAuthorize(MANAGE)
     public ApiResponse<Void> removeCollaborator(
         @PathVariable Long groupId,
         @PathVariable Long userId,
@@ -113,6 +128,7 @@ public class RoleGroupController {
     }
 
     @GetMapping("/{groupId}/users")
+    @PreAuthorize(READ_OR_MANAGE)
     public ApiResponse<List<PublicUserResponse>> searchUsers(
         @PathVariable Long groupId,
         @RequestParam(defaultValue = "") String keyword,
@@ -124,6 +140,7 @@ public class RoleGroupController {
     }
 
     @GetMapping("/{groupId}/roles")
+    @PreAuthorize(READ_OR_MANAGE)
     public ApiResponse<List<RoleGroupRoleResponse>> roles(
         @PathVariable Long groupId,
         @AuthenticationPrincipal AuthenticatedUser principal
@@ -134,6 +151,7 @@ public class RoleGroupController {
     }
 
     @PostMapping("/{groupId}/roles")
+    @PreAuthorize(MANAGE)
     public ApiResponse<RoleGroupRoleResponse> createRole(
         @PathVariable Long groupId,
         @Valid @RequestBody CreateGroupRoleRequest request,
@@ -145,6 +163,7 @@ public class RoleGroupController {
     }
 
     @PutMapping("/{groupId}/roles/{roleId}")
+    @PreAuthorize(MANAGE)
     public ApiResponse<RoleGroupRoleResponse> updateRole(
         @PathVariable Long groupId,
         @PathVariable Long roleId,
@@ -157,6 +176,7 @@ public class RoleGroupController {
     }
 
     @DeleteMapping("/{groupId}/roles/{roleId}")
+    @PreAuthorize(MANAGE)
     public ApiResponse<Void> deleteRole(
         @PathVariable Long groupId,
         @PathVariable Long roleId,
@@ -167,6 +187,7 @@ public class RoleGroupController {
     }
 
     @GetMapping("/{groupId}/roles/{roleId}/members")
+    @PreAuthorize(READ_OR_MANAGE)
     public ApiResponse<List<PublicUserResponse>> roleMembers(
         @PathVariable Long groupId,
         @PathVariable Long roleId,
@@ -178,7 +199,7 @@ public class RoleGroupController {
     }
 
     @PostMapping("/{groupId}/roles/{roleId}/members")
-    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_GROUP_USER_ASSIGN')")
+    @PreAuthorize(MANAGE_AND_ASSIGN)
     public ApiResponse<Void> addRoleMembers(
         @PathVariable Long groupId,
         @PathVariable Long roleId,
@@ -190,7 +211,7 @@ public class RoleGroupController {
     }
 
     @DeleteMapping("/{groupId}/roles/{roleId}/members/{userId}")
-    @PreAuthorize("@casbinAccessService.hasAny(authentication, 'ROLE_GROUP_USER_ASSIGN')")
+    @PreAuthorize(MANAGE_AND_ASSIGN)
     public ApiResponse<Void> removeRoleMember(
         @PathVariable Long groupId,
         @PathVariable Long roleId,

@@ -28,7 +28,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
-@PreAuthorize("@credentialAccessService.isSession(authentication)")
+@PreAuthorize(
+    "@credentialAccessService.isSession(authentication)"
+        + " and @casbinAccessService.hasAny(authentication, 'ROLE_GROUP_MANAGE')"
+)
 public class RoleSupplyTokenController {
 
     private final RoleSupplyTokenApplicationService applicationService;
