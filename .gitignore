@@ -2,6 +2,7 @@ target/
 .idea/
 .vscode/
 .tools/
+.worktrees/
 *.log
 __pycache__/
 scripts/pinyin-helper/node_modules/
