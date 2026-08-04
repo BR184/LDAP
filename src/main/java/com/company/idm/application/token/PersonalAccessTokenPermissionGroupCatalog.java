@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,7 @@ public class PersonalAccessTokenPermissionGroupCatalog {
     private final int version;
     private final List<PersonalAccessTokenPermissionGroup> groups;
 
+    @Autowired
     public PersonalAccessTokenPermissionGroupCatalog(
         ObjectMapper objectMapper,
         PermissionRepository permissionRepository
