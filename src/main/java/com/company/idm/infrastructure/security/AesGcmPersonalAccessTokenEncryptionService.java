@@ -12,6 +12,7 @@ import java.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -25,6 +26,7 @@ public class AesGcmPersonalAccessTokenEncryptionService implements PersonalAcces
     private final PersonalAccessTokenEncryptionProperties properties;
     private final SecureRandom secureRandom;
 
+    @Autowired
     public AesGcmPersonalAccessTokenEncryptionService(PersonalAccessTokenEncryptionProperties properties) {
         this(properties, new SecureRandom());
     }
