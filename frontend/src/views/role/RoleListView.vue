@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Plus, Search } from '@element-plus/icons-vue'
+import { Delete, Lock, Plus, Search } from '@element-plus/icons-vue'
 import { fetchPermissionTree, fetchRolePermissionBundles } from '@/api/modules/permission'
 import { fetchGovernedRoles, fetchRoleGroups, updateGovernedRoleScope } from '@/api/modules/role-group'
 import { useAuthStore } from '@/stores/auth'
@@ -22,8 +22,6 @@ import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTabl
 import type { PermissionTreeNode, RolePermissionBundle } from '@/types/permission'
 import type { CreateRolePayload, RoleItem, UpdateRolePayload } from '@/types/role'
 import type { GovernedRoleItem, RoleScope } from '@/types/role-group'
-
-const SUPER_ADMIN_ROLE_CODE = 'SUPER_ADMIN'
 
 const queryClient = useQueryClient()
 const authStore = useAuthStore()
@@ -212,7 +210,7 @@ function handleSelectionChange(rows: RoleItem[]) {
 }
 
 function selectableRole(row: RoleItem) {
-  return row.roleCode !== SUPER_ADMIN_ROLE_CODE
+  return row.builtIn !== 1
 }
 
 function openCreate() {
@@ -354,6 +352,7 @@ function statusTagType(status: number) {
 }
 
 async function handleScopeChange(role: GovernedRoleItem, roleScope: RoleScope) {
+  if (role.builtIn === 1) return
   if (roleScope === role.roleScope) return
   if (roleScope === 'GROUP') {
     scopeTargetRole.value = role
@@ -453,6 +452,7 @@ function scopeText(scope: RoleScope) {
         <el-table-column v-if="authStore.isAdmin" label="作用域" width="150" align="center">
           <template #default="{ row }">
             <el-select
+              v-if="row.builtIn !== 1"
               :model-value="row.roleScope"
               size="small"
               :loading="updateScopeMutation.isPending.value"
@@ -462,6 +462,12 @@ function scopeText(scope: RoleScope) {
               <el-option label="全局" value="GLOBAL" />
               <el-option :label="scopeText('GROUP')" value="GROUP" />
             </el-select>
+            <el-tooltip v-else content="内置角色作用域已锁定" placement="top">
+              <el-tag effect="plain" type="info" class="scope-lock-tag">
+                <el-icon><Lock /></el-icon>
+                {{ scopeText(row.roleScope) }}
+              </el-tag>
+            </el-tooltip>
           </template>
         </el-table-column>
         <el-table-column label="类型" width="120" align="center">
@@ -480,10 +486,10 @@ function scopeText(scope: RoleScope) {
             <el-space wrap>
               <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
               <el-button v-if="row.roleScope !== 'GROUP'" link type="success" @click="openGrantPermissions(row)">授权权限</el-button>
-              <el-button link type="info" @click="handleToggleStatus(row)">
+              <el-button v-if="row.builtIn !== 1" link type="info" @click="handleToggleStatus(row)">
                 {{ row.status === 1 ? '禁用' : '启用' }}
               </el-button>
-              <el-button v-if="row.roleCode !== SUPER_ADMIN_ROLE_CODE" link type="danger" @click="handleDelete(row)">
+              <el-button v-if="row.builtIn !== 1" link type="danger" @click="handleDelete(row)">
                 删除
               </el-button>
             </el-space>
@@ -589,5 +595,11 @@ function scopeText(scope: RoleScope) {
   margin: 0 0 18px;
   color: var(--idm-text-secondary);
   line-height: 1.7;
+}
+
+.scope-lock-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 </style>

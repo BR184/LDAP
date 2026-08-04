@@ -114,7 +114,7 @@ function closeDrawer() {
         class="role-form-drawer__alert"
         :closable="false"
         show-icon
-        title="当前为内置角色，请谨慎修改权限等级和名称。"
+        title="当前为内置角色，权限等级和结构属性已锁定。"
         type="warning"
       />
     </template>
@@ -142,7 +142,14 @@ function closeDrawer() {
       </el-form-item>
 
       <el-form-item label="权限等级" prop="permissionLevel">
-        <el-input-number v-model="form.permissionLevel" :min="1" :step="1" controls-position="right" style="width: 100%" />
+        <el-input-number
+          v-model="form.permissionLevel"
+          :disabled="role?.builtIn === 1"
+          :min="1"
+          :step="1"
+          controls-position="right"
+          style="width: 100%"
+        />
       </el-form-item>
 
       <el-form-item label="备注">

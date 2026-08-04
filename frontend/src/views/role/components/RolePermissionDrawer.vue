@@ -3,6 +3,13 @@ import { computed, nextTick, ref, watch } from 'vue'
 import type { TreeInstance } from 'element-plus'
 import type { PermissionTreeNode, RolePermissionBundle } from '@/types/permission'
 import type { RoleItem } from '@/types/role'
+import {
+  applyPermissionSuiteLevel,
+  buildPermissionSuiteCategories,
+  resolvePermissionSuiteLevel,
+  type PermissionSuiteCategory,
+  type SelectablePermissionSuiteLevel,
+} from './permissionSuiteSelection'
 
 const props = defineProps<{
   modelValue: boolean
@@ -27,12 +34,12 @@ const effectiveCheckedPermissionIds = computed(() =>
   autoGrantFullAccess.value ? collectPermissionIds(props.permissionTree) : selectedPermissionIds.value,
 )
 const checkedCount = computed(() => effectiveCheckedPermissionIds.value.length)
-const activeBundleIds = computed(() => {
-  const selected = new Set(effectiveCheckedPermissionIds.value)
-  return props.permissionBundles
-    .filter((bundle) => bundle.permissionIds.every((permissionId) => selected.has(permissionId)))
-    .map((bundle) => bundle.id)
-})
+const permissionSuiteCategories = computed(() => buildPermissionSuiteCategories(props.permissionBundles))
+const permissionSuiteOptions = [
+  { label: '未配置', value: 'NONE' },
+  { label: '常规操作', value: 'STANDARD' },
+  { label: '完整管理', value: 'ADMIN' },
+]
 
 watch(
   () => [props.modelValue, props.checkedPermissionIds, props.permissionTree] as const,
@@ -56,33 +63,26 @@ function handleSubmit() {
   emit('submit', [...effectiveCheckedPermissionIds.value])
 }
 
-function handleBundleSelectionChange(values: Array<string | number | boolean>) {
+function handleSuiteLevelChange(categoryId: string, rawLevel: string | number | boolean | undefined) {
   if (autoGrantFullAccess.value) return
-  const nextBundleIds = new Set(values.map(String))
-  const previousBundleIds = new Set(activeBundleIds.value)
-  const selectedPermissionIdSet = new Set(selectedPermissionIds.value)
-
-  for (const bundle of props.permissionBundles) {
-    if (nextBundleIds.has(bundle.id) && !previousBundleIds.has(bundle.id)) {
-      bundle.permissionIds.forEach((permissionId) => selectedPermissionIdSet.add(permissionId))
-    }
-  }
-
-  const retainedBundlePermissionIds = new Set(
-    props.permissionBundles
-      .filter((bundle) => nextBundleIds.has(bundle.id))
-      .flatMap((bundle) => bundle.permissionIds),
+  const level = String(rawLevel) as SelectablePermissionSuiteLevel
+  if (!['NONE', 'STANDARD', 'ADMIN'].includes(level)) return
+  selectedPermissionIds.value = applyPermissionSuiteLevel(
+    permissionSuiteCategories.value,
+    categoryId,
+    level,
+    selectedPermissionIds.value,
   )
-  for (const bundle of props.permissionBundles) {
-    if (previousBundleIds.has(bundle.id) && !nextBundleIds.has(bundle.id)) {
-      bundle.permissionIds.forEach((permissionId) => {
-        if (!retainedBundlePermissionIds.has(permissionId)) selectedPermissionIdSet.delete(permissionId)
-      })
-    }
-  }
-
-  selectedPermissionIds.value = [...selectedPermissionIdSet]
   syncTreeSelection()
+}
+
+function suiteLevel(category: PermissionSuiteCategory) {
+  return resolvePermissionSuiteLevel(category, effectiveCheckedPermissionIds.value)
+}
+
+function segmentedLevel(category: PermissionSuiteCategory) {
+  const level = suiteLevel(category)
+  return level === 'CUSTOM' ? undefined : level
 }
 
 function handleTreeCheck(_: PermissionTreeNode, state: { checkedKeys: Array<string | number> }) {
@@ -106,7 +106,7 @@ function collectPermissionIds(nodes: PermissionTreeNode[]): number[] {
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" title="授权权限" width="760px" @close="closeDialog">
+  <el-dialog :model-value="modelValue" title="授权权限" width="920px" @close="closeDialog">
     <template v-if="role">
       <el-alert :closable="false" show-icon type="info">
         当前角色：{{ role.roleName }}（{{ role.roleCode }}），当前已勾选 {{ checkedCount }} 个权限点。
@@ -123,19 +123,33 @@ function collectPermissionIds(nodes: PermissionTreeNode[]): number[] {
 
       <section v-if="permissionBundles.length" class="permission-bundles">
         <div class="permission-bundles__heading">
-          <strong>常用权限套件</strong>
-          <span>快速勾选常用能力，仍可在下方调整单项权限</span>
+          <strong>模块权限套件</strong>
+          <span>按职责选择授权等级</span>
         </div>
-        <el-checkbox-group
-          :model-value="activeBundleIds"
-          :disabled="autoGrantFullAccess"
-          class="permission-bundles__options"
-          @change="handleBundleSelectionChange"
-        >
-          <el-checkbox-button v-for="bundle in permissionBundles" :key="bundle.id" :value="bundle.id">
-            {{ bundle.name }}
-          </el-checkbox-button>
-        </el-checkbox-group>
+        <div class="permission-bundles__matrix">
+          <div
+            v-for="category in permissionSuiteCategories"
+            :key="category.categoryId"
+            class="permission-bundles__row"
+          >
+            <div class="permission-bundles__module">
+              <strong>{{ category.categoryName }}</strong>
+              <span>{{ category.categoryDescription }}</span>
+            </div>
+            <span class="permission-bundles__count">
+              常规 {{ category.standard.permissionIds.length }} 项 · 完整 {{ category.admin.permissionIds.length }} 项
+            </span>
+            <div class="permission-bundles__control">
+              <el-tag v-if="suiteLevel(category) === 'CUSTOM'" type="warning" effect="plain">自定义</el-tag>
+              <el-segmented
+                :model-value="segmentedLevel(category)"
+                :options="permissionSuiteOptions"
+                :disabled="autoGrantFullAccess"
+                @change="(value) => handleSuiteLevelChange(category.categoryId, value)"
+              />
+            </div>
+          </div>
+        </div>
       </section>
 
       <div v-loading="initializing" class="role-tree-dialog__body">
@@ -183,10 +197,10 @@ function collectPermissionIds(nodes: PermissionTreeNode[]): number[] {
 
 .permission-bundles {
   margin-top: 16px;
-  padding: 14px 16px;
+  overflow: hidden;
   border: 1px solid var(--idm-border-color);
   border-radius: var(--idm-radius-md);
-  background: rgba(248, 250, 249, 0.82);
+  background: rgba(250, 251, 250, 0.88);
 }
 
 .permission-bundles__heading {
@@ -194,7 +208,8 @@ function collectPermissionIds(nodes: PermissionTreeNode[]): number[] {
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--idm-border-color-lighter);
 }
 
 .permission-bundles__heading span {
@@ -202,16 +217,59 @@ function collectPermissionIds(nodes: PermissionTreeNode[]): number[] {
   font-size: 12px;
 }
 
-.permission-bundles__options {
+.permission-bundles__matrix {
+  display: grid;
+}
+
+.permission-bundles__row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) 148px 318px;
+  align-items: center;
+  gap: 16px;
+  min-height: 68px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--idm-border-color-lighter);
+}
+
+.permission-bundles__row:last-child {
+  border-bottom: 0;
+}
+
+.permission-bundles__module {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.permission-bundles__module span,
+.permission-bundles__count {
+  color: var(--idm-text-secondary);
+  font-size: 12px;
+}
+
+.permission-bundles__module span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-bundles__count {
+  white-space: nowrap;
+}
+
+.permission-bundles__control {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 
-.permission-bundles__options :deep(.el-checkbox-button__inner) {
-  border: 1px solid var(--idm-border-color);
-  border-radius: 4px;
-  box-shadow: none;
+.permission-bundles__control :deep(.el-segmented) {
+  width: 268px;
+}
+
+.permission-bundles__control :deep(.el-segmented__item) {
+  min-width: 0;
 }
 
 .role-tree-dialog__node {
