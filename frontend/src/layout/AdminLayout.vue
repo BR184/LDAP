@@ -246,7 +246,6 @@ function handleMenuSelect(index: string) {
   border-bottom: 1px solid var(--idm-border-color-light);
   background: var(--idm-header-background);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  z-index: 100;
 }
 
 .admin-layout__header-left,

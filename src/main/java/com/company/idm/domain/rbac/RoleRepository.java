@@ -11,6 +11,8 @@ public interface RoleRepository {
 
     Optional<Role> findById(Long id);
 
+    Optional<Role> findByIdForUpdate(Long id);
+
     Optional<Role> findByCode(String roleCode);
 
     List<Role> findAll();

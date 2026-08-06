@@ -121,7 +121,12 @@ public class RoleController {
         @Valid @RequestBody GrantRolePermissionsRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
     ) {
-        rbacApplicationService.grantPermissions(new GrantRolePermissionsCommand(id, request.permissionIds(), username));
+        rbacApplicationService.grantPermissions(new GrantRolePermissionsCommand(
+            id,
+            request.permissionIds(),
+            request.expectedPermissionIds(),
+            username
+        ));
         return ApiResponse.success();
     }
 

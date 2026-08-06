@@ -235,7 +235,12 @@ public class UserController {
         @Valid @RequestBody AssignUserRolesRequest request,
         @AuthenticationPrincipal(expression = "userId") String username
     ) {
-        rbacApplicationService.assignUserRoles(new AssignUserRolesCommand(id, request.roleIds(), username));
+        rbacApplicationService.assignUserRoles(new AssignUserRolesCommand(
+            id,
+            request.roleIds(),
+            request.expectedRoleIds(),
+            username
+        ));
         return ApiResponse.success();
     }
 

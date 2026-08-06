@@ -1,0 +1,16 @@
+将脚本放到内网 Linux 服务器后执行：
+bash restore-admin-permissions.sh /原LDAP部署目录
+例如：
+bash restore-admin-permissions.sh /opt/corp-idm
+脚本会自动：
+备份用户、角色和权限相关数据库表
+保留 admin 已有的其他平台角色
+补回 SUPER_ADMIN
+为 SUPER_ADMIN 补齐全部启用权限
+恢复 admin 的平台准入与在职状态
+只重启 idm-app，刷新 Casbin 权限
+校验 admin 绑定和权限数量
+不修改 admin 密码、LDAP 数据或其他用户
+已通过 Bash 语法和 Linux 换行格式检查。
+
+

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import axios from 'axios'
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -23,6 +24,7 @@ import type { PermissionTreeNode, RolePermissionBundle } from '@/types/permissio
 import type { CreateRolePayload, RoleItem, UpdateRolePayload } from '@/types/role'
 import type { GovernedRoleItem, RoleScope } from '@/types/role-group'
 
+const SUPER_ADMIN_ROLE_CODE = 'SUPER_ADMIN'
 const queryClient = useQueryClient()
 const authStore = useAuthStore()
 const tableRef = ref<{ clearSelection?: () => void } | null>(null)
@@ -56,6 +58,7 @@ const permissionDrawerVisible = ref(false)
 const permissionDrawerLoading = ref(false)
 const permissionDrawerRole = ref<RoleItem | null>(null)
 const checkedPermissionIds = ref<number[]>([])
+const expectedPermissionIds = ref<number[]>([])
 const scopeDialogVisible = ref(false)
 const scopeTargetRole = ref<GovernedRoleItem | null>(null)
 const scopeTargetGroupId = ref<number | null>(null)
@@ -129,12 +132,27 @@ const batchDeleteRolesMutation = useMutation({
 })
 
 const grantPermissionsMutation = useMutation({
-  mutationFn: ({ roleId, permissionIds }: { roleId: number; permissionIds: number[] }) =>
-    grantRolePermissions(roleId, { permissionIds }),
+  mutationFn: ({ roleId, permissionIds, baselinePermissionIds }: {
+    roleId: number
+    permissionIds: number[]
+    baselinePermissionIds: number[]
+  }) => grantRolePermissions(roleId, { permissionIds, expectedPermissionIds: baselinePermissionIds }),
   onSuccess: async () => {
     ElMessage.success('权限授权已保存')
     permissionDrawerVisible.value = false
     await refreshRoles()
+  },
+  onError: async (error) => {
+    if (!axios.isAxiosError(error) || error.response?.status !== 409 || !permissionDrawerRole.value) {
+      return
+    }
+    permissionDrawerLoading.value = true
+    try {
+      await loadCurrentPermissionAssignment(permissionDrawerRole.value)
+      await refreshRoles()
+    } finally {
+      permissionDrawerLoading.value = false
+    }
   },
 })
 
@@ -231,14 +249,31 @@ function openEdit(role: RoleItem) {
   formVisible.value = true
 }
 
+async function loadCurrentPermissionAssignment(role: RoleItem) {
+  const [permissionIds] = await Promise.all([
+    fetchRolePermissionIds(role.id),
+    permissionTreeQuery.refetch(),
+    permissionBundlesQuery.refetch(),
+  ])
+  permissionDrawerRole.value = role
+  checkedPermissionIds.value = permissionIds
+  expectedPermissionIds.value = [...permissionIds]
+}
+
 async function openGrantPermissions(role: RoleItem) {
+  if (role.roleCode === SUPER_ADMIN_ROLE_CODE) {
+    return
+  }
   permissionDrawerRole.value = role
   checkedPermissionIds.value = []
+  expectedPermissionIds.value = []
   permissionDrawerVisible.value = true
   permissionDrawerLoading.value = true
 
   try {
-    checkedPermissionIds.value = await fetchRolePermissionIds(role.id)
+    await loadCurrentPermissionAssignment(role)
+  } catch {
+    permissionDrawerVisible.value = false
   } finally {
     permissionDrawerLoading.value = false
   }
@@ -338,6 +373,7 @@ async function handleGrantPermissions(permissionIds: number[]) {
   await grantPermissionsMutation.mutateAsync({
     roleId: permissionDrawerRole.value.id,
     permissionIds,
+    baselinePermissionIds: expectedPermissionIds.value,
   })
 }
 
@@ -492,7 +528,21 @@ function scopeText(scope: RoleScope) {
           <template #default="{ row }">
             <el-space wrap>
               <el-button v-if="authStore.can('ROLE_UPDATE')" link type="primary" @click="openEdit(row)">编辑</el-button>
-              <el-button v-if="row.roleScope !== 'GROUP' && authStore.can('ROLE_PERMISSION_ASSIGN') && canReadPermissionAssignments" link type="success" @click="openGrantPermissions(row)">授权权限</el-button>
+              <el-tag
+                v-if="row.roleCode === SUPER_ADMIN_ROLE_CODE && row.roleScope !== 'GROUP' && authStore.can('ROLE_PERMISSION_ASSIGN')"
+                effect="plain"
+                type="info"
+              >
+                权限由系统托管
+              </el-tag>
+              <el-button
+                v-else-if="row.roleScope !== 'GROUP' && authStore.can('ROLE_PERMISSION_ASSIGN') && canReadPermissionAssignments"
+                link
+                type="success"
+                @click="openGrantPermissions(row)"
+              >
+                授权权限
+              </el-button>
               <el-button v-if="row.builtIn !== 1 && authStore.can('ROLE_STATUS')" link type="info" @click="handleToggleStatus(row)">
                 {{ row.status === 1 ? '禁用' : '启用' }}
               </el-button>

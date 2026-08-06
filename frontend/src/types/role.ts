@@ -29,6 +29,7 @@ export interface UpdateRoleStatusPayload {
 
 export interface GrantRolePermissionsPayload {
   permissionIds: number[]
+  expectedPermissionIds?: number[]
 }
 
 export interface BatchDeleteRolesPayload {

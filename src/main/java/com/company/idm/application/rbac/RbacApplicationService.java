@@ -13,6 +13,7 @@ import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.rbac.RoleScope;
 import com.company.idm.application.rolegroup.DelegatedPermissionPairPolicy;
+import com.company.idm.application.user.SystemAdministratorProtectionPolicy;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import java.util.HashMap;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RbacApplicationService {
 
     private static final String AUTH_ME_PERMISSION_CODE = "AUTH_ME";
+    private static final String SUPER_ADMIN_ROLE_CODE = "SUPER_ADMIN";
     private static final int FULL_ACCESS_PERMISSION_LEVEL = 2;
 
     private final RoleRepository roleRepository;
@@ -40,6 +42,7 @@ public class RbacApplicationService {
     private final PermissionLevelRuleService permissionLevelRuleService;
     private final MenuVisibilityPermissionService menuVisibilityPermissionService;
     private final DelegatedPermissionPairPolicy delegatedPermissionPairPolicy;
+    private final SystemAdministratorProtectionPolicy systemAdministratorProtectionPolicy;
 
     public List<Role> listRoles() {
         return roleRepository.findAll();
@@ -129,7 +132,7 @@ public class RbacApplicationService {
 
     @Transactional
     public Role updateRole(UpdateRoleCommand command, String operator) {
-        Role role = roleRepository.findById(command.roleId())
+        Role role = roleRepository.findByIdForUpdate(command.roleId())
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
         if (isBuiltIn(role) && !java.util.Objects.equals(role.getPermissionLevel(), command.permissionLevel())) {
             throw new BizException("BUILT_IN_ROLE_PERMISSION_LEVEL_LOCKED", "内置角色的权限等级不允许修改");
@@ -160,7 +163,7 @@ public class RbacApplicationService {
 
     @Transactional
     public void updateRoleStatus(UpdateRoleStatusCommand command) {
-        Role role = roleRepository.findById(command.roleId())
+        Role role = roleRepository.findByIdForUpdate(command.roleId())
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
         if (isBuiltIn(role)) {
             throw new BizException("BUILT_IN_ROLE_STATUS_LOCKED", "内置角色不允许启用或禁用");
@@ -180,7 +183,7 @@ public class RbacApplicationService {
 
     @Transactional
     public void deleteRole(DeleteRoleCommand command) {
-        Role role = roleRepository.findById(command.roleId())
+        Role role = roleRepository.findByIdForUpdate(command.roleId())
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
         validateRoleDeletion(role, command.operator());
         deleteRoleInternal(role, command.operator());
@@ -200,7 +203,8 @@ public class RbacApplicationService {
         }
 
         List<Role> roles = uniqueRoleIds.stream()
-            .map(roleId -> roleRepository.findById(roleId)
+            .sorted()
+            .map(roleId -> roleRepository.findByIdForUpdate(roleId)
                 .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "存在待删除角色不存在")))
             .toList();
 
@@ -226,8 +230,19 @@ public class RbacApplicationService {
 
     @Transactional
     public void grantPermissions(GrantRolePermissionsCommand command) {
-        Role role = roleRepository.findById(command.roleId())
+        Role role = roleRepository.findByIdForUpdate(command.roleId())
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
+        List<Long> currentPermissionIds = normalizePermissionIds(
+            roleRepository.findPermissionIdsByRoleId(command.roleId())
+        );
+        validateExpectedPermissionIds(command.expectedPermissionIds(), currentPermissionIds);
+        permissionLevelRuleService.checkCanUpdateRole(command.operator(), role, role.getPermissionLevel());
+        if (SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode())) {
+            throw new BizException(
+                "SUPER_ADMIN_PERMISSIONS_SYSTEM_MANAGED",
+                "超级管理员权限由系统托管，始终包含全部启用权限"
+            );
+        }
         List<Permission> allPermissions = permissionRepository.findAll();
         Map<Long, Permission> permissionsById = allPermissions.stream()
             .collect(java.util.stream.Collectors.toMap(Permission::getId, permission -> permission));
@@ -253,6 +268,7 @@ public class RbacApplicationService {
             .operationType("ROLE_PERMISSION_GRANT")
             .bizType("ROLE")
             .bizId(String.valueOf(command.roleId()))
+            .beforeJson(String.valueOf(currentPermissionIds))
             .afterJson(String.valueOf(synchronizedIds))
             .result("SUCCESS")
             .build());
@@ -260,22 +276,28 @@ public class RbacApplicationService {
 
     @Transactional
     public void assignUserRoles(AssignUserRolesCommand command) {
-        User user = userRepository.findById(command.userId())
+        User user = userRepository.findByIdForUpdate(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
-        List<Role> roles = roleRepository.findByIds(command.roleIds());
-        if (roles.size() != command.roleIds().size()) {
+        List<Long> currentRoleIds = normalizeRoleIds(userRepository.findRoleIdsByUserId(command.userId()));
+        validateExpectedRoleIds(command.expectedRoleIds(), currentRoleIds);
+
+        List<Long> requestedRoleIds = normalizeRoleIds(command.roleIds());
+        List<Role> roles = roleRepository.findByIds(requestedRoleIds);
+        if (roles.size() != requestedRoleIds.size()) {
             throw new BizException("ROLE_NOT_FOUND", "部分角色不存在");
         }
         ensureRolesEnabled(roles);
+        systemAdministratorProtectionPolicy.checkRetainsSuperAdministratorRole(user, roles);
         permissionLevelRuleService.checkCanAssignRoles(command.operator(), user, roles);
-        userRepository.assignRoles(command.userId(), command.roleIds(), command.operator());
+        userRepository.assignRoles(command.userId(), requestedRoleIds, command.operator());
         policyRefreshService.refresh();
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
             .operationType("USER_ROLE_ASSIGN")
             .bizType("USER")
             .bizId(String.valueOf(command.userId()))
-            .afterJson(String.valueOf(command.roleIds()))
+            .beforeJson(String.valueOf(currentRoleIds))
+            .afterJson(String.valueOf(requestedRoleIds))
             .result("SUCCESS")
             .build());
     }
@@ -450,6 +472,55 @@ public class RbacApplicationService {
         if (containsDisabledRole) {
             throw new BizException("ROLE_ASSIGN_DISABLED", "已禁用角色不允许分配");
         }
+    }
+
+    private void validateExpectedRoleIds(List<Long> expectedRoleIds, List<Long> currentRoleIds) {
+        if (expectedRoleIds == null) {
+            return;
+        }
+        Set<Long> expected = new LinkedHashSet<>(normalizeRoleIds(expectedRoleIds));
+        Set<Long> current = new LinkedHashSet<>(currentRoleIds);
+        if (!expected.equals(current)) {
+            throw new BizException(
+                "USER_ROLE_ASSIGN_CONFLICT",
+                "该用户的角色已被其他操作更新，请核对最新角色后重新提交"
+            );
+        }
+    }
+
+    private void validateExpectedPermissionIds(List<Long> expectedPermissionIds, List<Long> currentPermissionIds) {
+        if (expectedPermissionIds == null) {
+            return;
+        }
+        Set<Long> expected = new LinkedHashSet<>(normalizePermissionIds(expectedPermissionIds));
+        Set<Long> current = new LinkedHashSet<>(currentPermissionIds);
+        if (!expected.equals(current)) {
+            throw new BizException(
+                "ROLE_PERMISSION_ASSIGN_CONFLICT",
+                "该角色的权限已被其他操作更新，请核对最新权限后重新提交"
+            );
+        }
+    }
+
+    private List<Long> normalizeRoleIds(List<Long> roleIds) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            return List.of();
+        }
+        return roleIds.stream()
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .toList();
+    }
+
+    private List<Long> normalizePermissionIds(List<Long> permissionIds) {
+        if (permissionIds == null || permissionIds.isEmpty()) {
+            return List.of();
+        }
+        return permissionIds.stream()
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .sorted()
+            .toList();
     }
 
     private void deleteRoleInternal(Role role, String operator) {

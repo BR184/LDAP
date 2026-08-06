@@ -4,6 +4,7 @@ import com.company.idm.application.rbac.PolicyRefreshService;
 import com.company.idm.application.sync.LeaderRoleDerivationService;
 import com.company.idm.application.user.InitialPasswordPolicy;
 import com.company.idm.application.user.IntranetEmailGenerationService;
+import com.company.idm.application.user.SystemAdministratorProtectionPolicy;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.department.Department;
@@ -43,6 +44,7 @@ public class ImportExecutionApplicationService {
     private final InitialPasswordPolicy initialPasswordPolicy;
     private final UserAccessPolicy userAccessPolicy;
     private final IntranetEmailGenerationService intranetEmailGenerationService;
+    private final SystemAdministratorProtectionPolicy systemAdministratorProtectionPolicy;
 
     @Transactional
     public ImportBatch executePlan(Long batchId, String executedBy) {
@@ -104,7 +106,11 @@ public class ImportExecutionApplicationService {
         if (snapshot == null) {
             throw new BizException("IMPORT_USER_SNAPSHOT_MISSING", "用户导入快照不存在");
         }
+        systemAdministratorProtectionPolicy.checkImportTargetAllowed(snapshot.userId());
         User existing = userRepository.findByUserId(snapshot.userId()).orElse(null);
+        if (existing != null) {
+            systemAdministratorProtectionPolicy.checkImportTargetAllowed(existing.getUserId());
+        }
         String intranetEmail = existing == null
             ? intranetEmailGenerationService.generate(snapshot.userId(), null)
             : existing.getIntranetEmail();
@@ -143,6 +149,7 @@ public class ImportExecutionApplicationService {
         }
         User user = userRepository.findByUserId(item.getTargetKey())
             .orElseThrow(() -> new BizException("IMPORT_TARGET_NOT_FOUND", "用户不存在"));
+        systemAdministratorProtectionPolicy.checkImportTargetAllowed(user.getUserId());
         User resigned = user.toBuilder()
             .employmentStatus(EmploymentStatus.RESIGNED)
             .accountStatus("离职")

@@ -60,6 +60,7 @@ export interface UpdateUserPayload {
 
 export interface AssignUserRolesPayload {
   roleIds: number[]
+  expectedRoleIds?: number[]
 }
 
 export interface ChangePasswordPayload {

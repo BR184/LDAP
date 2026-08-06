@@ -3,9 +3,9 @@ package com.company.idm.infrastructure.casbin;
 import com.company.idm.application.rbac.EffectivePermissionService;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.casbin.jcasbin.main.Enforcer;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class CasbinAccessService {
 
-    private final Enforcer enforcer;
+    private final CasbinPolicyService policyService;
     private final EffectivePermissionService effectivePermissionService;
 
     public boolean hasAny(Authentication authentication, String... permissionCodes) {
@@ -27,9 +27,22 @@ public class CasbinAccessService {
             return false;
         }
         Set<String> effectivePermissions = effectivePermissionService.resolve(principal);
-        return Arrays.stream(permissionCodes)
+        List<String> candidates = Arrays.stream(permissionCodes)
             .filter(effectivePermissions::contains)
-            .anyMatch(permissionCode -> enforcer.enforce(principal.userId(), permissionCode, "GRANT"));
+            .toList();
+        if (candidates.isEmpty()) {
+            return false;
+        }
+        boolean granted = candidates.stream()
+            .anyMatch(permissionCode -> policyService.enforce(principal.userId(), permissionCode, "GRANT"));
+        if (granted) {
+            return true;
+        }
+
+        // The database is authoritative. A false negative can occur when another app instance changed RBAC state.
+        policyService.refresh();
+        return candidates.stream()
+            .anyMatch(permissionCode -> policyService.enforce(principal.userId(), permissionCode, "GRANT"));
     }
 
 }

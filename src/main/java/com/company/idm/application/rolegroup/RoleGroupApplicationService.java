@@ -318,7 +318,7 @@ public class RoleGroupApplicationService {
     private Role requireManageableRole(Long groupId, Long roleId, AuthenticatedUser principal) {
         requireGroup(groupId);
         authorizationService.requireRoleManager(principal, groupId);
-        Role role = roleRepository.findById(roleId)
+        Role role = roleRepository.findByIdForUpdate(roleId)
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
         boolean visible = role.getRoleScope() == RoleScope.GLOBAL
             || (role.getRoleScope() == RoleScope.GROUP && groupId.equals(role.getRoleGroupId()));
@@ -355,7 +355,7 @@ public class RoleGroupApplicationService {
     }
 
     private Role requireOwnedGroupRole(Long groupId, Long roleId) {
-        Role role = roleRepository.findById(roleId)
+        Role role = roleRepository.findByIdForUpdate(roleId)
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
         if (role.getRoleScope() != RoleScope.GROUP || !groupId.equals(role.getRoleGroupId())) {
             throw new BizException("ROLE_GROUP_ROLE_FORBIDDEN", "只能维护当前角色组拥有的角色");

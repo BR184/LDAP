@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.company.idm.application.rolegroup.DelegatedPermissionPairPolicy;
+import com.company.idm.application.user.SystemAdministratorProtectionPolicy;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.rbac.MenuRepository;
@@ -17,9 +18,11 @@ import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.rbac.RoleScope;
+import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class RbacApplicationServiceRoleProtectionTest {
@@ -27,22 +30,24 @@ class RbacApplicationServiceRoleProtectionTest {
     private final RoleRepository roleRepository = mock(RoleRepository.class);
     private final PermissionRepository permissionRepository = mock(PermissionRepository.class);
     private final PermissionLevelRuleService permissionLevelRuleService = mock(PermissionLevelRuleService.class);
+    private final UserRepository userRepository = mock(UserRepository.class);
     private final RbacApplicationService service = new RbacApplicationService(
         roleRepository,
         mock(MenuRepository.class),
         permissionRepository,
-        mock(UserRepository.class),
+        userRepository,
         mock(AuditLogRepository.class),
         mock(PolicyRefreshService.class),
         permissionLevelRuleService,
         mock(MenuVisibilityPermissionService.class),
-        new DelegatedPermissionPairPolicy()
+        new DelegatedPermissionPairPolicy(),
+        new SystemAdministratorProtectionPolicy()
     );
 
     @Test
     void rejectsBuiltInRolePermissionLevelChanges() {
         Role role = builtInRole();
-        when(roleRepository.findById(8L)).thenReturn(Optional.of(role));
+        when(roleRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(role));
 
         assertCode(
             () -> service.updateRole(new UpdateRoleCommand(8L, "普通用户", 30, "更新备注"), "admin"),
@@ -55,7 +60,7 @@ class RbacApplicationServiceRoleProtectionTest {
     @Test
     void allowsBuiltInRoleNameAndRemarkChangesWhenPermissionLevelIsUnchanged() {
         Role role = builtInRole();
-        when(roleRepository.findById(8L)).thenReturn(Optional.of(role));
+        when(roleRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(role));
         when(roleRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(permissionRepository.findAll()).thenReturn(List.of());
 
@@ -71,7 +76,7 @@ class RbacApplicationServiceRoleProtectionTest {
 
     @Test
     void rejectsBuiltInRoleStatusChanges() {
-        when(roleRepository.findById(8L)).thenReturn(Optional.of(builtInRole()));
+        when(roleRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(builtInRole()));
 
         assertCode(
             () -> service.updateRoleStatus(new UpdateRoleStatusCommand(8L, 0, "admin")),
@@ -83,7 +88,7 @@ class RbacApplicationServiceRoleProtectionTest {
 
     @Test
     void rejectsSingleAndBatchDeletionOfBuiltInRoles() {
-        when(roleRepository.findById(8L)).thenReturn(Optional.of(builtInRole()));
+        when(roleRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(builtInRole()));
 
         assertCode(
             () -> service.deleteRole(new DeleteRoleCommand(8L, "admin")),
@@ -107,12 +112,111 @@ class RbacApplicationServiceRoleProtectionTest {
             .status(1)
             .roleScope(RoleScope.SYSTEM)
             .build();
-        when(roleRepository.findById(9L)).thenReturn(Optional.of(role));
+        when(roleRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(role));
 
         service.updateRoleStatus(new UpdateRoleStatusCommand(9L, 0, "admin"));
 
         verify(permissionLevelRuleService).checkCanUpdateRole("admin", role, 30);
         verify(roleRepository).updateStatus(9L, 0);
+    }
+
+    @Test
+    void rejectsRoleAssignmentWhenTheClientSnapshotIsStale() {
+        User user = User.builder().id(21L).userId("employee").roleCodes(Set.of("NORMAL_USER")).build();
+        when(userRepository.findByIdForUpdate(21L)).thenReturn(Optional.of(user));
+        when(userRepository.findRoleIdsByUserId(21L)).thenReturn(List.of(8L, 9L));
+
+        assertCode(
+            () -> service.assignUserRoles(new AssignUserRolesCommand(
+                21L,
+                List.of(8L, 10L),
+                List.of(8L),
+                "admin"
+            )),
+            "USER_ROLE_ASSIGN_CONFLICT"
+        );
+
+        verify(roleRepository, never()).findByIds(any());
+        verify(userRepository, never()).assignRoles(any(), any(), any());
+    }
+
+    @Test
+    void rejectsRemovingSuperAdminFromTheBuiltInAdminAccount() {
+        User admin = User.builder().id(1L).userId("admin").roleCodes(Set.of("SUPER_ADMIN")).build();
+        Role customRole = Role.builder()
+            .id(12L)
+            .roleCode("PLATFORM_A_ADMIN")
+            .permissionLevel(10)
+            .status(1)
+            .build();
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(admin));
+        when(userRepository.findRoleIdsByUserId(1L)).thenReturn(List.of(1L));
+        when(roleRepository.findByIds(List.of(12L))).thenReturn(List.of(customRole));
+
+        assertCode(
+            () -> service.assignUserRoles(new AssignUserRolesCommand(
+                1L,
+                List.of(12L),
+                List.of(1L),
+                "admin"
+            )),
+            "SYSTEM_ADMIN_SUPER_ADMIN_REQUIRED"
+        );
+
+        verify(permissionLevelRuleService, never()).checkCanAssignRoles(any(), any(), any());
+        verify(userRepository, never()).assignRoles(any(), any(), any());
+    }
+
+    @Test
+    void rejectsRolePermissionAssignmentWhenTheClientSnapshotIsStale() {
+        Role role = Role.builder()
+            .id(12L)
+            .roleCode("PLATFORM_A_ADMIN")
+            .permissionLevel(10)
+            .status(1)
+            .roleScope(RoleScope.SYSTEM)
+            .build();
+        when(roleRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(role));
+        when(roleRepository.findPermissionIdsByRoleId(12L)).thenReturn(List.of(4L, 5L));
+
+        assertCode(
+            () -> service.grantPermissions(new GrantRolePermissionsCommand(
+                12L,
+                List.of(4L, 6L),
+                List.of(4L),
+                "admin"
+            )),
+            "ROLE_PERMISSION_ASSIGN_CONFLICT"
+        );
+
+        verify(permissionLevelRuleService, never()).checkCanUpdateRole(any(), any(), any());
+        verify(roleRepository, never()).assignPermissions(any(), any());
+    }
+
+    @Test
+    void rejectsManualPermissionChangesForSuperAdmin() {
+        Role role = Role.builder()
+            .id(1L)
+            .roleCode("SUPER_ADMIN")
+            .permissionLevel(1)
+            .builtIn(1)
+            .status(1)
+            .roleScope(RoleScope.SYSTEM)
+            .build();
+        when(roleRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(role));
+        when(roleRepository.findPermissionIdsByRoleId(1L)).thenReturn(List.of(4L, 5L));
+
+        assertCode(
+            () -> service.grantPermissions(new GrantRolePermissionsCommand(
+                1L,
+                List.of(4L),
+                List.of(4L, 5L),
+                "admin"
+            )),
+            "SUPER_ADMIN_PERMISSIONS_SYSTEM_MANAGED"
+        );
+
+        verify(roleRepository, never()).assignPermissions(any(), any());
     }
 
     private Role builtInRole() {

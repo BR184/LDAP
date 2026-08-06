@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import axios from 'axios'
 import { computed, reactive, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -26,6 +27,7 @@ import type { DepartmentTreeNode, DepartmentTreeOption } from '@/types/departmen
 import type { CreateUserPayload, UpdateUserPayload, UserItem, UserListQuery } from '@/types/user'
 
 const SUPER_ADMIN_ROLE_CODE = 'SUPER_ADMIN'
+const SYSTEM_ADMIN_USER_ID = 'admin'
 
 const queryClient = useQueryClient()
 const authStore = useAuthStore()
@@ -57,6 +59,8 @@ const formUser = ref<UserItem | null>(null)
 const roleVisible = ref(false)
 const roleUser = ref<UserItem | null>(null)
 const selectedRoleIds = ref<number[]>([])
+const expectedRoleIds = ref<number[]>([])
+const roleAssignmentLoading = ref(false)
 const selectedUsers = ref<UserItem[]>([])
 const canCreateUser = computed(() =>
   authStore.can('USER_CREATE') && authStore.can('ROLE_READ') && authStore.can('DEPT_TREE'),
@@ -151,11 +155,24 @@ const updateUserMutation = useMutation({
 })
 
 const assignRolesMutation = useMutation({
-  mutationFn: ({ userId, roleIds }: { userId: number; roleIds: number[] }) => assignUserRoles(userId, { roleIds }),
+  mutationFn: ({ userId, roleIds, baselineRoleIds }: { userId: number; roleIds: number[]; baselineRoleIds: number[] }) =>
+    assignUserRoles(userId, { roleIds, expectedRoleIds: baselineRoleIds }),
   onSuccess: async () => {
     ElMessage.success('角色分配已保存')
     roleVisible.value = false
     await refreshUsers()
+  },
+  onError: async (error, variables) => {
+    if (!axios.isAxiosError(error) || error.response?.status !== 409) {
+      return
+    }
+    roleAssignmentLoading.value = true
+    try {
+      await loadCurrentRoleAssignment(variables.userId)
+      await refreshUsers()
+    } finally {
+      roleAssignmentLoading.value = false
+    }
   },
 })
 
@@ -222,6 +239,9 @@ function resolvePermissionLevel(roleCodes: string[]) {
 }
 
 function canDeleteUser(user: UserItem) {
+  if (isProtectedAdministrator(user)) {
+    return false
+  }
   if (user.id === authStore.currentUser?.id) {
     return false
   }
@@ -233,6 +253,14 @@ function canDeleteUser(user: UserItem) {
 
 function isSuperAdminUser(user: UserItem) {
   return user.roleCodes.includes(SUPER_ADMIN_ROLE_CODE)
+}
+
+function isSystemAdminUser(user: UserItem) {
+  return user.userId.toLowerCase() === SYSTEM_ADMIN_USER_ID
+}
+
+function isProtectedAdministrator(user: UserItem) {
+  return isSystemAdminUser(user) || isSuperAdminUser(user)
 }
 
 function applySearch() {
@@ -284,12 +312,36 @@ async function openEdit(userId: number) {
   formUser.value = await fetchUserDetail(userId)
 }
 
-function openRoleAssign(user: UserItem) {
-  roleUser.value = user
-  selectedRoleIds.value = user.roleCodes
+function mapRoleCodesToIds(roleCodes: string[]) {
+  return roleCodes
     .map((roleCode) => roleIdMapByCode.value[roleCode])
     .filter((roleId): roleId is number => typeof roleId === 'number')
+}
+
+async function loadCurrentRoleAssignment(userId: number) {
+  const [user] = await Promise.all([
+    fetchUserDetail(userId),
+    rolesQuery.refetch(),
+  ])
+  const currentRoleIds = mapRoleCodesToIds(user.roleCodes)
+  roleUser.value = user
+  selectedRoleIds.value = currentRoleIds
+  expectedRoleIds.value = [...currentRoleIds]
+}
+
+async function openRoleAssign(user: UserItem) {
+  roleUser.value = user
+  selectedRoleIds.value = mapRoleCodesToIds(user.roleCodes)
+  expectedRoleIds.value = [...selectedRoleIds.value]
   roleVisible.value = true
+  roleAssignmentLoading.value = true
+  try {
+    await loadCurrentRoleAssignment(user.id)
+  } catch {
+    roleVisible.value = false
+  } finally {
+    roleAssignmentLoading.value = false
+  }
 }
 
 async function handleFormSubmit(payload: CreateUserPayload | UpdateUserPayload) {
@@ -313,6 +365,7 @@ async function handleRoleSubmit(roleIds: number[]) {
   await assignRolesMutation.mutateAsync({
     userId: roleUser.value.id,
     roleIds,
+    baselineRoleIds: expectedRoleIds.value,
   })
 }
 
@@ -542,6 +595,7 @@ async function handleSyncLdap(user: UserItem) {
               :active-icon="Check"
               :inactive-icon="Close"
               aria-label="切换用户平台使用权限"
+              :disabled="isSystemAdminUser(row)"
               :loading="updateAccessMutation.isPending.value"
               :before-change="() => confirmAccessChange(row, !row.accessAllowed)"
             />
@@ -568,7 +622,7 @@ async function handleSyncLdap(user: UserItem) {
           <template #default="{ row }">
             <el-space>
               <el-button v-if="authStore.can('USER_DETAIL')" link type="primary" @click="openDetail(row.id)">详情</el-button>
-              <el-button v-if="canEditUser" link type="primary" @click="openEdit(row.id)">编辑</el-button>
+              <el-button v-if="canEditUser && !isSystemAdminUser(row)" link type="primary" @click="openEdit(row.id)">编辑</el-button>
               <el-button v-if="canAssignUserRoles" link type="warning" @click="openRoleAssign(row)">分配角色</el-button>
 
               <el-dropdown v-if="hasMoreActions()" trigger="click">
@@ -633,7 +687,7 @@ async function handleSyncLdap(user: UserItem) {
 
     <UserRoleDrawer
       v-model="roleVisible"
-      :loading="assignRolesMutation.isPending.value"
+      :loading="roleAssignmentLoading || assignRolesMutation.isPending.value"
       :user="roleUser"
       :role-options="activeRoles"
       :role-ids="selectedRoleIds"

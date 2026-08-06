@@ -35,7 +35,7 @@ public class RoleGovernanceApplicationService {
         if (roleScope == null) {
             throw new BizException("ROLE_SCOPE_REQUIRED", "角色作用域不能为空");
         }
-        Role role = roleRepository.findById(roleId)
+        Role role = roleRepository.findByIdForUpdate(roleId)
             .orElseThrow(() -> new BizException("ROLE_NOT_FOUND", "角色不存在"));
         if (Integer.valueOf(1).equals(role.getBuiltIn())) {
             throw new BizException("BUILT_IN_ROLE_SCOPE_LOCKED", "内置角色的作用域不允许修改");

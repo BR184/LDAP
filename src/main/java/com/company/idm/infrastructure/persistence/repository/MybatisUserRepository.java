@@ -51,6 +51,14 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     @Override
+    public Optional<User> findByIdForUpdate(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(userMapper.selectByIdForUpdate(id)).map(this::toDomain);
+    }
+
+    @Override
     public Optional<User> findByUserId(String userId) {
         UserDO dataObject = userMapper.selectOne(new LambdaQueryWrapper<UserDO>()
             .eq(UserDO::getUserId, userId)

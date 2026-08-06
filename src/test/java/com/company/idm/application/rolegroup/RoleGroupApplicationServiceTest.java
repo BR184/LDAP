@@ -63,7 +63,7 @@ class RoleGroupApplicationServiceTest {
     @Test
     void delegatedManagersCannotAssignManagementLevelRoles() {
         Role administrator = role(2L, "ADMIN", RoleScope.GLOBAL, null, 2);
-        when(roleRepository.findById(2L)).thenReturn(Optional.of(administrator));
+        when(roleRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(administrator));
         when(authorizationService.isPlatformAdmin(session())).thenReturn(false);
 
         assertThatThrownBy(() -> service.addRoleMembers(10L, 2L, List.of(8L), session()))
@@ -77,7 +77,7 @@ class RoleGroupApplicationServiceTest {
     @Test
     void hiddenSubmissionCannotAssignAResignedUser() {
         Role groupRole = role(20L, "PROJECT_REVIEWER", RoleScope.GROUP, 10L, 999);
-        when(roleRepository.findById(20L)).thenReturn(Optional.of(groupRole));
+        when(roleRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(groupRole));
         when(userRepository.findById(8L)).thenReturn(Optional.of(User.builder()
             .id(8L)
             .userId("former")

@@ -172,6 +172,7 @@ public class GlobalExceptionHandler {
         return switch (code) {
             case "AUTH_INVALID", ErrorCodeConstants.AUTH_UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
             case "AUTH_DISABLED", ErrorCodeConstants.AUTH_FORBIDDEN -> HttpStatus.FORBIDDEN;
+            case "USER_ROLE_ASSIGN_CONFLICT", "ROLE_PERMISSION_ASSIGN_CONFLICT" -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
     }

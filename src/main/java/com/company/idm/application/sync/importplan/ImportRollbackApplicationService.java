@@ -2,6 +2,7 @@ package com.company.idm.application.sync.importplan;
 
 import com.company.idm.application.sync.LeaderRoleDerivationService;
 import com.company.idm.application.user.InitialPasswordPolicy;
+import com.company.idm.application.user.SystemAdministratorProtectionPolicy;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.department.Department;
@@ -38,6 +39,7 @@ public class ImportRollbackApplicationService {
     private final ImportJsonService jsonService;
     private final InitialPasswordPolicy initialPasswordPolicy;
     private final UserAccessPolicy userAccessPolicy;
+    private final SystemAdministratorProtectionPolicy systemAdministratorProtectionPolicy;
 
     @Transactional
     public ImportBatch generateRollbackPlan(Long batchId) {
@@ -119,6 +121,7 @@ public class ImportRollbackApplicationService {
             }
             User current = userRepository.findByUserId(item.getTargetKey())
                 .orElseThrow(() -> new BizException("IMPORT_TARGET_NOT_FOUND", "用户不存在"));
+            systemAdministratorProtectionPolicy.checkImportTargetAllowed(current.getUserId());
             User saved = userRepository.save(snapshot.applyTo(current, current.getIntranetEmail()));
             ldapDirectoryService.createOrUpdateUser(saved, initialPasswordPolicy.resolve(saved.getMobile()));
             if (userAccessPolicy.canAuthenticate(saved)) {
@@ -138,6 +141,7 @@ public class ImportRollbackApplicationService {
     private void disableCreatedUser(String userId) {
         User user = userRepository.findByUserId(userId)
             .orElseThrow(() -> new BizException("IMPORT_TARGET_NOT_FOUND", "用户不存在"));
+        systemAdministratorProtectionPolicy.checkImportTargetAllowed(user.getUserId());
         User resigned = user.toBuilder()
             .employmentStatus(EmploymentStatus.RESIGNED)
             .accountStatus("已撤回")

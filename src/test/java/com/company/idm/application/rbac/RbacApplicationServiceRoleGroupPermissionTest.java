@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.company.idm.application.rolegroup.DelegatedPermissionPairPolicy;
+import com.company.idm.application.user.SystemAdministratorProtectionPolicy;
 import com.company.idm.common.enums.PermissionType;
 import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.rbac.MenuRepository;
@@ -34,7 +35,8 @@ class RbacApplicationServiceRoleGroupPermissionTest {
             mock(PolicyRefreshService.class),
             mock(PermissionLevelRuleService.class),
             mock(MenuVisibilityPermissionService.class),
-            new DelegatedPermissionPairPolicy()
+            new DelegatedPermissionPairPolicy(),
+            new SystemAdministratorProtectionPolicy()
         );
         Role role = Role.builder()
             .id(30L)
@@ -54,10 +56,11 @@ class RbacApplicationServiceRoleGroupPermissionTest {
             DelegatedPermissionPairPolicy.ROLE_GROUP_MENU_VIEW,
             PermissionType.MENU
         );
-        when(roleRepository.findById(30L)).thenReturn(Optional.of(role));
+        when(roleRepository.findByIdForUpdate(30L)).thenReturn(Optional.of(role));
+        when(roleRepository.findPermissionIdsByRoleId(30L)).thenReturn(List.of());
         when(permissionRepository.findAll()).thenReturn(List.of(readPermission, menuPermission));
 
-        service.grantPermissions(new GrantRolePermissionsCommand(30L, List.of(4L), "admin"));
+        service.grantPermissions(new GrantRolePermissionsCommand(30L, List.of(4L), List.of(), "admin"));
 
         verify(roleRepository).assignPermissions(30L, List.of(4L, 5L));
     }

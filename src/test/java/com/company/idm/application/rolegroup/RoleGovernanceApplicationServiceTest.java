@@ -50,7 +50,7 @@ class RoleGovernanceApplicationServiceTest {
             .build();
         RoleGroup targetGroup = RoleGroup.builder().id(21L).groupName("CAT").status(1).build();
         when(authorizationService.isPlatformAdmin(principal())).thenReturn(true);
-        when(roleRepository.findById(8L)).thenReturn(Optional.of(systemRole));
+        when(roleRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(systemRole));
         when(roleGroupRepository.findById(21L)).thenReturn(Optional.of(targetGroup));
         when(roleRepository.findPermissionIdsByRoleId(8L)).thenReturn(List.of());
         when(roleRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -75,7 +75,7 @@ class RoleGovernanceApplicationServiceTest {
             .status(1)
             .build();
         when(authorizationService.isPlatformAdmin(principal())).thenReturn(true);
-        when(roleRepository.findById(9L)).thenReturn(Optional.of(builtInRole));
+        when(roleRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(builtInRole));
 
         org.assertj.core.api.Assertions.assertThatThrownBy(
             () -> service.updateScope(9L, RoleScope.GLOBAL, null, principal())

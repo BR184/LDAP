@@ -4,12 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.company.idm.application.rbac.PolicyRefreshService;
 import com.company.idm.application.sync.LeaderRoleDerivationService;
 import com.company.idm.application.user.InitialPasswordPolicy;
+import com.company.idm.application.user.SystemAdministratorProtectionPolicy;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.domain.department.DepartmentRepository;
@@ -77,7 +79,8 @@ class ImportExecutionApplicationServiceTest {
             jsonService,
             new InitialPasswordPolicy(),
             new UserAccessPolicy(),
-            new com.company.idm.application.user.IntranetEmailGenerationService(userRepository)
+            new com.company.idm.application.user.IntranetEmailGenerationService(userRepository),
+            new SystemAdministratorProtectionPolicy()
         );
     }
 
@@ -207,6 +210,44 @@ class ImportExecutionApplicationServiceTest {
         assertThat(savedUser.getValue().isAccessAllowed()).isFalse();
         assertThat(savedUser.getValue().getRealName()).isEqualTo("导入后姓名");
         verify(ldapDirectoryService).disableUserIfExists("employee-a");
+    }
+
+    @Test
+    void fileImportCannotOverwriteTheBuiltInAdminAccount() {
+        User admin = activeUser(1L, "admin").toBuilder()
+            .sourceType(SourceType.MANUAL)
+            .build();
+        ChangeItem item = ChangeItem.builder()
+            .id(100L)
+            .targetType(TargetType.USER)
+            .targetKey("admin")
+            .changeType(ChangeType.UPDATE)
+            .afterJson("admin-json")
+            .enabled(true)
+            .riskLevel(RiskLevel.HIGH)
+            .status(ChangeItemStatus.PENDING)
+            .build();
+        ImportBatch batch = ImportBatch.builder()
+            .id(1L)
+            .sourceType(ImportSourceType.MANUAL_FILE)
+            .status(ImportBatchStatus.CONFIRMED)
+            .changeItems(List.of(item))
+            .expiredAt(LocalDateTime.now().plusMinutes(10))
+            .build();
+        Role normalUserRole = Role.builder().id(2L).roleCode("NORMAL_USER").status(1).build();
+
+        when(importBatchRepository.findById(1L)).thenReturn(Optional.of(batch));
+        when(importBatchRepository.save(any(ImportBatch.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jsonService.readUserSnapshot("admin-json")).thenReturn(UserImportSnapshot.from(admin));
+        when(userRepository.findActiveEmployees()).thenReturn(List.of(admin));
+        when(roleRepository.findByCode("NORMAL_USER")).thenReturn(Optional.of(normalUserRole));
+
+        ImportBatch result = service.executePlan(1L, "operator");
+
+        assertThat(result.getStatus()).isEqualTo(ImportBatchStatus.FAILED);
+        assertThat(item.getStatus()).isEqualTo(ChangeItemStatus.FAILED);
+        verify(userRepository, never()).save(any(User.class));
+        verify(ldapDirectoryService, never()).createOrUpdateUser(any(), any());
     }
 
     private User activeUser(Long id, String userId) {

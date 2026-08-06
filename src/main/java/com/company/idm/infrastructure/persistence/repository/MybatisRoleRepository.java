@@ -35,6 +35,14 @@ public class MybatisRoleRepository implements RoleRepository {
     }
 
     @Override
+    public Optional<Role> findByIdForUpdate(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(roleMapper.selectByIdForUpdate(id)).map(this::toDomain);
+    }
+
+    @Override
     public Optional<Role> findByCode(String roleCode) {
         RoleDO dataObject = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
             .eq(RoleDO::getRoleCode, roleCode));
@@ -134,7 +142,7 @@ public class MybatisRoleRepository implements RoleRepository {
 
     @Override
     public void assignPermissions(Long roleId, List<Long> permissionIds) {
-        RoleDO role = roleMapper.selectById(roleId);
+        RoleDO role = roleMapper.selectByIdForUpdate(roleId);
         if (role != null
             && RoleScope.GROUP.name().equals(role.getRoleScope())
             && permissionIds != null
@@ -158,7 +166,7 @@ public class MybatisRoleRepository implements RoleRepository {
             return;
         }
         for (Long roleId : roleIds) {
-            RoleDO role = roleMapper.selectById(roleId);
+            RoleDO role = roleMapper.selectByIdForUpdate(roleId);
             if (role != null && RoleScope.GROUP.name().equals(role.getRoleScope())) {
                 continue;
             }

@@ -54,6 +54,7 @@ public class UserApplicationService {
     private final PasswordVerificationTokenService passwordVerificationTokenService;
     private final InitialPasswordPolicy initialPasswordPolicy;
     private final UserAccessPolicy userAccessPolicy;
+    private final SystemAdministratorProtectionPolicy systemAdministratorProtectionPolicy;
 
     public List<User> listUsers(String keyword, String departmentKeyword, Boolean accessAllowed) {
         String normalizedKeyword = normalize(keyword);
@@ -77,6 +78,7 @@ public class UserApplicationService {
         DepartmentAssignment departmentAssignment = resolveDepartmentAssignment(command.deptCode(), command.partTimeDeptCodes());
         List<Role> roles = loadEnabledRoles(command.roleIds());
         String normalizedUserId = requireUserIdentifier(command.userId());
+        systemAdministratorProtectionPolicy.checkUserIdAvailableForCreation(normalizedUserId);
         String normalizedIntranetEmail = normalizeRequiredIntranetEmail(command.intranetEmail(), null);
 
         userRepository.findByEmployeeNo(command.employeeNo())
@@ -106,6 +108,7 @@ public class UserApplicationService {
             .sourceType(SourceType.MANUAL)
             .tokenVersion(0)
             .build());
+        permissionLevelRuleService.checkCanAssignRoles(command.operator(), saved, roles);
         String initialPassword = initialPasswordPolicy.resolve(saved.getMobile());
         passwordPolicyValidator.validate(initialPassword);
         String ldapDn = ldapDirectoryService.createUser(saved, initialPassword);
@@ -133,6 +136,7 @@ public class UserApplicationService {
     public User updateUser(UpdateUserCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        systemAdministratorProtectionPolicy.checkProfileMutable(user);
         permissionLevelRuleService.checkCanModifyBasicUser(command.operator(), user);
         validateEditableEmployeeNo(command.employeeNo(), user);
         validateImmutableUserIdentifier(command.userIdentifier(), user);
@@ -165,6 +169,7 @@ public class UserApplicationService {
     public void updateAccess(UpdateUserAccessCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        systemAdministratorProtectionPolicy.checkAccessChangeAllowed(user, command.accessAllowed());
         permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
         int nextTokenVersion = nextTokenVersion(user);
         User updated = user.toBuilder()
@@ -188,6 +193,7 @@ public class UserApplicationService {
     public void deleteUser(DeleteUserCommand command) {
         User user = userRepository.findById(command.userId())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        systemAdministratorProtectionPolicy.checkDeletable(user);
         ensureDeletableSource(user);
         ensureNotSuperAdmin(user);
         permissionLevelRuleService.checkCanModifySensitiveUser(command.operator(), user);
@@ -217,6 +223,7 @@ public class UserApplicationService {
         }
 
         for (User user : users) {
+            systemAdministratorProtectionPolicy.checkDeletable(user);
             ensureDeletableSource(user);
             ensureNotSuperAdmin(user);
             if (command.operator().equals(user.getUserId())) {

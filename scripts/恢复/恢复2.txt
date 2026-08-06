@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+test -f .env || {
+  echo "错误：当前目录不存在 .env"
+  exit 1
+}
+
+test -f docker-compose.yml || {
+  echo "错误：当前目录不存在 docker-compose.yml"
+  exit 1
+}
+
+set -a
+source ./.env
+set +a
+
+COMPOSE=(docker compose --env-file .env -f docker-compose.yml)
+
+RESCUE_USER="rescue_admin"
+RESCUE_PASSWORD="123456"
+PEOPLE_OU="${APP_LDAP_PEOPLE_OU:-ou=people}"
+RESCUE_DN="uid=${RESCUE_USER},${PEOPLE_OU},${APP_LDAP_BASE_DN}"
+LDAP_BIND_DN="cn=admin,${APP_LDAP_BASE_DN}"
+
+echo "正在创建或修复 LDAP 紧急管理员账号……"
+
+if "${COMPOSE[@]}" exec -T openldap sh -c \
+  'ldapsearch -x -LLL -H ldap://127.0.0.1:389 \
+    -D "$2" -w "$LDAP_ADMIN_PASSWORD" \
+    -b "$1" -s base dn >/dev/null 2>&1' \
+  sh "$RESCUE_DN" "$LDAP_BIND_DN"
+then
+  "${COMPOSE[@]}" exec -T openldap sh -c \
+    'exec ldapmodify -x -H ldap://127.0.0.1:389 \
+      -D "$1" -w "$LDAP_ADMIN_PASSWORD"' \
+    sh "$LDAP_BIND_DN" >/dev/null <<LDIF
+dn: ${RESCUE_DN}
+changetype: modify
+replace: cn
+cn: Emergency Administrator
+-
+replace: sn
+sn: Administrator
+-
+replace: mail
+mail: rescue_admin@corp.local
+-
+replace: employeeType
+employeeType: ENABLED
+-
+replace: userPassword
+userPassword: ${RESCUE_PASSWORD}
+LDIF
+else
+  "${COMPOSE[@]}" exec -T openldap sh -c \
+    'exec ldapadd -x -H ldap://127.0.0.1:389 \
+      -D "$1" -w "$LDAP_ADMIN_PASSWORD"' \
+    sh "$LDAP_BIND_DN" >/dev/null <<LDIF
+dn: ${RESCUE_DN}
+objectClass: inetOrgPerson
+uid: ${RESCUE_USER}
+cn: Emergency Administrator
+sn: Administrator
+mail: rescue_admin@corp.local
+employeeType: ENABLED
+userPassword: ${RESCUE_PASSWORD}
+LDIF
+fi
+
+echo "正在写入 MySQL 用户及超级管理员权限……"
+
+"${COMPOSE[@]}" exec -T mysql sh -c \
+  'exec mysql --default-character-set=utf8mb4 \
+    -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' \
+  >/dev/null <<SQL
+START TRANSACTION;
+
+INSERT INTO sys_role (
+    role_code, role_name, status, remark,
+    role_scope, role_group_id, creator, modifier,
+    permission_level, built_in
+)
+VALUES (
+    'SUPER_ADMIN', 'Super Administrator', 1,
+    'Built-in super administrator role',
+    'SYSTEM', NULL,
+    'system:emergency-recovery',
+    'system:emergency-recovery',
+    1, 1
+)
+ON DUPLICATE KEY UPDATE
+    status = 1,
+    role_scope = 'SYSTEM',
+    role_group_id = NULL,
+    permission_level = 1,
+    built_in = 1,
+    modifier = 'system:emergency-recovery';
+
+INSERT INTO sys_user (
+    user_id, real_name, email, intranet_email,
+    mobile, employee_no, dept_code, job_title,
+    direct_leader_raw, leader_ref, account_status,
+    employment_status, access_allowed, source_type,
+    ldap_dn, token_version, deleted, creator, modifier
+)
+VALUES (
+    '${RESCUE_USER}',
+    'Emergency Administrator',
+    'rescue_admin@corp.local',
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    'ACTIVE', 1, 'MANUAL',
+    '${RESCUE_DN}',
+    0, 0,
+    'system:emergency-recovery',
+    'system:emergency-recovery'
+)
+ON DUPLICATE KEY UPDATE
+    real_name = 'Emergency Administrator',
+    email = 'rescue_admin@corp.local',
+    employment_status = 'ACTIVE',
+    access_allowed = 1,
+    source_type = 'MANUAL',
+    ldap_dn = '${RESCUE_DN}',
+    token_version = token_version + 1,
+    deleted = 0,
+    modifier = 'system:emergency-recovery';
+
+INSERT IGNORE INTO sys_role_permission (
+    role_id, permission_id, creator
+)
+SELECT
+    role_account.id,
+    permission.id,
+    'system:emergency-recovery'
+FROM sys_role role_account
+CROSS JOIN sys_permission permission
+WHERE role_account.role_code = 'SUPER_ADMIN'
+  AND permission.status = 1;
+
+INSERT IGNORE INTO sys_user_role (
+    user_id, role_id, creator
+)
+SELECT
+    user_account.id,
+    role_account.id,
+    'system:emergency-recovery'
+FROM sys_user user_account
+CROSS JOIN sys_role role_account
+WHERE user_account.user_id = '${RESCUE_USER}'
+  AND user_account.deleted = 0
+  AND role_account.role_code = 'SUPER_ADMIN';
+
+INSERT INTO sys_audit_log (
+    operator, operation_type, biz_type, biz_id, result
+)
+VALUES (
+    'system:emergency-recovery',
+    'EMERGENCY_SUPER_ADMIN_CREATE',
+    'USER',
+    '${RESCUE_USER}',
+    'SUCCESS'
+);
+
+COMMIT;
+SQL
+
+echo "正在重启后端以重新加载 RBAC 权限……"
+
+"${COMPOSE[@]}" restart idm-app >/dev/null
+
+healthy=0
+
+for ((attempt = 1; attempt <= 60; attempt++)); do
+  if "${COMPOSE[@]}" exec -T idm-app \
+    curl -fsS \
+    "http://127.0.0.1:${APP_INTERNAL_PORT}/actuator/health" \
+    2>/dev/null | grep -q '"status":"UP"'
+  then
+    healthy=1
+    break
+  fi
+
+  sleep 2
+done
+
+echo
+echo "========================================"
+echo "紧急超级管理员账号"
+echo "用户ID：${RESCUE_USER}"
+echo "密码：${RESCUE_PASSWORD}"
+echo "========================================"
+
+if (( healthy == 0 )); then
+  echo "账号已经创建，但后端健康检查未通过。"
+  echo "请执行以下命令查看日志："
+  echo "docker compose --env-file .env logs --tail=200 idm-app"
+  exit 1
+fi
+
+echo "后端健康检查通过，现在可以登录。"
+
+
+
+
+用户ID：rescue_admin
+密码：123456
