@@ -23,9 +23,45 @@ export interface UserItem {
 }
 
 export interface UserListQuery {
+  /** 精确用户ID（第三方身份目录/兼容用） */
   userId?: string
+  /** 模糊关键词（跨 userId/realName/employeeNo） */
+  keyword?: string
   deptName?: string
   accessAllowed?: boolean
+}
+
+/** V2 用户分页查询参数（GET /api/v2/users） */
+export interface UserListQueryV2 {
+  keyword?: string
+  userId?: string
+  realName?: string
+  employeeNo?: string
+  mobile?: string
+  email?: string
+  intranetEmail?: string
+  jobTitle?: string
+  /** 部门规则 JSON 数组字符串 */
+  departmentRules?: string
+  accessAllowed?: boolean
+  employmentStatus?: string
+  accountStatus?: string
+  sourceType?: string
+  roleCodes?: string[]
+  createdStart?: string
+  createdEnd?: string
+  pageNum?: number
+  pageSize?: number
+  orderBy?: string
+  orderDir?: 'asc' | 'desc'
+}
+
+/** V2 统一分页结果 */
+export interface PageResult<T> {
+  items: T[]
+  total: number
+  pageNum: number
+  pageSize: number
 }
 
 export interface DepartmentReference {
@@ -75,13 +111,6 @@ export interface VerifyPasswordPayload {
 
 export interface VerifyPasswordResult {
   verificationToken: string
-}
-
-export interface BatchDeleteUsersPayload {
-  userIds: number[]
-  userIdKeyword?: string
-  deptNameKeyword?: string
-  accessAllowed?: boolean
 }
 
 export interface BatchDeleteUsersResult {

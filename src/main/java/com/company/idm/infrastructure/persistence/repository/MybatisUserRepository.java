@@ -1,10 +1,14 @@
 package com.company.idm.infrastructure.persistence.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.company.idm.common.api.PageResult;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.PublicUser;
+import com.company.idm.domain.user.UserPageQuery;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.domain.user.UserRoleBinding;
 import com.company.idm.infrastructure.persistence.dataobject.UserPartTimeDepartmentDO;
@@ -17,7 +21,9 @@ import com.company.idm.infrastructure.persistence.mapper.RoleMembershipChangeMap
 import com.company.idm.infrastructure.persistence.mapper.UserPartTimeDepartmentMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserRoleMapper;
+import com.company.idm.infrastructure.persistence.record.UserRoleBindingRecord;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -25,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -125,6 +132,74 @@ public class MybatisUserRepository implements UserRepository {
         }
 
         return toDomains(userMapper.selectList(queryWrapper));
+    }
+
+    @Override
+    public PageResult<User> pageFind(UserPageQuery spec, Set<Long> visibleUserIds) {
+        List<UserPageQuery.DepartmentRule> includeRules = filterDepartmentRules(spec.departmentRules(), false);
+        List<UserPageQuery.DepartmentRule> excludeRules = filterDepartmentRules(spec.departmentRules(), true);
+        Page<UserDO> page = new Page<>(spec.pageNum(), spec.pageSize());
+        IPage<UserDO> result = userMapper.selectV2UserPage(
+            page,
+            spec.userId(),
+            spec.keyword(),
+            spec.realName(),
+            spec.employeeNo(),
+            spec.mobile(),
+            spec.email(),
+            spec.intranetEmail(),
+            spec.jobTitle(),
+            spec.accessAllowed(),
+            spec.employmentStatus(),
+            spec.accountStatus(),
+            spec.sourceType(),
+            spec.roleCodes(),
+            spec.createdStart(),
+            spec.createdEnd(),
+            includeRules.isEmpty() ? null : includeRules,
+            excludeRules.isEmpty() ? null : excludeRules,
+            visibleUserIds == null ? null : new ArrayList<>(visibleUserIds),
+            spec.orderBy(),
+            spec.orderDir()
+        );
+        return PageResult.of(toDomainList(result.getRecords()), result.getTotal(), spec.pageNum(), spec.pageSize());
+    }
+
+    private List<UserPageQuery.DepartmentRule> filterDepartmentRules(
+        List<UserPageQuery.DepartmentRule> rules,
+        boolean exclude
+    ) {
+        if (rules == null || rules.isEmpty()) {
+            return List.of();
+        }
+        return rules.stream().filter(rule -> rule.exclude() == exclude).toList();
+    }
+
+    /**
+     * 批量将分页查询的 DO 转换为领域用户，避免逐条 N+1 查询 roleCodes 与兼职部门。
+     */
+    private List<User> toDomainList(List<UserDO> dataObjects) {
+        if (dataObjects == null || dataObjects.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = dataObjects.stream().map(UserDO::getId).toList();
+        Map<String, List<String>> roleCodesByUserId = userRoleMapper.selectRoleCodesByUserIds(ids).stream()
+            .collect(Collectors.groupingBy(
+                UserRoleBindingRecord::userId,
+                Collectors.mapping(UserRoleBindingRecord::roleCode, Collectors.toList())
+            ));
+        Map<Long, List<String>> partTimeByUserId = userPartTimeDepartmentMapper.selectByUserIds(ids).stream()
+            .collect(Collectors.groupingBy(
+                UserPartTimeDepartmentDO::getUserId,
+                Collectors.mapping(UserPartTimeDepartmentDO::getDeptCode, Collectors.toList())
+            ));
+        return dataObjects.stream()
+            .map(dataObject -> toDomain(
+                dataObject,
+                partTimeByUserId.getOrDefault(dataObject.getId(), List.of()),
+                new HashSet<>(roleCodesByUserId.getOrDefault(dataObject.getUserId(), List.of()))
+            ))
+            .toList();
     }
 
     @Override
@@ -370,6 +445,10 @@ public class MybatisUserRepository implements UserRepository {
     }
 
     private User toDomain(UserDO dataObject, List<String> partTimeDeptCodes) {
+        return toDomain(dataObject, partTimeDeptCodes, findRoleCodesByUserId(dataObject.getUserId()));
+    }
+
+    private User toDomain(UserDO dataObject, List<String> partTimeDeptCodes, Set<String> roleCodes) {
         return User.builder()
             .id(dataObject.getId())
             .userId(dataObject.getUserId())
@@ -389,7 +468,7 @@ public class MybatisUserRepository implements UserRepository {
             .sourceType(SourceType.valueOf(dataObject.getSourceType()))
             .ldapDn(dataObject.getLdapDn())
             .tokenVersion(dataObject.getTokenVersion())
-            .roleCodes(findRoleCodesByUserId(dataObject.getUserId()))
+            .roleCodes(roleCodes == null ? Set.of() : roleCodes)
             .build();
     }
 

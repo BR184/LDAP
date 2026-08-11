@@ -1,5 +1,6 @@
 package com.company.idm.domain.user;
 
+import com.company.idm.common.api.PageResult;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -24,6 +25,14 @@ public interface UserRepository {
     List<User> findActiveEmployees();
 
     List<User> findByConditions(String keyword, String deptCode, Boolean accessAllowed);
+
+    /**
+     * V2 用户分页查询：读取范围已在可见用户 ID 集合下推到 SQL。
+     *
+     * @param spec           查询规格（含筛选、部门规则、分页、排序）
+     * @param visibleUserIds 操作者可见用户 ID 集合；null 表示全部可见
+     */
+    PageResult<User> pageFind(UserPageQuery spec, Set<Long> visibleUserIds);
 
     List<PublicUser> searchPublicUsers(String realNameKeyword, int limit);
 

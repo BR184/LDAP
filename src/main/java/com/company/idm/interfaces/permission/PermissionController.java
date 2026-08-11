@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 提供权限树查询接口。
  */
+@Deprecated
 @RestController
 @RequestMapping("/api/v1/permissions")
 @RequiredArgsConstructor

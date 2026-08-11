@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 鎻愪緵鍚屾浠诲姟鐨勬墜宸ヨЕ鍙戜笌鏌ヨ鎺ュ彛銆? */
+@Deprecated
 @RestController
 @RequestMapping("/api/v1/sync")
 @RequiredArgsConstructor

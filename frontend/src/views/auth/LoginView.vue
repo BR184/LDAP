@@ -89,7 +89,7 @@ function handleForgotPassword() {
                 <span>用户ID</span>
                 <el-popover
                   placement="left"
-                  :width="720"
+                  :width="560"
                   trigger="hover"
                   :show-after="120"
                   :hide-after="80"
@@ -332,9 +332,10 @@ function handleForgotPassword() {
 :global(.login-user-id-help-image) {
   display: block;
   width: 100%;
-  max-height: 78vh;
+  max-height: 48vh;
   border-radius: 5px;
   object-fit: contain;
+  margin: 0 auto;
 }
 
 .login-view :deep(.el-input__wrapper) {

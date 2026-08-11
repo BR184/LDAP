@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 提供第三方 LDAP 通用接入框架的模板与预检接口。
  */
+@Deprecated
 @RestController
 @RequestMapping("/api/v1/ldap")
 @RequiredArgsConstructor

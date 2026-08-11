@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.idm.infrastructure.persistence.mapper.UserMapper">
+
+    <!-- V2 用户分页筛选 WHERE 片段（所有值参数化，禁止拼串） -->
+    <sql id="v2UserWhere">
+        u.deleted = 0
+        <if test="userId != null and userId != ''">
+            AND u.user_id = #{userId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (u.user_id LIKE CONCAT('%', #{keyword}, '%')
+              OR u.real_name LIKE CONCAT('%', #{keyword}, '%')
+              OR u.employee_no LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="realName != null and realName != ''">
+            AND u.real_name LIKE CONCAT('%', #{realName}, '%')
+        </if>
+        <if test="employeeNo != null and employeeNo != ''">
+            AND u.employee_no LIKE CONCAT('%', #{employeeNo}, '%')
+        </if>
+        <if test="mobile != null and mobile != ''">
+            AND u.mobile LIKE CONCAT('%', #{mobile}, '%')
+        </if>
+        <if test="email != null and email != ''">
+            AND u.email LIKE CONCAT('%', #{email}, '%')
+        </if>
+        <if test="intranetEmail != null and intranetEmail != ''">
+            AND u.intranet_email LIKE CONCAT('%', #{intranetEmail}, '%')
+        </if>
+        <if test="jobTitle != null and jobTitle != ''">
+            AND u.job_title LIKE CONCAT('%', #{jobTitle}, '%')
+        </if>
+        <if test="accessAllowed != null">
+            AND u.access_allowed = #{accessAllowed}
+        </if>
+        <if test="employmentStatus != null and employmentStatus != ''">
+            AND u.employment_status = #{employmentStatus}
+        </if>
+        <if test="accountStatus != null and accountStatus != ''">
+            AND u.account_status = #{accountStatus}
+        </if>
+        <if test="sourceType != null and sourceType != ''">
+            AND u.source_type = #{sourceType}
+        </if>
+        <if test="createdStart != null">
+            AND u.gmt_create &gt;= #{createdStart}
+        </if>
+        <if test="createdEnd != null">
+            AND u.gmt_create &lt; #{createdEnd}
+        </if>
+        <if test="roleCodes != null and roleCodes.size() > 0">
+            AND u.id IN (
+                SELECT ur.user_id FROM sys_user_role ur
+                INNER JOIN sys_role r ON r.id = ur.role_id
+                WHERE r.status = 1 AND r.role_code IN
+                <foreach collection="roleCodes" item="roleCode" open="(" separator="," close=")">#{roleCode}</foreach>
+            )
+        </if>
+        <!-- 包含部门规则：规则之间 OR -->
+        <if test="includeRules != null and includeRules.size() > 0">
+            AND (
+            <foreach collection="includeRules" item="rule" separator=" OR ">
+                <include refid="departmentRulePredicate"/>
+            </foreach>
+            )
+        </if>
+        <!-- 排除部门规则：整体 NOT（命中任一排除规则即剔除） -->
+        <if test="excludeRules != null and excludeRules.size() > 0">
+            AND NOT (
+            <foreach collection="excludeRules" item="rule" separator=" OR ">
+                <include refid="departmentRulePredicate"/>
+            </foreach>
+            )
+        </if>
+        <!-- 读取范围下推：操作者可见用户 ID 集合（null 表示全部） -->
+        <if test="visibleUserIds != null">
+            AND u.id IN
+            <foreach collection="visibleUserIds" item="vid" open="(" separator="," close=")">#{vid}</foreach>
+        </if>
+    </sql>
+
+    <!-- 单条部门规则谓词（在 include/exclude foreach 中以 rule 为当前项） -->
+    <sql id="departmentRulePredicate">
+        <choose>
+            <when test="rule.unassigned">
+                (u.dept_code IS NULL OR u.dept_code = '')
+                AND NOT EXISTS (SELECT 1 FROM sys_user_part_time_department p WHERE p.user_id = u.id)
+            </when>
+            <otherwise>
+                <trim prefix="(" suffix=")" prefixOverrides="OR">
+                    <if test="rule.primaryCodes != null and rule.primaryCodes.size() > 0">
+                        u.dept_code IN
+                        <foreach collection="rule.primaryCodes" item="code" open="(" separator="," close=")">#{code}</foreach>
+                    </if>
+                    <if test="rule.partTimeCodes != null and rule.partTimeCodes.size() > 0">
+                        <if test="rule.primaryCodes != null and rule.primaryCodes.size() > 0">OR</if>
+                        EXISTS (SELECT 1 FROM sys_user_part_time_department p
+                                WHERE p.user_id = u.id AND p.dept_code IN
+                                <foreach collection="rule.partTimeCodes" item="code" open="(" separator="," close=")">#{code}</foreach>)
+                    </if>
+                </trim>
+            </otherwise>
+        </choose>
+    </sql>
+
+    <select id="selectV2UserPage" resultType="com.company.idm.infrastructure.persistence.dataobject.UserDO">
+        SELECT u.*
+        FROM sys_user u
+        WHERE
+        <include refid="v2UserWhere"/>
+        <choose>
+            <when test="orderBy != null and orderBy != ''">
+                ORDER BY ${orderBy} ${orderDir}
+            </when>
+            <otherwise>
+                ORDER BY u.id ASC
+            </otherwise>
+        </choose>
+    </select>
+
+</mapper>

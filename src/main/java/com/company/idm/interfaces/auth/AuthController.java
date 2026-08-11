@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 提供登录与当前用户信息接口。
  */
+@Deprecated
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor

@@ -26,3 +26,10 @@
 [2026-08-04 20:36:14] commit: 32851163d2d22ac38eb865b22eb3568f9f96a769 | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V51
 [2026-08-05 17:40:57] commit: ac22df12a706f58cb6186c29007692eb43ca2832 | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V52
 [2026-08-05 18:44:24] commit: ac22df12a706f58cb6186c29007692eb43ca2832 | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V53
+[2026-07-30 20:46:53] commit: e5327dbe36135cf42a4bf2c30753abf8032de2ef | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V36
+[2026-08-04 09:06:18] commit: 2aee3fb12426cebb043b9f79c8fce597ca6a5779 | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V46
+[2026-08-04 14:49:42] commit: 92d63291f641e69865332c7a6254832af04c99b1 | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V49
+[2026-08-04 20:24:21] commit: 408440e00dc97feba1aec1fa7f88f580f45c6f1c | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V50
+[2026-08-06 15:58:13] commit: 7172cb386bcc6bc1d768c57f007f497d639321b7 | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V53
+[2026-08-11 14:24:56] commit: 7172cb386bcc6bc1d768c57f007f497d639321b7 | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V53
+[2026-08-11 14:31:31] commit: 7172cb386bcc6bc1d768c57f007f497d639321b7 | jar: corp-idm-platform-0.1.0-SNAPSHOT.jar | db: V53 | fix: v2/users orderBy null NPE

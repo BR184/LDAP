@@ -1,6 +1,7 @@
 package com.company.idm.application.user;
 
 import com.company.idm.application.rbac.PolicyRefreshService;
+import com.company.idm.common.api.PageResult;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
 import com.company.idm.common.exception.BizException;
@@ -16,6 +17,7 @@ import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserAccessPolicy;
+import com.company.idm.domain.user.UserPageQuery;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.config.AppLdapProperties;
 import com.company.idm.infrastructure.ldap.LdapDnHelper;
@@ -55,8 +57,13 @@ public class UserApplicationService {
     private final InitialPasswordPolicy initialPasswordPolicy;
     private final UserAccessPolicy userAccessPolicy;
     private final SystemAdministratorProtectionPolicy systemAdministratorProtectionPolicy;
+    private final UserReadScopeService userReadScopeService;
 
-    public List<User> listUsers(String keyword, String departmentKeyword, Boolean accessAllowed) {
+    /**
+     * V1 keyword 模糊搜索：跨 userId/realName/employeeNo 三字段模糊匹配，管理端搜索框与批量删除共用。
+     * 仅供 V1 兼容，新功能请使用 V2 的 GET /api/v2/users。
+     */
+    public List<User> listUsersByKeyword(String keyword, String departmentKeyword, Boolean accessAllowed) {
         String normalizedKeyword = normalize(keyword);
         String normalizedDepartmentKeyword = normalize(departmentKeyword);
         Map<String, Department> departmentByCode = loadDepartmentMap();
@@ -67,8 +74,65 @@ public class UserApplicationService {
             .toList();
     }
 
+    /**
+     * V1 userId 精确匹配：只返回与 userId 精确相等的用户（0 或 1 条），供第三方身份目录精确查询，
+     * 避免子串模糊命中产生歧义。仅供 V1 兼容，新功能请使用 V2 的 GET /api/v2/users/by-user-id/{userId}。
+     */
+    public List<User> listUsersByExactUserId(String userId, String departmentKeyword, Boolean accessAllowed) {
+        String normalizedUserId = normalize(userId);
+        if (normalizedUserId == null) {
+            return List.of();
+        }
+        String normalizedDepartmentKeyword = normalize(departmentKeyword);
+        Map<String, Department> departmentByCode = loadDepartmentMap();
+        return userRepository.findByUserId(normalizedUserId)
+            .map(user -> enrichDepartment(user, departmentByCode))
+            .filter(user -> matchesDepartmentKeyword(user, normalizedDepartmentKeyword))
+            .filter(user -> accessAllowed == null || user.isAccessAllowed() == accessAllowed)
+            .stream()
+            .toList();
+    }
+
+    /**
+     * V2 用户分页查询：读取范围下推到 SQL 后再分页，保证 total 正确。
+     *
+     * @param spec                       V2 查询规格（筛选 + 部门规则 + 分页 + 排序）
+     * @param operator                   当前操作者
+     * @param organizationSnapshot       组织快照（用于下属树范围计算）
+     * @param operatorPermissionCodes    操作者权限码
+     */
+    public PageResult<User> pageUsersV2(
+        UserPageQuery spec,
+        User operator,
+        List<User> organizationSnapshot,
+        Set<String> operatorPermissionCodes
+    ) {
+        Set<Long> visibleUserIds = userReadScopeService.resolveVisibleUserIds(operator, organizationSnapshot, operatorPermissionCodes);
+        if (visibleUserIds != null && visibleUserIds.isEmpty()) {
+            return PageResult.empty(spec.pageNum(), spec.pageSize());
+        }
+        Map<String, Department> departmentByCode = loadDepartmentMap();
+        PageResult<User> page = userRepository.pageFind(spec, visibleUserIds);
+        List<User> enriched = page.items().stream()
+            .map(user -> enrichDepartment(user, departmentByCode))
+            .toList();
+        return PageResult.of(enriched, page.total(), page.pageNum(), page.pageSize());
+    }
+
     public User getUser(Long userId) {
         User user = userRepository.findById(userId)
+            .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
+        return enrichDepartment(user, loadDepartmentMap());
+    }
+
+    /**
+     * 按业务用户ID精确查询单个用户（V2 by-user-id 端点，走唯一索引）。
+     */
+    public User getUserByUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new BizException("USER_NOT_FOUND", "用户不存在");
+        }
+        User user = userRepository.findByUserId(userId.trim())
             .orElseThrow(() -> new BizException("USER_NOT_FOUND", "用户不存在"));
         return enrichDepartment(user, loadDepartmentMap());
     }
@@ -216,7 +280,7 @@ public class UserApplicationService {
                     .orElseThrow(() -> new BizException("USER_NOT_FOUND", "存在待删除用户不存在")))
                 .toList();
         } else {
-            users = listUsers(command.userIdKeyword(), command.deptNameKeyword(), command.accessAllowed());
+            users = listUsersByKeyword(command.userIdKeyword(), command.deptNameKeyword(), command.accessAllowed());
         }
         if (users.isEmpty()) {
             throw new BizException("USER_BATCH_DELETE_EMPTY", "待删除用户不能为空");

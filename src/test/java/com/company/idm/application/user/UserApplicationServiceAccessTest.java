@@ -46,7 +46,8 @@ class UserApplicationServiceAccessTest {
         mock(PasswordVerificationTokenService.class),
         mock(InitialPasswordPolicy.class),
         new UserAccessPolicy(),
-        new SystemAdministratorProtectionPolicy()
+        new SystemAdministratorProtectionPolicy(),
+        mock(UserReadScopeService.class)
     );
 
     @Test

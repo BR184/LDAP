@@ -3,6 +3,7 @@ package com.company.idm.application.user;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.common.exception.ErrorCodeConstants;
 import com.company.idm.domain.user.User;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,26 @@ public class UserReadScopeService {
     public static final String USER_READ_SELF_AND_SUBORDINATE_TREE = "USER_READ_SELF_AND_SUBORDINATE_TREE";
 
     private final ReportingHierarchyService reportingHierarchyService;
+
+    /**
+     * V2 读取范围下推：返回操作者可见的用户 ID 集合，null 表示全部可见。
+     * 含 USER_READ -> null（全量）；仅下属树 -> 操作者自身 + 下级树用户。
+     */
+    public Set<Long> resolveVisibleUserIds(
+        User operator,
+        List<User> organizationSnapshot,
+        Set<String> permissionCodes
+    ) {
+        if (resolveScope(permissionCodes) == UserReadScope.ALL) {
+            return null;
+        }
+        Set<Long> ids = new HashSet<>();
+        if (operator != null && operator.getId() != null) {
+            ids.add(operator.getId());
+        }
+        ids.addAll(reportingHierarchyService.findDescendantUserIds(operator, organizationSnapshot));
+        return ids;
+    }
 
     public List<User> filterVisibleUsers(
         User operator,

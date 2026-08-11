@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import axios from 'axios'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, toRaw } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, Close, Delete, MoreFilled, Plus, Search } from '@element-plus/icons-vue'
+import { Check, Close, Delete, MoreFilled, Plus } from '@element-plus/icons-vue'
 import {
   assignUserRoles,
   batchDeleteUsers,
   createUser,
   deleteUser,
   fetchUserDetail,
-  fetchUsers,
+  fetchUsersV2,
   resetUserPassword,
   syncUserToLdap,
   updateUser,
@@ -19,12 +19,18 @@ import {
 import { fetchDepartmentTree } from '@/api/modules/department'
 import { fetchRoles } from '@/api/modules/role'
 import { useAuthStore } from '@/stores/auth'
+import { buildDepartmentOptions } from '@/utils/department'
 import UserDetailDrawer from '@/views/user/components/UserDetailDrawer.vue'
 import UserFormDrawer from '@/views/user/components/UserFormDrawer.vue'
 import UserRoleDrawer from '@/views/user/components/UserRoleDrawer.vue'
 import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
+import UserQuickFilterBar from '@/components/admin/user-filter/UserQuickFilterBar.vue'
+import UserAdvancedFilterPanel from '@/components/admin/user-filter/UserAdvancedFilterPanel.vue'
+import UserDepartmentRulesEditor from '@/components/admin/user-filter/UserDepartmentRulesEditor.vue'
+import UserActiveFilterTags from '@/components/admin/user-filter/UserActiveFilterTags.vue'
+import { defaultUserFilters, filtersToV2Query, type UserFilters } from '@/components/admin/user-filter/types'
 import type { DepartmentTreeNode, DepartmentTreeOption } from '@/types/department'
-import type { CreateUserPayload, UpdateUserPayload, UserItem, UserListQuery } from '@/types/user'
+import type { CreateUserPayload, UpdateUserPayload, UserItem } from '@/types/user'
 
 const SUPER_ADMIN_ROLE_CODE = 'SUPER_ADMIN'
 const SYSTEM_ADMIN_USER_ID = 'admin'
@@ -33,17 +39,10 @@ const queryClient = useQueryClient()
 const authStore = useAuthStore()
 const tableRef = ref<{ clearSelection?: () => void } | null>(null)
 
-const searchForm = reactive({
-  userId: '',
-  deptName: '',
-  accessAllowed: undefined as boolean | undefined,
-})
-
-const appliedQuery = reactive<UserListQuery>({
-  userId: '',
-  deptName: '',
-  accessAllowed: undefined,
-})
+const filters = reactive<UserFilters>(defaultUserFilters())
+const appliedFilters = ref<UserFilters>(defaultUserFilters())
+const advancedVisible = ref(false)
+const deptRulesDialogVisible = ref(false)
 
 const pagination = reactive({
   page: 1,
@@ -78,12 +77,12 @@ const needsRoleOptions = computed(() => canCreateUser.value || canEditUser.value
 const needsDepartmentOptions = computed(() => canCreateUser.value || canEditUser.value)
 
 const usersQuery = useQuery({
-  queryKey: computed(() => ['users', appliedQuery.userId || '', appliedQuery.deptName || '', appliedQuery.accessAllowed ?? 'all']),
+  queryKey: computed(() => ['users-v2', pagination.page, pagination.pageSize, JSON.stringify(appliedFilters.value)]),
   queryFn: () =>
-    fetchUsers({
-      userId: appliedQuery.userId || undefined,
-      deptName: appliedQuery.deptName || undefined,
-      accessAllowed: appliedQuery.accessAllowed,
+    fetchUsersV2({
+      ...filtersToV2Query(appliedFilters.value),
+      pageNum: pagination.page,
+      pageSize: pagination.pageSize,
     }),
 })
 
@@ -99,21 +98,22 @@ const departmentsQuery = useQuery({
   enabled: needsDepartmentOptions,
 })
 
-const users = computed(() => usersQuery.data.value || [])
+const users = computed(() => usersQuery.data.value?.items ?? [])
+const total = computed(() => usersQuery.data.value?.total ?? 0)
 const roles = computed(() => rolesQuery.data.value || [])
 const activeRoles = computed(() => roles.value.filter((role) => role.status === 1))
-const total = computed(() => users.value.length)
-const pagedUsers = computed(() => {
-  const start = (pagination.page - 1) * pagination.pageSize
-  return users.value.slice(start, start + pagination.pageSize)
-})
+const deptRuleCount = computed(() => filters.departmentRules.length)
 
 const departmentOptions = computed<DepartmentTreeOption[]>(() => buildDepartmentOptions(departmentsQuery.data.value || []))
+const departmentTree = computed<DepartmentTreeNode[]>(() => departmentsQuery.data.value || [])
 const roleIdMapByCode = computed<Record<string, number>>(() =>
   roles.value.reduce<Record<string, number>>((accumulator, role) => {
     accumulator[role.roleCode] = role.id
     return accumulator
   }, {}),
+)
+const roleOptions = computed(() =>
+  activeRoles.value.map((role) => ({ value: role.roleCode, label: role.roleName || role.roleCode })),
 )
 
 const currentOperatorPermissionLevel = computed(() => {
@@ -125,12 +125,8 @@ const currentOperatorPermissionLevel = computed(() => {
 })
 
 const isCurrentUserSuperAdmin = computed(() => authStore.currentUser?.roleCodes.includes(SUPER_ADMIN_ROLE_CODE) ?? false)
-const canBatchDelete = computed(() =>
-  selectedUsers.value.length > 0
-  || !!(appliedQuery.userId || appliedQuery.deptName || typeof appliedQuery.accessAllowed === 'boolean'),
-)
+const canBatchDelete = computed(() => selectedUsers.value.length > 0)
 const selectedDeletableUsers = computed(() => selectedUsers.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
-const deletableUsersByQuery = computed(() => users.value.filter((user) => canDeleteUser(user) && !isSuperAdminUser(user)))
 
 function hasMoreActions() {
   return canResetUserPassword.value || authStore.canAny('USER_SYNC_LDAP', 'USER_DELETE')
@@ -193,7 +189,7 @@ const deleteUserMutation = useMutation({
 })
 
 const batchDeleteUsersMutation = useMutation({
-  mutationFn: batchDeleteUsers,
+  mutationFn: (userIds: number[]) => batchDeleteUsers(userIds),
   onSuccess: async (result) => {
     ElMessage.success(`已批量删除 ${result.deletedCount} 个用户`)
     selectedUsers.value = []
@@ -213,20 +209,6 @@ const syncLdapMutation = useMutation({
     await refreshUsers()
   },
 })
-
-function buildDepartmentOptions(nodes: DepartmentTreeNode[]): DepartmentTreeOption[] {
-  return nodes.map((item) => ({
-    value: item.deptCode,
-    label: `${item.deptName} (${item.deptCode})`,
-    disabled: item.status !== 1,
-    children: buildDepartmentOptions(item.children || []),
-  }))
-}
-
-function normalizeText(value: string) {
-  const normalized = value.trim()
-  return normalized ? normalized : undefined
-}
 
 function resolvePermissionLevel(roleCodes: string[]) {
   if (!roleCodes.length) {
@@ -263,22 +245,33 @@ function isProtectedAdministrator(user: UserItem) {
   return isSystemAdminUser(user) || isSuperAdminUser(user)
 }
 
-function applySearch() {
-  appliedQuery.userId = normalizeText(searchForm.userId)
-  appliedQuery.deptName = normalizeText(searchForm.deptName)
-  appliedQuery.accessAllowed = typeof searchForm.accessAllowed === 'boolean' ? searchForm.accessAllowed : undefined
+function applyFilters() {
+  // 注意：structuredClone 无法克隆 Vue reactive 代理对象（会抛 DataCloneError），须先 toRaw 解包
+  appliedFilters.value = structuredClone(toRaw(filters))
   pagination.page = 1
 }
 
-function resetSearch() {
-  searchForm.userId = ''
-  searchForm.deptName = ''
-  searchForm.accessAllowed = undefined
-  applySearch()
+function resetFilters() {
+  Object.assign(filters, defaultUserFilters())
+  advancedVisible.value = false
+  applyFilters()
+}
+
+function clearFilterField(key: keyof UserFilters) {
+  if (key === 'roleCodes') {
+    filters.roleCodes = []
+  } else if (key === 'createdRange') {
+    filters.createdRange = []
+  } else if (key === 'departmentRules') {
+    filters.departmentRules = []
+  } else {
+    ;(filters as Record<string, unknown>)[key] = ''
+  }
+  applyFilters()
 }
 
 async function refreshUsers() {
-  await queryClient.invalidateQueries({ queryKey: ['users'] })
+  await queryClient.invalidateQueries({ queryKey: ['users-v2'] })
 }
 
 function handleSelectionChange(rows: UserItem[]) {
@@ -409,13 +402,7 @@ async function handleDelete(user: UserItem) {
 }
 
 async function handleBatchDelete() {
-  const hasSelectedRows = selectedUsers.value.length > 0
-  const hasSearchQuery = !!(appliedQuery.userId || appliedQuery.deptName || typeof appliedQuery.accessAllowed === 'boolean')
-  if (!hasSelectedRows && !hasSearchQuery) {
-    return
-  }
-
-  const targetUsers = hasSelectedRows ? selectedDeletableUsers.value : deletableUsersByQuery.value
+  const targetUsers = selectedDeletableUsers.value
   if (!targetUsers.length) {
     ElMessage.warning('当前没有可批量删除的用户')
     return
@@ -435,12 +422,7 @@ async function handleBatchDelete() {
     return
   }
 
-  await batchDeleteUsersMutation.mutateAsync({
-    userIds: targetUsers.map((user) => user.id),
-    userIdKeyword: hasSelectedRows ? undefined : appliedQuery.userId || undefined,
-    deptNameKeyword: hasSelectedRows ? undefined : appliedQuery.deptName || undefined,
-    accessAllowed: hasSelectedRows ? undefined : appliedQuery.accessAllowed,
-  })
+  await batchDeleteUsersMutation.mutateAsync(targetUsers.map((user) => user.id))
 }
 
 async function handleResetPassword(user: UserItem) {
@@ -479,24 +461,26 @@ async function handleSyncLdap(user: UserItem) {
     description="统一维护用户资料、管理员准入、LDAP 同步与角色绑定。管理员关闭的准入设置不会被文件导入覆盖。"
   >
     <el-card class="idm-card" shadow="never">
-      <el-form :inline="true" :model="searchForm">
-        <el-form-item label="用户ID/工号/姓名">
-          <el-input v-model="searchForm.userId" clearable placeholder="请输入用户ID、工号或姓名" />
-        </el-form-item>
-        <el-form-item label="部门名称">
-          <el-input v-model="searchForm.deptName" clearable placeholder="请输入部门名称" />
-        </el-form-item>
-        <el-form-item label="允许使用">
-          <el-select v-model="searchForm.accessAllowed" clearable placeholder="全部账号" style="width: 160px">
-            <el-option label="允许使用" :value="true" />
-            <el-option label="已关闭" :value="false" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :icon="Search" @click="applySearch">查询</el-button>
-          <el-button @click="resetSearch">重置</el-button>
-        </el-form-item>
-      </el-form>
+      <UserQuickFilterBar
+        v-model:filters="filters"
+        :dept-rule-count="deptRuleCount"
+        :advanced-visible="advancedVisible"
+        @search="applyFilters"
+        @reset="resetFilters"
+        @toggle-advanced="advancedVisible = !advancedVisible"
+        @open-dept-rules="deptRulesDialogVisible = true"
+      />
+      <el-collapse-transition>
+        <div v-show="advancedVisible" class="user-advanced-filter__panel">
+          <UserAdvancedFilterPanel
+            v-model:filters="filters"
+            :role-options="roleOptions"
+            :dept-rule-count="deptRuleCount"
+            @open-dept-rules="deptRulesDialogVisible = true"
+          />
+        </div>
+      </el-collapse-transition>
+      <UserActiveFilterTags :filters="filters" @clear-field="clearFilterField" @clear-all="resetFilters" />
     </el-card>
 
     <el-card class="idm-card" shadow="never">
@@ -528,7 +512,7 @@ async function handleSyncLdap(user: UserItem) {
         <el-table
           ref="tableRef"
           v-loading="usersQuery.isLoading.value || usersQuery.isFetching.value"
-          :data="pagedUsers"
+          :data="users"
           border
           @selection-change="handleSelectionChange"
         >
@@ -595,9 +579,9 @@ async function handleSyncLdap(user: UserItem) {
               :active-icon="Check"
               :inactive-icon="Close"
               aria-label="切换用户平台使用权限"
-              :disabled="isSystemAdminUser(row)"
+              :disabled="isSystemAdminUser(row as UserItem)"
               :loading="updateAccessMutation.isPending.value"
-              :before-change="() => confirmAccessChange(row, !row.accessAllowed)"
+              :before-change="() => confirmAccessChange(row as UserItem, !row.accessAllowed)"
             />
             <el-tag v-else :type="row.accessAllowed ? 'success' : 'info'" effect="plain">
               {{ row.accessAllowed ? '允许' : '禁止' }}
@@ -622,8 +606,8 @@ async function handleSyncLdap(user: UserItem) {
           <template #default="{ row }">
             <el-space>
               <el-button v-if="authStore.can('USER_DETAIL')" link type="primary" @click="openDetail(row.id)">详情</el-button>
-              <el-button v-if="canEditUser && !isSystemAdminUser(row)" link type="primary" @click="openEdit(row.id)">编辑</el-button>
-              <el-button v-if="canAssignUserRoles" link type="warning" @click="openRoleAssign(row)">分配角色</el-button>
+              <el-button v-if="canEditUser && !isSystemAdminUser(row as UserItem)" link type="primary" @click="openEdit(row.id)">编辑</el-button>
+              <el-button v-if="canAssignUserRoles" link type="warning" @click="openRoleAssign(row as UserItem)">分配角色</el-button>
 
               <el-dropdown v-if="hasMoreActions()" trigger="click">
                 <el-button link type="info">
@@ -642,14 +626,14 @@ async function handleSyncLdap(user: UserItem) {
                       <span class="dropdown-tooltip-wrap">
                         <el-dropdown-item
                           :disabled="!row.canResetPassword"
-                          @click="handleResetPassword(row)"
+                          @click="handleResetPassword(row as UserItem)"
                         >
                           重置密码
                         </el-dropdown-item>
                       </span>
                     </el-tooltip>
-                    <el-dropdown-item v-if="authStore.can('USER_SYNC_LDAP')" @click="handleSyncLdap(row)">同步 LDAP</el-dropdown-item>
-                    <el-dropdown-item v-if="authStore.can('USER_DELETE')" divided :disabled="!canDeleteUser(row)" @click="handleDelete(row)">
+                    <el-dropdown-item v-if="authStore.can('USER_SYNC_LDAP')" @click="handleSyncLdap(row as UserItem)">同步 LDAP</el-dropdown-item>
+                    <el-dropdown-item v-if="authStore.can('USER_DELETE')" divided :disabled="!canDeleteUser(row as UserItem)" @click="handleDelete(row as UserItem)">
                       删除用户
                     </el-dropdown-item>
                   </el-dropdown-menu>
@@ -672,6 +656,14 @@ async function handleSyncLdap(user: UserItem) {
         />
       </div>
     </el-card>
+
+    <el-dialog v-model="deptRulesDialogVisible" title="部门筛选" width="760px">
+      <UserDepartmentRulesEditor v-model="filters.departmentRules" :departments="departmentTree" />
+      <template #footer>
+        <el-button @click="deptRulesDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="deptRulesDialogVisible = false">确定</el-button>
+      </template>
+    </el-dialog>
 
     <UserDetailDrawer v-model="detailVisible" :loading="detailLoading" :user="detailUser" />
 
@@ -697,6 +689,14 @@ async function handleSyncLdap(user: UserItem) {
 </template>
 
 <style scoped lang="scss">
+.user-advanced-filter__panel {
+  margin-top: 12px;
+  padding: 12px;
+  border-top: 1px dashed var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+}
+
 .view-toolbar {
   display: flex;
   align-items: center;

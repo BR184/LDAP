@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 鎻愪緵瑙掕壊鏌ヨ銆佸垱寤恒€佹洿鏂般€佸垹闄や笌鎺堟潈鎺ュ彛銆? */
+@Deprecated
 @RestController
 @RequestMapping("/api/v1/roles")
 @RequiredArgsConstructor

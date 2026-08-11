@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 鎻愪緵绯荤粺绠＄悊涓嬬殑閭欢閰嶇疆鍏ュ彛銆? */
+@Deprecated
 @RestController
 @RequestMapping("/api/v1/system/mail-config")
 @RequiredArgsConstructor

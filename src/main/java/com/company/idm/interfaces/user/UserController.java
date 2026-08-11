@@ -3,8 +3,6 @@ package com.company.idm.interfaces.user;
 import com.company.idm.application.rbac.AssignUserRolesCommand;
 import com.company.idm.application.rbac.EffectivePermissionService;
 import com.company.idm.application.rbac.RbacApplicationService;
-import com.company.idm.application.department.DepartmentDisplay;
-import com.company.idm.application.department.DepartmentPathService;
 import com.company.idm.application.user.AdminResetPasswordCommand;
 import com.company.idm.application.user.BatchDeleteUsersCommand;
 import com.company.idm.application.user.BatchDeleteUsersResult;
@@ -12,7 +10,6 @@ import com.company.idm.application.user.ChangePasswordCommand;
 import com.company.idm.application.user.CreateUserCommand;
 import com.company.idm.application.user.DeleteUserCommand;
 import com.company.idm.application.user.PasswordResetApplicationService;
-import com.company.idm.application.user.PasswordResetAuthorizationService;
 import com.company.idm.application.user.UpdateUserCommand;
 import com.company.idm.application.user.UpdateUserAccessCommand;
 import com.company.idm.application.user.UserApplicationService;
@@ -20,7 +17,6 @@ import com.company.idm.application.user.UserReadScopeService;
 import com.company.idm.common.api.ApiResponse;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.user.User;
-import com.company.idm.domain.user.UserRepository;
 import com.company.idm.domain.department.Department;
 import com.company.idm.domain.department.DepartmentRepository;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
@@ -32,6 +28,7 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,6 +39,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * V1 用户管理接口。
+ *
+ * @deprecated 仅供存量调用方与第三方兼容使用（userId 参数为精确匹配，keyword 参数为模糊搜索）；
+ * 新功能请使用 /api/v2/users。
+ */
+@Deprecated
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -49,18 +53,17 @@ public class UserController {
 
     private final UserApplicationService userApplicationService;
     private final PasswordResetApplicationService passwordResetApplicationService;
-    private final PasswordResetAuthorizationService passwordResetAuthorizationService;
     private final UserReadScopeService userReadScopeService;
-    private final UserRepository userRepository;
     private final EffectivePermissionService effectivePermissionService;
     private final RbacApplicationService rbacApplicationService;
     private final DepartmentRepository departmentRepository;
-    private final DepartmentPathService departmentPathService;
+    private final UserResponseAssembler userResponseAssembler;
 
     @GetMapping
     @PreAuthorize("@casbinAccessService.hasAny(authentication, 'USER_READ', 'USER_READ_SELF_AND_SUBORDINATE_TREE')")
     public ApiResponse<List<UserResponse>> list(
         @RequestParam(required = false) String userId,
+        @RequestParam(required = false) String keyword,
         @RequestParam(required = false) String deptName,
         @RequestParam(required = false) String deptCode,
         @RequestParam(required = false) Boolean accessAllowed,
@@ -68,20 +71,23 @@ public class UserController {
     ) {
         String username = principal.userId();
         String departmentKeyword = deptName != null && !deptName.isBlank() ? deptName : deptCode;
-        User operator = resolveOperator(username);
-        List<User> organizationSnapshot = userRepositorySnapshot();
+        User operator = userResponseAssembler.resolveOperator(username);
+        List<User> organizationSnapshot = userResponseAssembler.repositorySnapshot();
         List<Department> departmentSnapshot = departmentRepository.findAll();
         Set<String> operatorPermissionCodes = effectivePermissionService.resolve(principal);
+        List<User> candidates = StringUtils.hasText(userId)
+            ? userApplicationService.listUsersByExactUserId(userId, departmentKeyword, accessAllowed)
+            : userApplicationService.listUsersByKeyword(keyword, departmentKeyword, accessAllowed);
         List<User> userList = userReadScopeService.filterVisibleUsers(
             operator,
-            userApplicationService.listUsers(userId, departmentKeyword, accessAllowed),
+            candidates,
             organizationSnapshot,
             operatorPermissionCodes
         );
         List<UserResponse> users = userList.stream()
-            .map(user -> toResponse(
+            .map(user -> userResponseAssembler.toResponse(
                 user,
-                canResetPassword(operator, user, organizationSnapshot, operatorPermissionCodes),
+                userResponseAssembler.canResetPassword(operator, user, organizationSnapshot, operatorPermissionCodes),
                 departmentSnapshot
             ))
             .toList();
@@ -96,13 +102,13 @@ public class UserController {
     ) {
         String username = principal.userId();
         User user = userApplicationService.getUser(id);
-        User operator = resolveOperator(username);
-        List<User> organizationSnapshot = userRepositorySnapshot();
+        User operator = userResponseAssembler.resolveOperator(username);
+        List<User> organizationSnapshot = userResponseAssembler.repositorySnapshot();
         Set<String> operatorPermissionCodes = effectivePermissionService.resolve(principal);
         userReadScopeService.checkCanReadUser(operator, user, organizationSnapshot, operatorPermissionCodes);
-        return ApiResponse.success(toResponse(
+        return ApiResponse.success(userResponseAssembler.toResponse(
             user,
-            canResetPassword(operator, user, organizationSnapshot, operatorPermissionCodes),
+            userResponseAssembler.canResetPassword(operator, user, organizationSnapshot, operatorPermissionCodes),
             departmentRepository.findAll()
         ));
     }
@@ -126,7 +132,7 @@ public class UserController {
             request.roleIds(),
             username
         ));
-        return ApiResponse.success(toResponse(user, false, departmentRepository.findAll()));
+        return ApiResponse.success(userResponseAssembler.toResponse(user, false, departmentRepository.findAll()));
     }
 
     @PutMapping("/{id}")
@@ -148,7 +154,7 @@ public class UserController {
             request.partTimeDeptCodes(),
             username
         ));
-        return ApiResponse.success(toResponse(user, false, departmentRepository.findAll()));
+        return ApiResponse.success(userResponseAssembler.toResponse(user, false, departmentRepository.findAll()));
     }
 
     @PutMapping("/{id}/access")
@@ -250,80 +256,6 @@ public class UserController {
         @PathVariable Long id,
         @AuthenticationPrincipal(expression = "userId") String username
     ) {
-        return ApiResponse.success(toResponse(userApplicationService.syncUserToLdap(id, username), false, departmentRepository.findAll()));
-    }
-
-    private UserResponse toResponse(User user, boolean canResetPassword, List<Department> departments) {
-        List<DepartmentReferenceResponse> partTimeDepartments = toDepartmentReferences(
-            user.getPartTimeDeptCodes(),
-            departments
-        );
-        List<String> partTimeDeptCodes = partTimeDepartments.stream()
-            .map(DepartmentReferenceResponse::deptCode)
-            .toList();
-        return new UserResponse(
-            user.getId(),
-            user.getUserId(),
-            user.getRealName(),
-            user.getEmail(),
-            user.getIntranetEmail(),
-            user.getMobile(),
-            user.getEmployeeNo(),
-            user.getDeptName(),
-            user.getDeptCode(),
-            user.getDepartmentPath(),
-            user.getJobTitle(),
-            user.getDirectLeaderRaw(),
-            user.getLeaderRef(),
-            user.getAccountStatus(),
-            partTimeDeptCodes,
-            partTimeDepartments.stream()
-                .map(department -> department.deptName() == null || department.deptName().isBlank()
-                    ? department.deptCode()
-                    : department.deptName())
-                .toList(),
-            partTimeDepartments,
-            user.getPermissionLevel(),
-            user.isAccessAllowed(),
-            user.getEmploymentStatus() == null ? null : user.getEmploymentStatus().name(),
-            user.getLdapDn(),
-            user.getRoleCodes(),
-            canResetPassword
-        );
-    }
-
-    private List<DepartmentReferenceResponse> toDepartmentReferences(List<String> departmentCodes, List<Department> departments) {
-        if (departmentCodes == null || departmentCodes.isEmpty()) {
-            return List.of();
-        }
-        return departmentCodes.stream()
-            .filter(java.util.Objects::nonNull)
-            .map(String::trim)
-            .filter(code -> !code.isBlank())
-            .distinct()
-            .map(code -> {
-                DepartmentDisplay display = departmentPathService.resolve(code, departments);
-                return new DepartmentReferenceResponse(code, display.departmentName(), display.departmentPath());
-            })
-            .toList();
-    }
-
-    private User resolveOperator(String username) {
-        if (username == null || username.isBlank()) {
-            return null;
-        }
-        try {
-            return userRepository.findByUserId(username).orElse(null);
-        } catch (RuntimeException exception) {
-            return null;
-        }
-    }
-
-    private boolean canResetPassword(User operator, User target, List<User> allUsers, Set<String> operatorPermissionCodes) {
-        return passwordResetAuthorizationService.evaluate(operator, target, allUsers, operatorPermissionCodes).allowed();
-    }
-
-    private List<User> userRepositorySnapshot() {
-        return userRepository.findAll();
+        return ApiResponse.success(userResponseAssembler.toResponse(userApplicationService.syncUserToLdap(id, username), false, departmentRepository.findAll()));
     }
 }

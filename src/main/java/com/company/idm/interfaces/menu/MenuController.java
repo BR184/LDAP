@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 鎻愪緵鑿滃崟鏍戞煡璇㈡帴鍙ｃ€? */
+@Deprecated
 @RestController
 @RequestMapping("/api/v1/menus")
 @RequiredArgsConstructor
