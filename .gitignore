@@ -11,3 +11,6 @@ ldap-offline-imagesv0.1/
 LDAP_incremental_update/
 部署打的压缩包/
 docs/feishu-import/
+deploy-backups/
+openwebui_idm_diagnostic.txt
+openwebui_ldap_relogin_diagnostic.txt

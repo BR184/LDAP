@@ -45,7 +45,7 @@
 ## 项目结构
 
 ```
-E:\ldap\
+D:\liuxuhao\projects\ldap\
 ├── src/main/java/com/company/idm/    # 后端 Java 源码
 │   ├── boot/                         # 启动入口
 │   │   └── IdmBootApplication.java   # Spring Boot 主类
@@ -179,7 +179,7 @@ E:\ldap\
 ### 1. 启动依赖服务（MySQL、OpenLDAP）
 
 ```powershell
-cd E:\ldap\deploy
+cd D:\liuxuhao\projects\ldap\deploy
 docker compose -f docker-compose-dev.yml up -d
 ```
 
@@ -192,7 +192,7 @@ docker compose -f docker-compose-dev.yml up -d
 ### 2. 编译后端
 
 ```powershell
-cd E:\ldap
+cd D:\liuxuhao\projects\ldap
 .tools\apache-maven-3.9.6\bin\mvn.cmd clean package -DskipTests
 ```
 
@@ -213,7 +213,7 @@ cd E:\ldap
 ### 4. 启动前端
 
 ```powershell
-cd E:\ldap\frontend
+cd D:\liuxuhao\projects\ldap\frontend
 npm install
 npm run dev
 ```
@@ -428,9 +428,10 @@ infrastructure (基础设施层)
 
 ## 文档管理规则
 
-- 项目设计文档**只维护 `docs`文档**。
-- 禁止在 `docs/` 下新增编号之外的设计文档或计划文档。需求分析、设计方案、重构计划等内容一律归入对应编号文档的合适章节。
-- `CLAUDE.md` 只记录通用共识和规则（技术决策、安全规则、代码规范、协作规则），不记录最新进度口径或其他 已有的信息。
+- **AI 协作与仓库级规则以根 `AGENTS.md` 为准**；项目事实以三份权威文档为准：`docs/product.md`（产品方向）、`docs/architecture.md`（技术架构）、`docs/progress.md`（当前进度）。开发前先读对应文档。
+- 跨阶段/跨系统的开发工作在实现前登记到 `docs/plans/`，完成后将有效结论归入权威文档并删除计划文件。
+- 开发编码遵循**阿里巴巴 Java 开发手册**（后端）与 Vue 3 + TypeScript 强类型最佳实践（前端）。
+- `docs/Design/`、`docs/progress/` 下旧编号文档为只读历史，不作为当前事实来源。
 - 文档膨胀比文档缺失更危险：维护不过来的文档会全部腐烂成垃圾信息干扰项目开发。
 
 ## 文档索引
