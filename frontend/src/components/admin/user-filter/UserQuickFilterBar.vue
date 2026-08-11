@@ -21,7 +21,7 @@ const filters = computed(() => props.filters)
 </script>
 
 <template>
-  <el-form :inline="true" class="user-quick-filter">
+  <el-form :inline="true" class="user-quick-filter" @submit.prevent="emit('search')">
     <el-form-item label="综合关键词">
       <el-input v-model="filters.keyword" clearable placeholder="用户ID、工号或姓名" style="width: 220px" />
     </el-form-item>
@@ -43,7 +43,7 @@ const filters = computed(() => props.filters)
       </el-select>
     </el-form-item>
     <el-form-item>
-      <el-button type="primary" :icon="Search" @click="emit('search')">查询</el-button>
+      <el-button type="primary" native-type="submit" :icon="Search">查询</el-button>
       <el-button :icon="Refresh" @click="emit('reset')">重置</el-button>
       <el-button text @click="emit('toggle-advanced')">
         {{ advancedVisible ? '收起精确筛选' : '精确筛选' }}

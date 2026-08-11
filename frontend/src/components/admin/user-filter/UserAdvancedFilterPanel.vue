@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:filters', value: UserFilters): void
+  (e: 'search'): void
   (e: 'open-dept-rules'): void
 }>()
 
@@ -24,7 +25,7 @@ const sourceTypeOptions = [
 </script>
 
 <template>
-  <el-form label-width="84px" class="user-advanced-filter">
+  <el-form label-width="84px" class="user-advanced-filter" @submit.prevent="emit('search')">
     <el-row :gutter="16">
       <el-col :span="8">
         <el-form-item label="用户ID">
@@ -102,6 +103,8 @@ const sourceTypeOptions = [
         </el-form-item>
       </el-col>
     </el-row>
+    <!-- 隐藏提交按钮：让精确筛选输入框回车也能触发查询（表单 @submit.prevent -> emit('search')） -->
+    <el-button native-type="submit" style="display: none">查询</el-button>
   </el-form>
 </template>
 

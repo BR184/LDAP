@@ -476,11 +476,12 @@ async function handleSyncLdap(user: UserItem) {
             v-model:filters="filters"
             :role-options="roleOptions"
             :dept-rule-count="deptRuleCount"
+            @search="applyFilters"
             @open-dept-rules="deptRulesDialogVisible = true"
           />
         </div>
       </el-collapse-transition>
-      <UserActiveFilterTags :filters="filters" @clear-field="clearFilterField" @clear-all="resetFilters" />
+      <UserActiveFilterTags :filters="appliedFilters" @clear-field="clearFilterField" @clear-all="resetFilters" />
     </el-card>
 
     <el-card class="idm-card" shadow="never">
