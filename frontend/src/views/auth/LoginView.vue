@@ -17,7 +17,7 @@ const form = reactive({
 })
 
 const rules = {
-  loginId: [{ required: true, message: '请输入用户ID', trigger: 'blur' }],
+  loginId: [{ required: true, message: '请输入飞书用户ID', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
@@ -86,7 +86,7 @@ function handleForgotPassword() {
           <el-form-item prop="loginId">
             <template #label>
               <span class="login-view__field-label">
-                <span>用户ID</span>
+                <span>飞书用户ID</span>
                 <el-popover
                   placement="left"
                   :width="560"
@@ -109,7 +109,7 @@ function handleForgotPassword() {
                 </el-popover>
               </span>
             </template>
-            <el-input v-model="form.loginId" :prefix-icon="User" placeholder="请输入用户ID" />
+            <el-input v-model="form.loginId" :prefix-icon="User" placeholder="请输入飞书用户ID" />
           </el-form-item>
 
           <el-form-item label="密码" prop="password">

@@ -52,6 +52,18 @@ class AuthApplicationServiceAccessTest {
         verifyNoInteractions(ldapDirectoryService);
     }
 
+    @Test
+    void rejectsEmployeeNoLoginAttemptBeforeLdapAuthentication() {
+        // 模拟同事使用工号 0102 尝试登录，按 userId 无法查找到用户，且不再回退查询 employeeNo
+        when(userRepository.findByUserId("0102")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.login(new LoginCommand("0102", "password")))
+            .isInstanceOfSatisfying(BizException.class, exception ->
+                org.assertj.core.api.Assertions.assertThat(exception.getCode()).isEqualTo("AUTH_INVALID"));
+
+        verifyNoInteractions(ldapDirectoryService);
+    }
+
     private User user(boolean accessAllowed, EmploymentStatus employmentStatus) {
         return User.builder()
             .id(1L)

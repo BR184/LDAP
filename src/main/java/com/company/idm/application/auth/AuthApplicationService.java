@@ -86,12 +86,7 @@ public class AuthApplicationService {
         if (loginId == null || loginId.isBlank()) {
             return java.util.Optional.empty();
         }
-        String normalizedLoginName = loginId.trim();
-        java.util.Optional<User> byUserId = userRepository.findByUserId(normalizedLoginName);
-        if (byUserId.isPresent()) {
-            return byUserId;
-        }
-        return userRepository.findByEmployeeNo(normalizedLoginName);
+        return userRepository.findByUserId(loginId.trim());
     }
 }
 
