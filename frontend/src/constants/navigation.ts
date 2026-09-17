@@ -47,7 +47,7 @@ export const flatNavigationItems: NavigationItem[] = [
     title: '角色组管理',
     path: '/role-groups',
     icon: Collection,
-    description: '委派维护角色成员关系与对外供给令牌',
+    description: '委派维护角色成员关系与订阅推送',
   },
   {
     title: '菜单管理',
@@ -120,7 +120,7 @@ export const sidebarNavigationGroups: NavigationGroup[] = [
         title: '角色组管理',
         path: '/role-groups',
         icon: Collection,
-        description: '委派维护角色成员关系与对外供给令牌',
+        description: '委派维护角色成员关系与订阅推送',
       },
       {
         title: 'LDAP 控制面',

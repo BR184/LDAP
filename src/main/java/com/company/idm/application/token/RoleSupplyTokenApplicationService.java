@@ -1,6 +1,5 @@
 package com.company.idm.application.token;
 
-import com.company.idm.application.rolegroup.RoleGroupAuthorizationService;
 import com.company.idm.application.user.PasswordVerificationTokenService;
 import com.company.idm.common.exception.BizException;
 import com.company.idm.domain.audit.AuditLog;
@@ -16,10 +15,15 @@ import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 订阅令牌的内部能力：由角色变更推送订阅自动持有与维护，不再对外暴露管理入口。
+ * 令牌主体沿用 ROLE_GROUP/GLOBAL，开放供给接口的鉴权链路保持不变。
+ */
 @Service
 @RequiredArgsConstructor
 public class RoleSupplyTokenApplicationService {
@@ -27,180 +31,22 @@ public class RoleSupplyTokenApplicationService {
     private final PersonalAccessTokenRepository tokenRepository;
     private final PersonalAccessTokenSecretService secretService;
     private final PersonalAccessTokenProperties properties;
-    private final RoleGroupAuthorizationService authorizationService;
     private final UserRepository userRepository;
     private final PasswordVerificationTokenService passwordVerificationTokenService;
     private final AuditLogRepository auditLogRepository;
     private final Clock clock = Clock.systemDefaultZone();
 
-    public RoleSupplyTokenPage listGroupTokens(
-        Long groupId,
-        AuthenticatedUser principal,
-        int page,
-        int pageSize
-    ) {
-        requireSession(principal);
-        authorizationService.requireOwner(principal, groupId);
-        return list(PersonalAccessTokenSubjectType.ROLE_GROUP, groupId, page, pageSize);
-    }
-
-    public RoleSupplyTokenPage listGlobalTokens(AuthenticatedUser principal, int page, int pageSize) {
-        requirePlatformAdminSession(principal);
-        return list(PersonalAccessTokenSubjectType.GLOBAL, null, page, pageSize);
-    }
-
     @Transactional
-    public CreatedPersonalAccessToken createGroupToken(
-        Long groupId,
-        AuthenticatedUser principal,
-        String name,
-        String description,
-        LocalDateTime expiresAt,
-        String sourceIp
-    ) {
-        requireSession(principal);
-        authorizationService.requireOwner(principal, groupId);
-        return create(
-            PersonalAccessTokenSubjectType.ROLE_GROUP,
-            groupId,
-            principal,
-            name,
-            description,
-            expiresAt,
-            sourceIp
-        );
-    }
-
-    @Transactional
-    public CreatedPersonalAccessToken createGlobalToken(
-        AuthenticatedUser principal,
-        String name,
-        String description,
-        LocalDateTime expiresAt,
-        String sourceIp
-    ) {
-        requirePlatformAdminSession(principal);
-        return create(
-            PersonalAccessTokenSubjectType.GLOBAL,
-            null,
-            principal,
-            name,
-            description,
-            expiresAt,
-            sourceIp
-        );
-    }
-
-    @Transactional
-    public CreatedPersonalAccessToken rotateGroupToken(
-        Long groupId,
-        Long tokenId,
-        AuthenticatedUser principal,
-        String sourceIp
-    ) {
-        requireSession(principal);
-        authorizationService.requireOwner(principal, groupId);
-        return rotate(PersonalAccessTokenSubjectType.ROLE_GROUP, groupId, tokenId, principal, sourceIp);
-    }
-
-    @Transactional
-    public CreatedPersonalAccessToken rotateGlobalToken(
-        Long tokenId,
-        AuthenticatedUser principal,
-        String sourceIp
-    ) {
-        requirePlatformAdminSession(principal);
-        return rotate(PersonalAccessTokenSubjectType.GLOBAL, null, tokenId, principal, sourceIp);
-    }
-
-    public String revealGroupToken(
-        Long groupId,
-        Long tokenId,
-        String verificationToken,
-        AuthenticatedUser principal,
-        String sourceIp
-    ) {
-        requireSession(principal);
-        authorizationService.requireOwner(principal, groupId);
-        verifyPasswordToken(principal, verificationToken);
-        return reveal(PersonalAccessTokenSubjectType.ROLE_GROUP, groupId, tokenId, principal, sourceIp);
-    }
-
-    public String revealGlobalToken(
-        Long tokenId,
-        String verificationToken,
-        AuthenticatedUser principal,
-        String sourceIp
-    ) {
-        requirePlatformAdminSession(principal);
-        verifyPasswordToken(principal, verificationToken);
-        return reveal(PersonalAccessTokenSubjectType.GLOBAL, null, tokenId, principal, sourceIp);
-    }
-
-    @Transactional
-    public void revokeGroupToken(
-        Long groupId,
-        Long tokenId,
-        AuthenticatedUser principal,
-        String sourceIp
-    ) {
-        requireSession(principal);
-        authorizationService.requireOwner(principal, groupId);
-        revoke(PersonalAccessTokenSubjectType.ROLE_GROUP, groupId, tokenId, principal, sourceIp);
-    }
-
-    @Transactional
-    public void revokeGlobalToken(Long tokenId, AuthenticatedUser principal, String sourceIp) {
-        requirePlatformAdminSession(principal);
-        revoke(PersonalAccessTokenSubjectType.GLOBAL, null, tokenId, principal, sourceIp);
-    }
-
-    @Transactional
-    public void deleteGroupToken(
-        Long groupId,
-        Long tokenId,
-        AuthenticatedUser principal,
-        String sourceIp
-    ) {
-        requireSession(principal);
-        authorizationService.requireOwner(principal, groupId);
-        delete(PersonalAccessTokenSubjectType.ROLE_GROUP, groupId, tokenId, principal, sourceIp);
-    }
-
-    @Transactional
-    public void deleteGlobalToken(Long tokenId, AuthenticatedUser principal, String sourceIp) {
-        requirePlatformAdminSession(principal);
-        delete(PersonalAccessTokenSubjectType.GLOBAL, null, tokenId, principal, sourceIp);
-    }
-
-    private RoleSupplyTokenPage list(
+    public CreatedPersonalAccessToken createTokenFor(
         PersonalAccessTokenSubjectType subjectType,
         Long subjectId,
-        int page,
-        int pageSize
-    ) {
-        int safePage = Math.max(1, page);
-        int safePageSize = Math.max(1, Math.min(pageSize, 100));
-        long offset = (long) (safePage - 1) * safePageSize;
-        return new RoleSupplyTokenPage(
-            tokenRepository.findBySubject(subjectType, subjectId, offset, safePageSize),
-            tokenRepository.countBySubject(subjectType, subjectId),
-            safePage,
-            safePageSize
-        );
-    }
-
-    private CreatedPersonalAccessToken create(
-        PersonalAccessTokenSubjectType subjectType,
-        Long subjectId,
-        AuthenticatedUser principal,
         String name,
         String description,
-        LocalDateTime expiresAt,
+        AuthenticatedUser principal,
         String sourceIp
     ) {
+        requireSession(principal);
         LocalDateTime now = LocalDateTime.now(clock);
-        validateExpiry(expiresAt, now);
         if (tokenRepository.countActiveBySubject(subjectType, subjectId, now)
             >= properties.getMaxActivePerUser()) {
             throw new BizException("PAT_ACTIVE_LIMIT_EXCEEDED", "有效访问令牌数量已达到上限");
@@ -218,24 +64,26 @@ public class RoleSupplyTokenApplicationService {
             .secretValue(generated.rawToken())
             .hashVersion(generated.hashVersion())
             .tokenPrefix(generated.displayPrefix())
-            .expiresAt(expiresAt)
+            .expiresAt(null)
             .creator(principal.userId())
             .modifier(principal.userId())
             .gmtCreate(now)
             .gmtModified(now)
-            .permissions(java.util.List.of())
+            .permissions(List.of())
             .build());
         audit(principal, sourceIp, "ROLE_SUPPLY_TOKEN_CREATE", persisted.getId(), subjectType, subjectId);
         return new CreatedPersonalAccessToken(persisted, generated.rawToken());
     }
 
-    private CreatedPersonalAccessToken rotate(
+    @Transactional
+    public CreatedPersonalAccessToken rotateToken(
+        Long tokenId,
         PersonalAccessTokenSubjectType subjectType,
         Long subjectId,
-        Long tokenId,
         AuthenticatedUser principal,
         String sourceIp
     ) {
+        requireSession(principal);
         PersonalAccessToken existing = requireToken(tokenId, subjectType, subjectId);
         LocalDateTime now = LocalDateTime.now(clock);
         if (!existing.isActiveAt(now)) {
@@ -258,13 +106,16 @@ public class RoleSupplyTokenApplicationService {
         return new CreatedPersonalAccessToken(rotated, generated.rawToken());
     }
 
-    private String reveal(
+    public String revealToken(
+        Long tokenId,
         PersonalAccessTokenSubjectType subjectType,
         Long subjectId,
-        Long tokenId,
+        String verificationToken,
         AuthenticatedUser principal,
         String sourceIp
     ) {
+        requireSession(principal);
+        verifyPasswordToken(principal, verificationToken);
         PersonalAccessToken token = requireToken(tokenId, subjectType, subjectId);
         if (!token.isActiveAt(LocalDateTime.now(clock)) || !token.isSecretRecoverable()) {
             throw new BizException("PAT_SECRET_UNAVAILABLE", "当前访问令牌不可查看");
@@ -273,10 +124,11 @@ public class RoleSupplyTokenApplicationService {
         return token.getSecretValue();
     }
 
-    private void revoke(
+    @Transactional
+    public void revokeToken(
+        Long tokenId,
         PersonalAccessTokenSubjectType subjectType,
         Long subjectId,
-        Long tokenId,
         AuthenticatedUser principal,
         String sourceIp
     ) {
@@ -290,15 +142,19 @@ public class RoleSupplyTokenApplicationService {
         }
     }
 
-    private void delete(
+    /**
+     * 删除令牌；令牌已不存在时按幂等处理，便于订阅删除流程重试。
+     */
+    @Transactional
+    public void deleteToken(
+        Long tokenId,
         PersonalAccessTokenSubjectType subjectType,
         Long subjectId,
-        Long tokenId,
         AuthenticatedUser principal,
         String sourceIp
     ) {
         if (!tokenRepository.delete(tokenId, subjectType, subjectId)) {
-            throw new BizException("PAT_NOT_FOUND", "访问令牌不存在");
+            return;
         }
         audit(principal, sourceIp, "ROLE_SUPPLY_TOKEN_DELETE", tokenId, subjectType, subjectId);
     }
@@ -318,25 +174,12 @@ public class RoleSupplyTokenApplicationService {
         passwordVerificationTokenService.verify(verificationToken, user);
     }
 
-    private void requirePlatformAdminSession(AuthenticatedUser principal) {
-        requireSession(principal);
-        if (!authorizationService.isPlatformAdmin(principal)) {
-            throw new BizException("ROLE_SUPPLY_TOKEN_FORBIDDEN", "只有平台管理员可以管理全局令牌");
-        }
-    }
-
     private void requireSession(AuthenticatedUser principal) {
         if (principal == null
             || principal.credentialType() != CredentialType.SESSION
             || principal.id() == null
             || principal.userId() == null) {
             throw new BizException("AUTH_FORBIDDEN", "访问令牌管理仅支持网页登录会话");
-        }
-    }
-
-    private void validateExpiry(LocalDateTime expiresAt, LocalDateTime now) {
-        if (expiresAt != null && !expiresAt.isAfter(now)) {
-            throw new BizException("PAT_EXPIRY_INVALID", "令牌有效期必须晚于当前时间");
         }
     }
 

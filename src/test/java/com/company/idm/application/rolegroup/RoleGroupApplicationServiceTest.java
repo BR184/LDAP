@@ -15,6 +15,7 @@ import com.company.idm.domain.audit.AuditLogRepository;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.rbac.RoleScope;
+import com.company.idm.domain.rolegroup.PushSubscriptionRepository;
 import com.company.idm.domain.rolegroup.RoleGroup;
 import com.company.idm.domain.rolegroup.RoleGroupMember;
 import com.company.idm.domain.rolegroup.RoleGroupMemberRole;
@@ -48,7 +49,8 @@ class RoleGroupApplicationServiceTest {
         auditLogRepository,
         policyRefreshService,
         authorizationService,
-        tokenRepository
+        tokenRepository,
+        mock(PushSubscriptionRepository.class)
     );
 
     @BeforeEach

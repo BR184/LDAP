@@ -24,4 +24,5 @@ public class RoleMembershipChangeDO {
     private String changeType;
     private String operator;
     private LocalDateTime gmtCreate;
+    private LocalDateTime publishedAt;
 }

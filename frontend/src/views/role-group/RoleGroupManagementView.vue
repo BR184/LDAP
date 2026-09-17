@@ -2,51 +2,61 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, CopyDocument, Delete, Edit, Key, Plus, RefreshRight, UserFilled } from '@element-plus/icons-vue'
+import { Bell, Check, CopyDocument, Delete, Edit, Plus, RefreshRight, UserFilled } from '@element-plus/icons-vue'
 import PersistentTableScrollFrame from '@/components/table-scroll/PersistentTableScrollFrame.vue'
 import { verifyMyPassword } from '@/api/modules/user'
 import {
   addRoleMembers,
-  createGlobalToken,
-  createGroupToken,
+  createGlobalSubscription,
+  createGroupSubscription,
   createRoleGroup,
   createRoleGroupRole,
-  deleteGlobalToken,
-  deleteGroupToken,
+  deleteGlobalSubscription,
+  deleteGroupSubscription,
   deleteRoleGroup,
   deleteRoleGroupRole,
-  fetchGlobalTokens,
-  fetchGroupTokens,
+  disableGlobalSubscription,
+  disableGroupSubscription,
+  enableGlobalSubscription,
+  enableGroupSubscription,
+  fetchGlobalSubscriptions,
+  fetchGroupSubscriptions,
   fetchRoleGroupCollaborators,
   fetchRoleGroupRoles,
   fetchRoleGroups,
   fetchRoleMembers,
   removeRoleGroupCollaborator,
   removeRoleMember,
-  revealGlobalToken,
-  revealGroupToken,
-  revokeGlobalToken,
-  revokeGroupToken,
-  rotateGlobalToken,
-  rotateGroupToken,
+  revealGlobalSubscription,
+  revealGroupSubscription,
+  rotateGlobalSubscription,
+  rotateGroupSubscription,
   saveRoleGroupCollaborator,
   searchRoleGroupUsers,
   updateRoleGroup,
   updateRoleGroupRole,
 } from '@/api/modules/role-group'
+import { fetchRoles } from '@/api/modules/role'
 import { useAuthStore } from '@/stores/auth'
 import type {
   PublicUserItem,
   RoleGroupItem,
   RoleGroupMemberRole,
   RoleGroupRoleItem,
-  RoleSupplyTokenItem,
+  SubscriptionCredential,
+  SubscriptionItem,
 } from '@/types/role-group'
 
 const queryClient = useQueryClient()
 const authStore = useAuthStore()
 const selectedGroupId = ref<number | null>(null)
 const activeTab = ref('roles')
+type RoleGroupPageView = 'groups' | 'global-subscriptions'
+const activeView = ref<RoleGroupPageView>('groups')
+const pageViewOptions: Array<{ label: string; value: RoleGroupPageView }> = [
+  { label: '角色组', value: 'groups' },
+  { label: '全局订阅', value: 'global-subscriptions' },
+]
 const viewerId = computed(() => authStore.currentUser?.id ?? null)
 const canReadRoleGroups = computed(() => authStore.canAny('ROLE_GROUP_READ', 'ROLE_GROUP_MANAGE'))
 const hasRoleGroupManagement = computed(() => authStore.can('ROLE_GROUP_MANAGE'))
@@ -75,7 +85,10 @@ const canManageGroupContent = computed(() =>
 const canAssignRoleMembers = computed(() =>
   canManageGroupContent.value && authStore.can('ROLE_GROUP_USER_ASSIGN'),
 )
-const canManageGlobalTokens = computed(() => authStore.isAdmin && hasRoleGroupManagement.value)
+const canManageGlobalSubscriptions = computed(() => authStore.isAdmin && hasRoleGroupManagement.value)
+const showGlobalSubscriptionView = computed(
+  () => canManageGlobalSubscriptions.value && activeView.value === 'global-subscriptions',
+)
 
 const rolesQuery = useQuery({
   queryKey: computed(() => ['role-groups', viewerId.value, selectedGroupId.value, 'roles']),
@@ -87,22 +100,23 @@ const collaboratorsQuery = useQuery({
   queryFn: () => fetchRoleGroupCollaborators(selectedGroupId.value!),
   enabled: hasValidGroupSelection,
 })
-const groupTokensQuery = useQuery({
-  queryKey: computed(() => ['role-groups', viewerId.value, selectedGroupId.value, 'tokens']),
-  queryFn: () => fetchGroupTokens(selectedGroupId.value!),
+const groupSubscriptionsQuery = useQuery({
+  queryKey: computed(() => ['role-groups', viewerId.value, selectedGroupId.value, 'subscriptions']),
+  queryFn: () => fetchGroupSubscriptions(selectedGroupId.value!),
   enabled: computed(() => hasValidGroupSelection.value && canManageGroupSettings.value),
 })
-const globalTokensQuery = useQuery({
-  queryKey: computed(() => ['role-supply-tokens', viewerId.value, 'global']),
-  queryFn: fetchGlobalTokens,
-  enabled: computed(() => viewerId.value !== null && canManageGlobalTokens.value),
+const globalSubscriptionsQuery = useQuery({
+  queryKey: computed(() => ['role-supply-subscriptions', viewerId.value, 'global']),
+  queryFn: fetchGlobalSubscriptions,
+  enabled: computed(() => viewerId.value !== null && canManageGlobalSubscriptions.value),
 })
 
 watch(
   viewerId,
   () => {
     selectedGroupId.value = null
-    activeTab.value = canManageGlobalTokens.value ? 'global-tokens' : 'roles'
+    activeTab.value = 'roles'
+    activeView.value = 'groups'
   },
   { immediate: true },
 )
@@ -112,7 +126,6 @@ watch(
   (items) => {
     if (!items.length) {
       selectedGroupId.value = null
-      activeTab.value = canManageGlobalTokens.value ? 'global-tokens' : 'roles'
       return
     }
     if (!items.some((group) => group.id === selectedGroupId.value)) {
@@ -145,15 +158,42 @@ const roleMembers = ref<PublicUserItem[]>([])
 const selectedMemberUserIds = ref<number[]>([])
 const roleMembersLoading = ref(false)
 
-const tokenDialogVisible = ref(false)
-const tokenSubject = ref<'GROUP' | 'GLOBAL'>('GROUP')
-const tokenForm = reactive<{ name: string; description: string; expiresAt: Date | null }>({
+const subscriptionDialogVisible = ref(false)
+const subscriptionSubject = ref<'GROUP' | 'GLOBAL'>('GROUP')
+const subscriptionForm = reactive<{ name: string; description: string; roleIds: number[] }>({
   name: '',
   description: '',
-  expiresAt: null,
+  roleIds: [],
 })
-const secretDialogVisible = ref(false)
-const currentSecret = ref('')
+const credentialDialogVisible = ref(false)
+const currentCredential = ref<SubscriptionCredential | null>(null)
+
+const allRolesQuery = useQuery({
+  queryKey: computed(() => ['role-subscription-options', viewerId.value]),
+  queryFn: fetchRoles,
+  enabled: computed(() =>
+    viewerId.value !== null
+    && canManageGlobalSubscriptions.value
+    && subscriptionDialogVisible.value
+    && subscriptionSubject.value === 'GLOBAL'),
+})
+
+const subscriptionRoleOptions = computed(() =>
+  subscriptionSubject.value === 'GLOBAL' ? allRolesQuery.data.value || [] : rolesQuery.data.value || [])
+
+const credentialRows = computed<Array<{ label: string; value: string }>>(() => {
+  const credential = currentCredential.value
+  if (!credential) return []
+  const { mq } = credential
+  return [
+    { label: 'MQ 主机', value: mq.host },
+    { label: 'MQ 端口', value: String(mq.port) },
+    { label: 'vhost', value: mq.vhost },
+    { label: '队列名', value: mq.queue },
+    { label: '账号', value: mq.username },
+    { label: '密码', value: mq.password },
+  ]
+})
 
 const refreshGroups = () => queryClient.invalidateQueries({
   queryKey: ['role-groups', viewerId.value],
@@ -168,13 +208,13 @@ const refreshCollaborators = () =>
     queryKey: ['role-groups', viewerId.value, selectedGroupId.value, 'collaborators'],
     exact: true,
   })
-const refreshGroupTokens = () =>
+const refreshGroupSubscriptions = () =>
   queryClient.invalidateQueries({
-    queryKey: ['role-groups', viewerId.value, selectedGroupId.value, 'tokens'],
+    queryKey: ['role-groups', viewerId.value, selectedGroupId.value, 'subscriptions'],
     exact: true,
   })
-const refreshGlobalTokens = () => queryClient.invalidateQueries({
-  queryKey: ['role-supply-tokens', viewerId.value, 'global'],
+const refreshGlobalSubscriptions = () => queryClient.invalidateQueries({
+  queryKey: ['role-supply-subscriptions', viewerId.value, 'global'],
   exact: true,
 })
 
@@ -224,22 +264,22 @@ const saveCollaboratorMutation = useMutation({
   },
 })
 
-const createTokenMutation = useMutation({
+const createSubscriptionMutation = useMutation({
   mutationFn: () => {
     const payload = {
-      name: tokenForm.name,
-      description: tokenForm.description || null,
-      expiresAt: tokenForm.expiresAt ? toLocalDateTime(tokenForm.expiresAt) : null,
+      name: subscriptionForm.name,
+      description: subscriptionForm.description || null,
+      roleIds: subscriptionForm.roleIds,
     }
-    return tokenSubject.value === 'GLOBAL'
-      ? createGlobalToken(payload)
-      : createGroupToken(selectedGroupId.value!, payload)
+    return subscriptionSubject.value === 'GLOBAL'
+      ? createGlobalSubscription(payload)
+      : createGroupSubscription(selectedGroupId.value!, payload)
   },
   onSuccess: async (created) => {
-    tokenDialogVisible.value = false
-    showSecret(created.secret)
-    await (tokenSubject.value === 'GLOBAL' ? refreshGlobalTokens() : refreshGroupTokens())
-    ElMessage.success('供给令牌已创建')
+    subscriptionDialogVisible.value = false
+    showCredential(created.credential)
+    await (subscriptionSubject.value === 'GLOBAL' ? refreshGlobalSubscriptions() : refreshGroupSubscriptions())
+    ElMessage.success('订阅已创建')
   },
 })
 
@@ -362,27 +402,32 @@ async function deleteRoleMember(user: PublicUserItem) {
   await reloadRoleMembers()
 }
 
-function openTokenDialog(subject: 'GROUP' | 'GLOBAL') {
-  tokenSubject.value = subject
-  Object.assign(tokenForm, { name: '', description: '', expiresAt: null })
-  tokenDialogVisible.value = true
+function openSubscriptionDialog(subject: 'GROUP' | 'GLOBAL') {
+  subscriptionSubject.value = subject
+  Object.assign(subscriptionForm, { name: '', description: '', roleIds: [] })
+  subscriptionDialogVisible.value = true
 }
 
-async function rotateToken(token: RoleSupplyTokenItem, subject: 'GROUP' | 'GLOBAL') {
-  await ElMessageBox.confirm('轮换后旧令牌立即失效，是否继续？', '轮换令牌', {
+function selectAllSubscriptionRoles() {
+  subscriptionForm.roleIds = subscriptionRoleOptions.value.map((role) => role.id)
+}
+
+async function rotateSubscription(subscription: SubscriptionItem, subject: 'GROUP' | 'GLOBAL') {
+  await ElMessageBox.confirm('轮换后将生成新的订阅令牌与 MQ 密码，旧凭证立即失效，是否继续？', '轮换凭证', {
     type: 'warning',
     confirmButtonText: '轮换',
     cancelButtonText: '取消',
   })
-  const created = subject === 'GLOBAL'
-    ? await rotateGlobalToken(token.id)
-    : await rotateGroupToken(selectedGroupId.value!, token.id)
-  showSecret(created.secret)
-  await (subject === 'GLOBAL' ? refreshGlobalTokens() : refreshGroupTokens())
+  const credential = subject === 'GLOBAL'
+    ? await rotateGlobalSubscription(subscription.id)
+    : await rotateGroupSubscription(selectedGroupId.value!, subscription.id)
+  showCredential(credential)
+  await (subject === 'GLOBAL' ? refreshGlobalSubscriptions() : refreshGroupSubscriptions())
+  ElMessage.success('凭证已轮换')
 }
 
-async function revealToken(token: RoleSupplyTokenItem, subject: 'GROUP' | 'GLOBAL') {
-  const prompt = await ElMessageBox.prompt('请输入当前登录密码', '查看完整令牌', {
+async function revealSubscription(subscription: SubscriptionItem, subject: 'GROUP' | 'GLOBAL') {
+  const prompt = await ElMessageBox.prompt('请输入当前登录密码', '查看访问凭证', {
     inputType: 'password',
     inputPattern: /\S+/,
     inputErrorMessage: '请输入当前登录密码',
@@ -390,56 +435,85 @@ async function revealToken(token: RoleSupplyTokenItem, subject: 'GROUP' | 'GLOBA
     cancelButtonText: '取消',
   })
   const verification = await verifyMyPassword({ oldPassword: prompt.value })
-  const result = subject === 'GLOBAL'
-    ? await revealGlobalToken(token.id, verification.verificationToken)
-    : await revealGroupToken(selectedGroupId.value!, token.id, verification.verificationToken)
-  showSecret(result.secret)
+  const credential = subject === 'GLOBAL'
+    ? await revealGlobalSubscription(subscription.id, verification.verificationToken)
+    : await revealGroupSubscription(selectedGroupId.value!, subscription.id, verification.verificationToken)
+  showCredential(credential)
 }
 
-async function revokeToken(token: RoleSupplyTokenItem, subject: 'GROUP' | 'GLOBAL') {
-  await ElMessageBox.confirm('撤销后令牌立即失效，是否继续？', '撤销令牌', {
-    type: 'warning',
-    confirmButtonText: '撤销',
-    cancelButtonText: '取消',
-  })
-  if (subject === 'GLOBAL') await revokeGlobalToken(token.id)
-  else await revokeGroupToken(selectedGroupId.value!, token.id)
-  await (subject === 'GLOBAL' ? refreshGlobalTokens() : refreshGroupTokens())
+async function toggleSubscription(subscription: SubscriptionItem, subject: 'GROUP' | 'GLOBAL') {
+  const disabling = subscription.status === 'ENABLED'
+  await ElMessageBox.confirm(
+    disabling
+      ? '停用后第三方将暂停接收新消息（消息仍在队列中积压不丢失），是否继续？'
+      : '启用后第三方可继续接收积压的消息，是否继续？',
+    disabling ? '停用订阅' : '启用订阅',
+    {
+      type: 'warning',
+      confirmButtonText: disabling ? '停用' : '启用',
+      cancelButtonText: '取消',
+    },
+  )
+  if (disabling) {
+    if (subject === 'GLOBAL') await disableGlobalSubscription(subscription.id)
+    else await disableGroupSubscription(selectedGroupId.value!, subscription.id)
+  } else if (subject === 'GLOBAL') {
+    await enableGlobalSubscription(subscription.id)
+  } else {
+    await enableGroupSubscription(selectedGroupId.value!, subscription.id)
+  }
+  await (subject === 'GLOBAL' ? refreshGlobalSubscriptions() : refreshGroupSubscriptions())
+  ElMessage.success(disabling ? '订阅已停用' : '订阅已启用')
 }
 
-async function removeToken(token: RoleSupplyTokenItem, subject: 'GROUP' | 'GLOBAL') {
-  await ElMessageBox.confirm(`确认删除令牌“${token.name}”吗？`, '删除令牌', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-  })
-  if (subject === 'GLOBAL') await deleteGlobalToken(token.id)
-  else await deleteGroupToken(selectedGroupId.value!, token.id)
-  await (subject === 'GLOBAL' ? refreshGlobalTokens() : refreshGroupTokens())
+async function removeSubscription(subscription: SubscriptionItem, subject: 'GROUP' | 'GLOBAL') {
+  await ElMessageBox.confirm(
+    `确认删除订阅“${subscription.name}”吗？删除后专属队列、MQ 账号与订阅令牌将一并清理，队列中未消费的消息将丢失。`,
+    '删除订阅',
+    {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    },
+  )
+  if (subject === 'GLOBAL') await deleteGlobalSubscription(subscription.id)
+  else await deleteGroupSubscription(selectedGroupId.value!, subscription.id)
+  await (subject === 'GLOBAL' ? refreshGlobalSubscriptions() : refreshGroupSubscriptions())
+  ElMessage.success('订阅已删除')
 }
 
-function showSecret(secret: string) {
-  currentSecret.value = secret
-  secretDialogVisible.value = true
+function showCredential(credential: SubscriptionCredential) {
+  currentCredential.value = credential
+  credentialDialogVisible.value = true
 }
 
-async function copySecret() {
+async function copyText(text: string, label: string) {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(currentSecret.value)
+    await navigator.clipboard.writeText(text)
   } else {
     const input = document.createElement('textarea')
-    input.value = currentSecret.value
+    input.value = text
     document.body.appendChild(input)
     input.select()
     document.execCommand('copy')
     input.remove()
   }
-  ElMessage.success('令牌已复制')
+  ElMessage.success(`${label}已复制`)
 }
 
-function toLocalDateTime(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:00`
+function copyFullCredential() {
+  const credential = currentCredential.value
+  if (!credential) return
+  const lines = [
+    `订阅令牌=${credential.tokenSecret}`,
+    `MQ主机=${credential.mq.host}`,
+    `MQ端口=${credential.mq.port}`,
+    `vhost=${credential.mq.vhost}`,
+    `队列名=${credential.mq.queue}`,
+    `账号=${credential.mq.username}`,
+    `密码=${credential.mq.password}`,
+  ]
+  void copyText(lines.join('\n'), '完整凭证')
 }
 
 function scopeText(scope: string) {
@@ -464,14 +538,66 @@ function ownerNamesText(group: RoleGroupItem) {
   return group.ownerNames.length ? group.ownerNames.join('、') : '暂无所有者'
 }
 
-function tokenStatusText(status: string) {
-  return status === 'ACTIVE' ? '有效' : status === 'REVOKED' ? '已撤销' : '已过期'
+function subscriptionStatusText(status: string) {
+  return status === 'ENABLED' ? '已启用' : '已停用'
+}
+
+function formatDateTime(value?: string | null) {
+  return value ? value.replace('T', ' ') : '--'
 }
 </script>
 
 <template>
   <PageContainer title="角色组管理">
-    <div class="role-group-workspace">
+    <template #extra>
+      <el-segmented
+        v-if="canManageGlobalSubscriptions"
+        v-model="activeView"
+        :options="pageViewOptions"
+        class="view-switch"
+      />
+    </template>
+
+    <section v-if="showGlobalSubscriptionView" class="group-detail group-detail--panel">
+      <header class="group-detail__header">
+        <div>
+          <div class="group-detail__title-row">
+            <h2>全局订阅推送</h2>
+            <el-tag effect="plain">平台管理员</el-tag>
+          </div>
+          <p>平台级订阅：可订阅任意角色，面向跨角色组场景的第三方系统，与具体角色组无关</p>
+        </div>
+      </header>
+      <div class="section-toolbar">
+        <strong>订阅列表</strong>
+        <el-button type="primary" :icon="Bell" @click="openSubscriptionDialog('GLOBAL')">创建订阅令牌</el-button>
+      </div>
+      <el-table :data="globalSubscriptionsQuery.data.value || []" v-loading="globalSubscriptionsQuery.isLoading.value" border>
+        <el-table-column prop="name" label="名称" min-width="160" />
+        <el-table-column prop="description" label="说明" min-width="180" show-overflow-tooltip />
+        <el-table-column label="订阅角色数" width="110" align="center">
+          <template #default="{ row }">{{ row.roleCount }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'" effect="plain">{{ subscriptionStatusText(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" min-width="165">
+          <template #default="{ row }">{{ formatDateTime(row.gmtCreate) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="320" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="revealSubscription(row, 'GLOBAL')">查看凭证</el-button>
+            <el-button link type="primary" :icon="RefreshRight" @click="rotateSubscription(row, 'GLOBAL')">轮换</el-button>
+            <el-button link type="warning" @click="toggleSubscription(row, 'GLOBAL')">{{ row.status === 'ENABLED' ? '停用' : '启用' }}</el-button>
+            <el-button link type="danger" @click="removeSubscription(row, 'GLOBAL')">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
+    <div v-else class="role-group-workspace">
       <aside class="group-rail">
         <div class="group-rail__header">
           <div>
@@ -503,8 +629,8 @@ function tokenStatusText(status: string) {
         </div>
       </aside>
 
-      <section v-if="selectedGroup || canManageGlobalTokens" class="group-detail">
-        <header v-if="selectedGroup" class="group-detail__header">
+      <section v-if="selectedGroup" class="group-detail">
+        <header class="group-detail__header">
           <div>
             <div class="group-detail__title-row">
               <h2>{{ selectedGroup.groupName }}</h2>
@@ -519,12 +645,6 @@ function tokenStatusText(status: string) {
           <div v-if="canManageGroupSettings" class="group-detail__actions">
             <el-button :icon="Edit" @click="openEditGroup">设置</el-button>
             <el-button type="danger" plain :icon="Delete" @click="handleDeleteGroup">删除</el-button>
-          </div>
-        </header>
-        <header v-else class="group-detail__header">
-          <div class="group-detail__title-row">
-            <h2>全局供给令牌</h2>
-            <el-tag effect="plain">平台管理员</el-tag>
           </div>
         </header>
 
@@ -571,47 +691,36 @@ function tokenStatusText(status: string) {
             </el-table>
           </el-tab-pane>
 
-          <el-tab-pane v-if="selectedGroup && canManageGroupSettings" label="供给令牌" name="tokens">
+          <el-tab-pane v-if="selectedGroup && canManageGroupSettings" label="订阅推送" name="subscriptions">
             <div class="section-toolbar">
-              <strong>组供给令牌</strong>
-              <el-button type="primary" :icon="Key" @click="openTokenDialog('GROUP')">创建令牌</el-button>
+              <strong>组订阅推送</strong>
+              <el-button type="primary" :icon="Bell" @click="openSubscriptionDialog('GROUP')">创建订阅令牌</el-button>
             </div>
-            <el-table :data="groupTokensQuery.data.value?.items || []" v-loading="groupTokensQuery.isLoading.value" border>
-              <el-table-column prop="name" label="名称" min-width="180" />
-              <el-table-column prop="description" label="备注" min-width="200" show-overflow-tooltip />
-              <el-table-column label="状态" width="100"><template #default="{ row }">{{ tokenStatusText(row.status) }}</template></el-table-column>
-              <el-table-column prop="expiresAt" label="有效期" min-width="180"><template #default="{ row }">{{ row.expiresAt || '无限制' }}</template></el-table-column>
-              <el-table-column label="操作" width="280" fixed="right">
+            <el-table :data="groupSubscriptionsQuery.data.value || []" v-loading="groupSubscriptionsQuery.isLoading.value" border>
+              <el-table-column prop="name" label="名称" min-width="160" />
+              <el-table-column prop="description" label="说明" min-width="180" show-overflow-tooltip />
+              <el-table-column label="订阅角色数" width="110" align="center">
+                <template #default="{ row }">{{ row.roleCount }}</template>
+              </el-table-column>
+              <el-table-column label="状态" width="100">
                 <template #default="{ row }">
-                  <el-button link type="primary" @click="revealToken(row, 'GROUP')">查看</el-button>
-                  <el-button link type="primary" :icon="RefreshRight" @click="rotateToken(row, 'GROUP')">轮换</el-button>
-                  <el-button v-if="row.status === 'ACTIVE'" link type="warning" @click="revokeToken(row, 'GROUP')">撤销</el-button>
-                  <el-button link type="danger" @click="removeToken(row, 'GROUP')">删除</el-button>
+                  <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'" effect="plain">{{ subscriptionStatusText(row.status) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="创建时间" min-width="165">
+                <template #default="{ row }">{{ formatDateTime(row.gmtCreate) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="320" fixed="right">
+                <template #default="{ row }">
+                  <el-button link type="primary" @click="revealSubscription(row, 'GROUP')">查看凭证</el-button>
+                  <el-button link type="primary" :icon="RefreshRight" @click="rotateSubscription(row, 'GROUP')">轮换</el-button>
+                  <el-button link type="warning" @click="toggleSubscription(row, 'GROUP')">{{ row.status === 'ENABLED' ? '停用' : '启用' }}</el-button>
+                  <el-button link type="danger" @click="removeSubscription(row, 'GROUP')">删除</el-button>
                 </template>
               </el-table-column>
             </el-table>
           </el-tab-pane>
 
-          <el-tab-pane v-if="canManageGlobalTokens" label="全局令牌" name="global-tokens">
-            <div class="section-toolbar">
-              <strong>全局供给令牌</strong>
-              <el-button type="primary" :icon="Key" @click="openTokenDialog('GLOBAL')">创建令牌</el-button>
-            </div>
-            <el-table :data="globalTokensQuery.data.value?.items || []" v-loading="globalTokensQuery.isLoading.value" border>
-              <el-table-column prop="name" label="名称" min-width="180" />
-              <el-table-column prop="description" label="备注" min-width="200" show-overflow-tooltip />
-              <el-table-column label="状态" width="100"><template #default="{ row }">{{ tokenStatusText(row.status) }}</template></el-table-column>
-              <el-table-column prop="expiresAt" label="有效期" min-width="180"><template #default="{ row }">{{ row.expiresAt || '无限制' }}</template></el-table-column>
-              <el-table-column label="操作" width="280" fixed="right">
-                <template #default="{ row }">
-                  <el-button link type="primary" @click="revealToken(row, 'GLOBAL')">查看</el-button>
-                  <el-button link type="primary" :icon="RefreshRight" @click="rotateToken(row, 'GLOBAL')">轮换</el-button>
-                  <el-button v-if="row.status === 'ACTIVE'" link type="warning" @click="revokeToken(row, 'GLOBAL')">撤销</el-button>
-                  <el-button link type="danger" @click="removeToken(row, 'GLOBAL')">删除</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </el-tab-pane>
         </el-tabs>
       </section>
 
@@ -660,24 +769,49 @@ function tokenStatusText(status: string) {
       </el-table>
     </el-dialog>
 
-    <el-dialog v-model="tokenDialogVisible" :title="tokenSubject === 'GLOBAL' ? '创建全局令牌' : '创建组供给令牌'" width="520px">
+    <el-dialog v-model="subscriptionDialogVisible" :title="subscriptionSubject === 'GLOBAL' ? '创建全局订阅令牌' : '创建组订阅令牌'" width="560px">
       <el-form label-position="top">
-        <el-form-item label="名称" required><el-input v-model="tokenForm.name" maxlength="64" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="tokenForm.description" maxlength="255" /></el-form-item>
-        <el-form-item label="有效期"><el-date-picker v-model="tokenForm.expiresAt" type="datetime" placeholder="无限制" style="width: 100%" /></el-form-item>
+        <el-form-item label="名称" required><el-input v-model="subscriptionForm.name" maxlength="64" /></el-form-item>
+        <el-form-item label="说明"><el-input v-model="subscriptionForm.description" maxlength="255" /></el-form-item>
+        <el-form-item label="订阅角色" required>
+          <div class="subscription-role-picker">
+            <el-select v-model="subscriptionForm.roleIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择需要推送的角色" style="width: 100%">
+              <el-option v-for="role in subscriptionRoleOptions" :key="role.id" :label="`${role.roleName}（${role.roleCode}）`" :value="role.id" />
+            </el-select>
+            <el-button :disabled="!subscriptionRoleOptions.length" @click="selectAllSubscriptionRoles">全选</el-button>
+          </div>
+        </el-form-item>
       </el-form>
-      <template #footer><el-button @click="tokenDialogVisible = false">取消</el-button><el-button type="primary" :loading="createTokenMutation.isPending.value" :disabled="!tokenForm.name.trim()" @click="createTokenMutation.mutate()">创建</el-button></template>
+      <template #footer><el-button @click="subscriptionDialogVisible = false">取消</el-button><el-button type="primary" :loading="createSubscriptionMutation.isPending.value" :disabled="!subscriptionForm.name.trim() || !subscriptionForm.roleIds.length" @click="createSubscriptionMutation.mutate()">创建</el-button></template>
     </el-dialog>
 
     <el-dialog
-      v-model="secretDialogVisible"
-      title="访问令牌"
-      width="620px"
+      v-model="credentialDialogVisible"
+      title="访问凭证"
+      width="680px"
       append-to-body
-      @closed="currentSecret = ''"
+      @closed="currentCredential = null"
     >
-      <el-input :model-value="currentSecret" readonly type="textarea" :rows="3" class="secret-value" />
-      <template #footer><el-button type="primary" :icon="CopyDocument" @click="copySecret">复制令牌</el-button></template>
+      <template v-if="currentCredential">
+        <el-alert type="warning" :closable="false" show-icon title="凭证仅在创建与轮换时一次性展示，请立即妥善保存；关闭后需验证登录密码才能重看。" />
+        <div class="credential-block">
+          <div class="credential-block__head">
+            <strong>订阅令牌</strong>
+            <el-button link type="primary" :icon="CopyDocument" @click="copyText(currentCredential.tokenSecret, '订阅令牌')">复制</el-button>
+          </div>
+          <el-input :model-value="currentCredential.tokenSecret" readonly type="textarea" :rows="2" class="secret-value" />
+          <p class="credential-hint">用于调用 /api/v2/open/role-supply/snapshot 与 /changes 建立初始账并兜底对账</p>
+        </div>
+        <div class="credential-block">
+          <div class="credential-block__head"><strong>RabbitMQ 连接信息</strong></div>
+          <div v-for="item in credentialRows" :key="item.label" class="credential-row">
+            <span class="credential-row__label">{{ item.label }}</span>
+            <span class="credential-row__value">{{ item.value }}</span>
+            <el-button link type="primary" :icon="CopyDocument" @click="copyText(item.value, item.label)">复制</el-button>
+          </div>
+        </div>
+      </template>
+      <template #footer><el-button type="primary" :icon="CopyDocument" @click="copyFullCredential">复制全部凭证</el-button></template>
     </el-dialog>
   </PageContainer>
 </template>
@@ -700,14 +834,23 @@ function tokenStatusText(status: string) {
 .group-list__creator { overflow: hidden; color: var(--idm-text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .group-detail { min-width: 0; padding: 26px 28px; }
 .group-detail--empty { display: flex; align-items: center; justify-content: center; }
+.group-detail--panel { border: 1px solid var(--idm-border-color-light); background: rgba(255, 255, 255, 0.78); backdrop-filter: blur(18px); box-shadow: var(--idm-shadow-card); }
 .group-detail__header { align-items: flex-start; padding-bottom: 18px; border-bottom: 1px solid var(--idm-border-color-lighter); }
 .group-detail__title-row { justify-content: flex-start; }
 .group-detail h2 { margin: 0; font-size: 22px; letter-spacing: 0; }
 .group-detail p { margin: 8px 0 0; color: var(--idm-text-secondary); }
 .group-detail__ownership { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 10px; color: var(--idm-text-secondary); font-size: 13px; }
 .group-tabs { margin-top: 10px; }
+.view-switch { --el-segmented-item-selected-color: #155e57; --el-segmented-item-selected-bg-color: #e5f1ee; }
 .section-toolbar { margin: 12px 0 16px; }
 .section-toolbar > div { display: flex; flex-direction: column; gap: 4px; }
 .member-picker { margin-bottom: 16px; }
+.subscription-role-picker { display: flex; gap: 10px; width: 100%; }
+.credential-block { margin-top: 14px; }
+.credential-block__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.credential-hint { margin: 6px 0 0; color: var(--idm-text-secondary); font-size: 12px; }
+.credential-row { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--idm-border-color-lighter); }
+.credential-row__label { color: var(--idm-text-secondary); font-size: 13px; }
+.credential-row__value { overflow-wrap: anywhere; font-family: Consolas, monospace; font-size: 13px; }
 .secret-value :deep(textarea) { font-family: Consolas, monospace; line-height: 1.6; word-break: break-all; }
 </style>

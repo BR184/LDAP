@@ -2,6 +2,7 @@ package com.company.idm.interfaces.rolegroup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.company.idm.interfaces.v2.rolegroup.SubscriptionV2Controller;
 import java.lang.reflect.Method;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -43,8 +44,8 @@ class RoleGroupControllerAuthorizationTest {
     }
 
     @Test
-    void roleSupplyTokenManagementRequiresSessionAndManagementPermission() {
-        assertThat(RoleSupplyTokenController.class.getAnnotation(PreAuthorize.class))
+    void subscriptionManagementRequiresSessionAndManagementPermission() {
+        assertThat(SubscriptionV2Controller.class.getAnnotation(PreAuthorize.class))
             .isNotNull()
             .extracting(PreAuthorize::value)
             .isEqualTo(SESSION_AND_MANAGE);

@@ -9,6 +9,16 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # index.html 不缓存：发版后浏览器每次导航都会重新验证，确保拿到新入口（引用新构建的 chunk）
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    # 构建产物文件名带内容哈希，可长缓存，避免旧缓存与新入口混用
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
     location /api/ {
         proxy_pass http://${BACKEND_UPSTREAM}/api/;
         proxy_http_version 1.1;

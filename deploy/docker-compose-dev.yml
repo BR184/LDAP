@@ -43,6 +43,26 @@ services:
       - openldap-data:/var/lib/ldap
       - openldap-config:/etc/ldap/slapd.d
 
+  rabbitmq:
+    image: rabbitmq:4.2-management
+    container_name: corp-idm-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: idm
+      RABBITMQ_DEFAULT_PASS: idm
+      TZ: Asia/Shanghai
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
   gitlab:
     image: gitlab/gitlab-ce:latest
     container_name: corp-idm-gitlab-test
@@ -93,6 +113,7 @@ volumes:
   mysql-data:
   openldap-data:
   openldap-config:
+  rabbitmq-data:
   gitlab-config:
   gitlab-logs:
   gitlab-data:

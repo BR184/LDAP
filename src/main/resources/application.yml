@@ -16,6 +16,14 @@ spring:
   jackson:
     # JSON 序列化时忽略 null 字段，保持响应简洁。
     default-property-inclusion: non_null
+  rabbitmq:
+    # 角色变更推送专用连接；内网容器中通过环境变量覆盖为 rabbitmq 服务。
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:idm}
+    password: ${SPRING_RABBITMQ_PASSWORD:idm}
+    publisher-confirm-type: correlated
+    connection-timeout: ${SPRING_RABBITMQ_CONNECTION_TIMEOUT_MS:5000}
 
 mybatis-plus:
   configuration:
@@ -110,4 +118,25 @@ app:
         enabled: false
         cron: "0 30 2 * * *"
         auto-repair: true
+  rabbitmq:
+    # 角色变更推送拓扑与 RabbitMQ 管理 API 配置。
+    exchange: idm.role-change
+    dead-letter-exchange: idm.role-change.dlx
+    dead-letter-queue: idm.role-change.dlq
+    vhost: ${APP_RABBITMQ_VHOST:/}
+    management:
+      base-url: ${APP_RABBITMQ_MANAGEMENT_BASE_URL:http://localhost:15672}
+      username: ${APP_RABBITMQ_MANAGEMENT_USERNAME:idm}
+      password: ${APP_RABBITMQ_MANAGEMENT_PASSWORD:idm}
+      connect-timeout-ms: ${APP_RABBITMQ_MANAGEMENT_CONNECT_TIMEOUT_MS:3000}
+      read-timeout-ms: ${APP_RABBITMQ_MANAGEMENT_READ_TIMEOUT_MS:10000}
+    connection:
+      # 展示给第三方的连接地址；留空时回退为当前访问地址。
+      external-host: ${APP_RABBITMQ_EXTERNAL_HOST:}
+      external-port: ${APP_RABBITMQ_EXTERNAL_PORT:5672}
+    publisher:
+      enabled: ${APP_RABBITMQ_PUBLISHER_ENABLED:true}
+      fixed-delay-ms: ${APP_RABBITMQ_PUBLISHER_FIXED_DELAY_MS:5000}
+      confirm-timeout-ms: ${APP_RABBITMQ_PUBLISHER_CONFIRM_TIMEOUT_MS:10000}
+      batch-size: ${APP_RABBITMQ_PUBLISHER_BATCH_SIZE:200}
 

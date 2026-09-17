@@ -12,6 +12,7 @@ import com.company.idm.domain.rolegroup.RoleGroup;
 import com.company.idm.domain.rolegroup.RoleGroupMember;
 import com.company.idm.domain.rolegroup.RoleGroupMemberRole;
 import com.company.idm.domain.rolegroup.RoleGroupRepository;
+import com.company.idm.domain.rolegroup.PushSubscriptionRepository;
 import com.company.idm.domain.user.PublicUser;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserRepository;
@@ -47,6 +48,7 @@ public class RoleGroupApplicationService {
     private final PolicyRefreshService policyRefreshService;
     private final RoleGroupAuthorizationService authorizationService;
     private final PersonalAccessTokenRepository tokenRepository;
+    private final PushSubscriptionRepository pushSubscriptionRepository;
 
     public List<RoleGroupView> listGroups(AuthenticatedUser principal) {
         authorizationService.requireRead(principal);
@@ -121,6 +123,9 @@ public class RoleGroupApplicationService {
         }
         if (tokenRepository.countBySubject(PersonalAccessTokenSubjectType.ROLE_GROUP, groupId) > 0) {
             throw new BizException("ROLE_GROUP_TOKEN_EXISTS", "角色组仍包含访问令牌，不能删除");
+        }
+        if (pushSubscriptionRepository.countBySubject(PersonalAccessTokenSubjectType.ROLE_GROUP, groupId) > 0) {
+            throw new BizException("ROLE_GROUP_SUBSCRIPTION_EXISTS", "角色组仍包含推送订阅，请先删除订阅");
         }
         roleGroupRepository.delete(groupId);
         audit(principal.userId(), "ROLE_GROUP_DELETE", "ROLE_GROUP", groupId, group.getGroupName());

@@ -57,11 +57,13 @@ Write-Host "Validating offline package: $root"
     'data/mysql/.gitkeep',
     'data/openldap/config/.gitkeep',
     'data/openldap/database/.gitkeep',
+    'data/rabbitmq/.gitkeep',
     'imports/.gitkeep',
     'images/corp-idm-platform-internal.tar',
     'images/corp-idm-web-internal.tar',
     'images/mysql-8.0.tar',
-    'images/openldap-1.5.0.tar'
+    'images/openldap-1.5.0.tar',
+    'images/rabbitmq-4.2-management.tar'
 ) | ForEach-Object { Require-File $_ }
 
 $envFile = Join-Path $root '.env'
@@ -74,6 +76,16 @@ if (Test-Path -LiteralPath $envFile -PathType Leaf) {
     Assert-EnvValue $envValues 'APP_LDAP_URL' 'ldap://openldap:389'
     Assert-EnvValue $envValues 'APP_LDAP_BIND_DN' 'cn=admin,dc=corp,dc=local'
     Assert-EnvValue $envValues 'LDAP_DOMAIN' 'corp.local'
+    Assert-EnvValue $envValues 'RABBITMQ_IMAGE' 'rabbitmq:4.2-management'
+    Assert-EnvValue $envValues 'RABBITMQ_EXPOSE_PORT' '5672'
+    Assert-EnvValue $envValues 'RABBITMQ_MGMT_EXPOSE_PORT' '15672'
+
+    if (-not $envValues.ContainsKey('RABBITMQ_USER') -or [string]::IsNullOrWhiteSpace($envValues['RABBITMQ_USER'])) {
+        Add-Failure 'RABBITMQ_USER is empty'
+    }
+    if (-not $envValues.ContainsKey('RABBITMQ_PASSWORD') -or [string]::IsNullOrWhiteSpace($envValues['RABBITMQ_PASSWORD'])) {
+        Add-Failure 'RABBITMQ_PASSWORD is empty'
+    }
 
     if (-not $envValues.ContainsKey('LDAP_ADMIN_PASSWORD') -or [string]::IsNullOrWhiteSpace($envValues['LDAP_ADMIN_PASSWORD'])) {
         Add-Failure 'LDAP_ADMIN_PASSWORD is empty'
@@ -101,7 +113,7 @@ if (Test-Path -LiteralPath $ldifPath -PathType Leaf) {
     }
 }
 
-foreach ($relativeDirectory in @('data/mysql', 'data/openldap/config', 'data/openldap/database')) {
+foreach ($relativeDirectory in @('data/mysql', 'data/openldap/config', 'data/openldap/database', 'data/rabbitmq')) {
     $directory = Join-Path $root $relativeDirectory
     if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
         Add-Failure "Missing data directory: $relativeDirectory"
@@ -156,14 +168,20 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     }
     else {
         $services = @(& docker compose --project-directory $root --env-file $envFile -f $composePath config --services)
-        foreach ($service in @('mysql', 'openldap', 'idm-app', 'idm-web')) {
+        foreach ($service in @('mysql', 'openldap', 'rabbitmq', 'idm-app', 'idm-web')) {
             if ($services -notcontains $service) {
                 Add-Failure "Missing Compose service: $service"
             }
         }
     }
 
-    foreach ($image in @('corp-idm-platform:internal', 'corp-idm-web:internal', 'mysql:8.0', 'osixia/openldap:1.5.0')) {
+    foreach ($image in @(
+        'corp-idm-platform:internal',
+        'corp-idm-web:internal',
+        'mysql:8.0',
+        'osixia/openldap:1.5.0',
+        'rabbitmq:4.2-management'
+    )) {
         & docker image inspect $image *> $null
         if ($LASTEXITCODE -ne 0) {
             Add-Failure "Docker image is not loaded: $image"

@@ -1,6 +1,6 @@
 import request from '@/api/request'
 import type {
-  CreatedRoleSupplyToken,
+  CreatedSubscription,
   GovernedRoleItem,
   PersonalRoleContext,
   PublicUserItem,
@@ -9,7 +9,8 @@ import type {
   RoleGroupMemberRole,
   RoleGroupRoleItem,
   RoleScope,
-  RoleSupplyTokenPage,
+  SubscriptionCredential,
+  SubscriptionItem,
 } from '@/types/role-group'
 
 export const fetchRoleGroups = () => request.get<never, RoleGroupItem[]>('/v2/role-groups')
@@ -49,36 +50,44 @@ export const addRoleMembers = (groupId: number, roleId: number, userIds: number[
 export const removeRoleMember = (groupId: number, roleId: number, userId: number) =>
   request.delete<never, void>(`/v2/role-groups/${groupId}/roles/${roleId}/members/${userId}`)
 
-export const fetchGroupTokens = (groupId: number) =>
-  request.get<never, RoleSupplyTokenPage>(`/v2/role-groups/${groupId}/tokens`)
-export const createGroupToken = (
+export const fetchGroupSubscriptions = (groupId: number) =>
+  request.get<never, SubscriptionItem[]>(`/v2/role-groups/${groupId}/subscriptions`)
+export const createGroupSubscription = (
   groupId: number,
-  payload: { name: string; description?: string | null; expiresAt?: string | null },
-) => request.post<never, CreatedRoleSupplyToken>(`/v2/role-groups/${groupId}/tokens`, payload)
-export const rotateGroupToken = (groupId: number, tokenId: number) =>
-  request.post<never, CreatedRoleSupplyToken>(`/v2/role-groups/${groupId}/tokens/${tokenId}/rotations`)
-export const revealGroupToken = (groupId: number, tokenId: number, verificationToken: string) =>
-  request.post<never, { secret: string }>(`/v2/role-groups/${groupId}/tokens/${tokenId}/secret-reveals`, {
-    verificationToken,
-  })
-export const revokeGroupToken = (groupId: number, tokenId: number) =>
-  request.post<never, void>(`/v2/role-groups/${groupId}/tokens/${tokenId}/revocations`)
-export const deleteGroupToken = (groupId: number, tokenId: number) =>
-  request.delete<never, void>(`/v2/role-groups/${groupId}/tokens/${tokenId}`)
+  payload: { name: string; description?: string | null; roleIds: number[] },
+) => request.post<never, CreatedSubscription>(`/v2/role-groups/${groupId}/subscriptions`, payload)
+export const rotateGroupSubscription = (groupId: number, subscriptionId: number) =>
+  request.post<never, SubscriptionCredential>(
+    `/v2/role-groups/${groupId}/subscriptions/${subscriptionId}/rotations`,
+  )
+export const revealGroupSubscription = (groupId: number, subscriptionId: number, verificationToken: string) =>
+  request.post<never, SubscriptionCredential>(
+    `/v2/role-groups/${groupId}/subscriptions/${subscriptionId}/secret-reveals`,
+    { verificationToken },
+  )
+export const disableGroupSubscription = (groupId: number, subscriptionId: number) =>
+  request.post<never, void>(`/v2/role-groups/${groupId}/subscriptions/${subscriptionId}/disables`)
+export const enableGroupSubscription = (groupId: number, subscriptionId: number) =>
+  request.post<never, void>(`/v2/role-groups/${groupId}/subscriptions/${subscriptionId}/enables`)
+export const deleteGroupSubscription = (groupId: number, subscriptionId: number) =>
+  request.delete<never, void>(`/v2/role-groups/${groupId}/subscriptions/${subscriptionId}`)
 
-export const fetchGlobalTokens = () => request.get<never, RoleSupplyTokenPage>('/v2/role-supply-tokens/global')
-export const createGlobalToken = (payload: { name: string; description?: string | null; expiresAt?: string | null }) =>
-  request.post<never, CreatedRoleSupplyToken>('/v2/role-supply-tokens/global', payload)
-export const rotateGlobalToken = (tokenId: number) =>
-  request.post<never, CreatedRoleSupplyToken>(`/v2/role-supply-tokens/global/${tokenId}/rotations`)
-export const revealGlobalToken = (tokenId: number, verificationToken: string) =>
-  request.post<never, { secret: string }>(`/v2/role-supply-tokens/global/${tokenId}/secret-reveals`, {
+export const fetchGlobalSubscriptions = () =>
+  request.get<never, SubscriptionItem[]>('/v2/role-supply-subscriptions/global')
+export const createGlobalSubscription = (payload: { name: string; description?: string | null; roleIds: number[] }) =>
+  request.post<never, CreatedSubscription>('/v2/role-supply-subscriptions/global', payload)
+export const rotateGlobalSubscription = (subscriptionId: number) =>
+  request.post<never, SubscriptionCredential>(`/v2/role-supply-subscriptions/global/${subscriptionId}/rotations`)
+export const revealGlobalSubscription = (subscriptionId: number, verificationToken: string) =>
+  request.post<never, SubscriptionCredential>(`/v2/role-supply-subscriptions/global/${subscriptionId}/secret-reveals`, {
     verificationToken,
   })
-export const revokeGlobalToken = (tokenId: number) =>
-  request.post<never, void>(`/v2/role-supply-tokens/global/${tokenId}/revocations`)
-export const deleteGlobalToken = (tokenId: number) =>
-  request.delete<never, void>(`/v2/role-supply-tokens/global/${tokenId}`)
+export const disableGlobalSubscription = (subscriptionId: number) =>
+  request.post<never, void>(`/v2/role-supply-subscriptions/global/${subscriptionId}/disables`)
+export const enableGlobalSubscription = (subscriptionId: number) =>
+  request.post<never, void>(`/v2/role-supply-subscriptions/global/${subscriptionId}/enables`)
+export const deleteGlobalSubscription = (subscriptionId: number) =>
+  request.delete<never, void>(`/v2/role-supply-subscriptions/global/${subscriptionId}`)
 
 export const fetchPersonalRoleContext = () =>
   request.get<never, PersonalRoleContext>('/v2/users/me/role-context')

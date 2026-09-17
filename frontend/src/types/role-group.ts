@@ -38,30 +38,39 @@ export interface PublicUserItem {
   realName: string
 }
 
-export interface RoleSupplyTokenItem {
+export type SubscriptionStatus = 'ENABLED' | 'DISABLED'
+
+export interface SubscriptionItem {
   id: number
   name: string
   description: string | null
-  status: 'ACTIVE' | 'REVOKED' | 'EXPIRED'
   subjectType: 'ROLE_GROUP' | 'GLOBAL'
   subjectId: number | null
-  expiresAt: string | null
-  lastUsedAt: string | null
-  lastUsedIp: string | null
-  createdAt: string
-  secretRecoverable: boolean
+  status: SubscriptionStatus
+  roleCount: number
+  creator: string
+  gmtCreate: string
+  gmtModified: string
 }
 
-export interface RoleSupplyTokenPage {
-  items: RoleSupplyTokenItem[]
-  total: number
-  page: number
-  pageSize: number
+export interface SubscriptionMqInfo {
+  host: string
+  port: number
+  vhost: string
+  queue: string
+  username: string
+  password: string
 }
 
-export interface CreatedRoleSupplyToken {
-  token: RoleSupplyTokenItem
-  secret: string
+export interface SubscriptionCredential {
+  subscriptionId: number
+  tokenSecret: string
+  mq: SubscriptionMqInfo
+}
+
+export interface CreatedSubscription {
+  subscription: SubscriptionItem
+  credential: SubscriptionCredential
 }
 
 export interface PersonalRoleContext {

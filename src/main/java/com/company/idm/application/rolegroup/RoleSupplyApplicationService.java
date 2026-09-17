@@ -77,11 +77,11 @@ public class RoleSupplyApplicationService {
             || principal.credentialType() != CredentialType.PERSONAL_ACCESS_TOKEN
             || principal.tokenSubjectType() == null
             || principal.tokenSubjectType() == PersonalAccessTokenSubjectType.USER) {
-            throw new BizException("ROLE_SUPPLY_TOKEN_REQUIRED", "请使用角色供给访问令牌");
+            throw new BizException("ROLE_SUPPLY_TOKEN_REQUIRED", "请使用订阅令牌访问");
         }
         if (principal.tokenSubjectType() == PersonalAccessTokenSubjectType.ROLE_GROUP
             && principal.tokenSubjectId() == null) {
-            throw new BizException("ROLE_SUPPLY_TOKEN_INVALID", "角色组令牌缺少固定作用域");
+            throw new BizException("ROLE_SUPPLY_TOKEN_INVALID", "角色组订阅令牌缺少固定作用域");
         }
         return principal.tokenSubjectType();
     }

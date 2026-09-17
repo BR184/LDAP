@@ -32,6 +32,8 @@ These values must not change silently:
 | Backend host port | `8081` |
 | MySQL host port | `3307` |
 | LDAP host port | `389` |
+| RabbitMQ AMQP host port | `5672` |
+| RabbitMQ management host port | `15672` |
 | LDAP protocol | `ldap://` |
 | LDAP domain | `corp.local` |
 | LDAP base DN | `dc=corp,dc=local` |
@@ -94,6 +96,7 @@ The Compose service names are stable:
 ```text
 openldap
 mysql
+rabbitmq
 idm-app
 idm-web
 ```
@@ -103,6 +106,8 @@ Required internal addresses:
 ```text
 idm-app -> mysql:3306
 idm-app -> openldap:389
+idm-app -> rabbitmq:5672
+idm-app -> rabbitmq:15672
 idm-web -> idm-app:8081
 ```
 
@@ -115,6 +120,7 @@ All data mounts must be relative to the package root:
 ./data/mysql
 ./data/openldap/database
 ./data/openldap/config
+./data/rabbitmq
 ./imports
 ```
 
@@ -130,10 +136,12 @@ offline-images/
 ├─ images/corp-idm-web-internal.tar
 ├─ images/mysql-8.0.tar
 ├─ images/openldap-1.5.0.tar
+├─ images/rabbitmq-4.2-management.tar
 ├─ openldap/bootstrap/01-base-ou.ldif
 ├─ data/mysql/.gitkeep
 ├─ data/openldap/config/.gitkeep
 ├─ data/openldap/database/.gitkeep
+├─ data/rabbitmq/.gitkeep
 └─ imports/.gitkeep
 ```
 
@@ -152,7 +160,7 @@ npm run build
 Set-Location ..
 ```
 
-Build and export all four images:
+Build and export all five images:
 
 ```powershell
 docker build -t corp-idm-platform:internal .
@@ -161,10 +169,11 @@ docker save -o offline-images/images/corp-idm-platform-internal.tar corp-idm-pla
 docker save -o offline-images/images/corp-idm-web-internal.tar corp-idm-web:internal
 docker save -o offline-images/images/mysql-8.0.tar mysql:8.0
 docker save -o offline-images/images/openldap-1.5.0.tar osixia/openldap:1.5.0
+docker save -o offline-images/images/rabbitmq-4.2-management.tar rabbitmq:4.2-management
 ```
 
-Before validation, remove generated runtime files from `data/mysql` and
-`data/openldap`, then restore the `.gitkeep` files.
+Before validation, remove generated runtime files from `data/mysql`, `data/openldap`
+and `data/rabbitmq`, then restore the `.gitkeep` files.
 
 ## 8. Mandatory Validation
 
@@ -245,12 +254,13 @@ requires a new package version and updated client templates.
 
 - [ ] Backend tests pass.
 - [ ] Frontend check and build pass.
-- [ ] All four image archives exist.
-- [ ] MySQL and LDAP data directories are clean.
+- [ ] All five image archives exist.
+- [ ] MySQL, LDAP and RabbitMQ data directories are clean.
 - [ ] The bootstrap LDIF contains `admin`.
 - [ ] LDAP external port is `389`.
 - [ ] `LDAP_ADMIN_PASSWORD` equals `APP_LDAP_BIND_PASSWORD`.
 - [ ] `APP_LDAP_URL` uses `openldap:389`.
+- [ ] `RABBITMQ_EXPOSE_PORT` is `5672` and the Compose service `rabbitmq` exists.
 - [ ] No server IP is hardcoded in Compose or Dockerfiles.
 - [ ] `docker compose config` passes.
 - [ ] `sha256sum -c CHECKSUMS.txt` passes.

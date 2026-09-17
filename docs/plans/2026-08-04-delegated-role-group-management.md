@@ -35,3 +35,9 @@
 - 角色组令牌只能访问开放供给 API，不进入用户权限计算。
 - 令牌值不写入列表、日志或审计详情；重看必须经过短时密码验证凭证并记录审计。
 - 原有 `RoleResponse`、`CurrentUserResponse`、LDAP 相关 DTO 和兼职部门数组契约保持不变。
+
+## 后续演进（V54 角色变更订阅推送）
+
+- 组/全局令牌的独立管理入口移除，由“订阅”统一承载：创建订阅自动生成订阅令牌 + RabbitMQ 专属队列 + 专属消费账号。
+- 通道升级：角色成员变更由平台经 RabbitMQ 主动推送（至少一次投递 + `eventId` 幂等），开放供给接口保留为建账与兜底对账。
+- 详见 `docs/runbooks/role-change-subscription-push.md` 与迁移 `V54__role_change_subscription_push.sql`。

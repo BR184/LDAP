@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.company.idm.common.api.PageResult;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
+import com.company.idm.domain.rolegroup.RoleMembershipChangedEvent;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.PublicUser;
 import com.company.idm.domain.user.UserPageQuery;
@@ -33,6 +34,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +50,7 @@ public class MybatisUserRepository implements UserRepository {
     private final UserPartTimeDepartmentMapper userPartTimeDepartmentMapper;
     private final RoleMapper roleMapper;
     private final RoleMembershipChangeMapper roleMembershipChangeMapper;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Override
     public Optional<User> findById(Long id) {
@@ -578,6 +581,7 @@ public class MybatisUserRepository implements UserRepository {
         change.setOperator(normalizeOperator(operator));
         change.setGmtCreate(LocalDateTime.now());
         roleMembershipChangeMapper.insert(change);
+        applicationEventPublisher.publishEvent(new RoleMembershipChangedEvent(change.getId()));
     }
 
     private String normalizeOperator(String operator) {

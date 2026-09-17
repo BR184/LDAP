@@ -54,7 +54,7 @@
 | `/api/v1/role-groups/*` | `/api/v2/role-groups/*` | 纯迁移 |
 | `/api/v1/role-governance/roles/*` | `/api/v2/role-governance/roles/*` | 纯迁移 |
 | `/api/v1/open/role-supply/*` | `/api/v2/open/role-supply/*` | 第三方契约，参数/游标不变 |
-| `/api/v1/role-supply-tokens/*`、`/api/v1/role-groups/*/tokens/*` | `/api/v2/...` | 纯迁移 |
+| `/api/v1/role-supply-tokens/*`、`/api/v1/role-groups/*/tokens/*` | `/api/v2/role-groups/{groupId}/subscriptions/**`、`/api/v2/role-supply-subscriptions/global/**` | 令牌管理已被订阅管理取代（V54），凭证随订阅自动生成 |
 | `/api/v1/users/me/role-context` | `/api/v2/users/me/role-context` | 纯迁移 |
 | `/api/v1/sync/*` | `/api/v2/sync/*` | 纯迁移 |
 | `/api/v1/import/*` | `/api/v2/import/*` | 动作类接口幂等/回滚语义复核后迁移 |
@@ -64,7 +64,7 @@
 
 ## 迁移状态
 
-- [x] 后端 V2 控制器（auth/users/departments/roles/menus/permissions/role-groups/role-governance/role-supply/role-supply-tokens/personal-role-context/sync/import/ldap/mail-config/personal-access-tokens）
+- [x] 后端 V2 控制器（auth/users/departments/roles/menus/permissions/role-groups/role-governance/role-supply/role-supply-subscriptions/personal-role-context/sync/import/ldap/mail-config/personal-access-tokens）
 - [x] V1 全部控制器标注 `@Deprecated`
 - [x] 前端用户模块切换 V2（筛选升级 + 服务端分页）
 - [x] 前端其余 API 模块路径切 V2

@@ -52,7 +52,17 @@ $dockerArgs = @(
     '--restart', 'unless-stopped',
     '--network', $PrimaryNetwork,
     '-p', "$($HostPort):8083",
-    '-v', "$($jarPath):/app/app.jar:ro"
+    '-v', "$($jarPath):/app/app.jar:ro",
+    # 容器时区：与其他容器（MySQL/RabbitMQ）保持一致，避免 Java 写入时间比本地时间早 8 小时
+    '-e', 'TZ=Asia/Shanghai',
+    # 角色变更推送：连接 dev compose 中的 rabbitmq 服务（与 docker-compose-internal.yml 保持一致）
+    '-e', 'SPRING_RABBITMQ_HOST=corp-idm-rabbitmq',
+    '-e', 'SPRING_RABBITMQ_PORT=5672',
+    '-e', 'SPRING_RABBITMQ_USERNAME=idm',
+    '-e', 'SPRING_RABBITMQ_PASSWORD=idm',
+    '-e', 'APP_RABBITMQ_MANAGEMENT_BASE_URL=http://corp-idm-rabbitmq:15672',
+    '-e', 'APP_RABBITMQ_MANAGEMENT_USERNAME=idm',
+    '-e', 'APP_RABBITMQ_MANAGEMENT_PASSWORD=idm'
 )
 
 if (Test-Path $feishuImportPath) {
