@@ -15,6 +15,7 @@ public record RoleChangeMessage(
     String roleScope,
     Long roleGroupId,
     String memberName,
+    String userId,
     LocalDateTime gmtCreate
 ) {
 
@@ -28,6 +29,7 @@ public record RoleChangeMessage(
             change.roleScope() == null ? null : change.roleScope().name(),
             change.roleGroupId(),
             change.memberName(),
+            change.memberUserId(),
             change.gmtCreate()
         );
     }

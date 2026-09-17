@@ -3,6 +3,9 @@
 > 适用版本：包含 Flyway `V54__role_change_subscription_push.sql` 的版本。
 > 该版本起，原"组令牌 / 全局令牌管理"升级为"订阅管理"：创建订阅即自动生成订阅令牌、
 > RabbitMQ 专属队列与专属消费账号，第三方不再轮询，由平台主动推送成员变更。
+>
+> **成员身份标识（V56 起）**：消息与 `/changes`、`/snapshot` 新增成员平台用户ID
+> （`userId`，飞书ID；与 OpenLDAP `uid`、各平台登录名同链），用于按唯一标识精确匹配成员。
 
 ## 一、模式说明
 
@@ -11,7 +14,7 @@
 | 通道 | 用途 | 说明 |
 | --- | --- | --- |
 | 订阅推送（主通道） | 角色成员授予/移除实时推送 | RabbitMQ 消息，按 `eventId` 幂等 |
-| 开放供给接口（建账与兜底） | 首次建立初始账、异常对账 | `/api/v2/open/role-supply/snapshot` 与 `/changes`，契约不变 |
+| 开放供给接口（建账与兜底） | 首次建立初始账、异常对账 | `/api/v2/open/role-supply/snapshot` 与 `/changes`（V56 起响应含成员 `userId`） |
 
 第三方拿到凭证后的标准流程：
 
@@ -67,6 +70,7 @@
   "roleScope": "GROUP",
   "roleGroupId": 2,
   "memberName": "张三",
+  "userId": "ou_6a1f...c9",
   "gmtCreate": "2026-09-16T10:20:30"
 }
 ```
@@ -78,10 +82,14 @@
 | `roleId` / `roleCode` / `roleName` | 角色标识 |
 | `roleScope` | `GLOBAL`（全局角色）/ `GROUP`（组角色） |
 | `roleGroupId` | 组角色所属角色组 ID；全局角色为 `null` |
-| `memberName` | 成员公开姓名（平台不推送工号、邮箱等隐私字段） |
+| `memberName` | 成员公开姓名（平台不推送工号、邮箱等隐私字段；成员匹配请用 `userId`） |
+| `userId` | 成员平台用户ID（飞书ID），与 OpenLDAP `uid` 及各平台登录名一致，**唯一匹配键**；历史事件中成员已删除时为 `null` |
 | `gmtCreate` | 变更发生时间（ISO-8601） |
 
 消息属性：`contentType=application/json`、`contentEncoding=UTF-8`、`messageId=eventId`、持久化投递。
+
+> `/snapshot` 响应中每个角色的 `memberNames` 与 `memberUserIds` 为**同源同序**数组（第 i 项一一对应）；
+> `/changes` 响应字段与消息一致，仅以 `cursor` 代替 `eventId`。
 
 ## 五、可靠性语义
 
@@ -105,7 +113,7 @@ public class RoleChangeConsumer {
                           @Header(AmqpHeaders.DELIVERY_TAG) long tag) throws IOException {
         try {
             // 1. 幂等检查：eventId 已处理则直接 ack
-            // 2. 业务处理：ADDED 授予本地角色；REMOVED 撤销本地角色
+            // 2. 业务处理：按 userId 匹配本地账号；ADDED 授予本地角色；REMOVED 撤销本地角色
             channel.basicAck(tag, false);
         } catch (Exception exception) {
             // 处理失败：重新入队，稍后重试
@@ -134,7 +142,7 @@ channel.basic_qos(prefetch_count=10)
 def handle(ch, method, properties, body):
     event = json.loads(body)
     # 1. 幂等检查：event["eventId"] 已处理则直接 ack
-    # 2. 业务处理：ADDED 授予本地角色；REMOVED 撤销本地角色
+    # 2. 业务处理：按 userId 匹配本地账号；ADDED 授予本地角色；REMOVED 撤销本地角色
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
@@ -145,7 +153,7 @@ channel.start_consuming()
 ### 6.3 幂等建议
 
 - 落库已处理的 `eventId`（唯一索引），重复消息直接忽略；
-- 或按业务键覆盖：`(roleCode, memberName)` + 最新状态，重复投递结果一致；
+- 或按业务键覆盖：`(roleCode, userId)` + 最新状态，重复投递结果一致；
 - 处理失败且暂时无法重试时，可选择 `basicNack(requeue=false)` 进入死信队列
   `idm.role-change.dlq`（运维在管理界面查看与人工重投）。
 
@@ -179,8 +187,8 @@ channel.start_consuming()
 
 - 订阅数据在 MySQL（`sys_role_push_subscription` / `sys_role_push_subscription_role`）；
 - MQ 运行数据在 `data/rabbitmq`（随部署目录持久化）；
-- 应用回滚只影响订阅推送功能，角色与 LDAP 功能不依赖 MQ；`/api/v1/**` 与
-  `/api/v2/open/**` 响应字段保持不变。
+- 应用回滚只影响订阅推送功能，角色与 LDAP 功能不依赖 MQ；V56 起角色供应响应新增成员
+  `userId` / `memberUserIds`（纯加法，旧字段不变；回滚旧版本时新增列保留但旧代码不读取，无影响）。
 
 ## 八、安全说明
 

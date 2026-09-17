@@ -9,6 +9,7 @@ import com.company.idm.common.enums.SourceType;
 import com.company.idm.domain.rolegroup.RoleMembershipChangedEvent;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.PublicUser;
+import com.company.idm.domain.user.RoleSupplyMember;
 import com.company.idm.domain.user.UserPageQuery;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.domain.user.UserRoleBinding;
@@ -231,6 +232,16 @@ public class MybatisUserRepository implements UserRepository {
         }
         return userRoleMapper.selectPublicUsersByRoleId(roleId).stream()
             .map(user -> new PublicUser(user.userId(), user.realName()))
+            .toList();
+    }
+
+    @Override
+    public List<RoleSupplyMember> findRoleSupplyMembersByRoleId(Long roleId) {
+        if (roleId == null) {
+            return List.of();
+        }
+        return userRoleMapper.selectRoleSupplyMembersByRoleId(roleId).stream()
+            .map(member -> new RoleSupplyMember(member.platformUserId(), member.realName()))
             .toList();
     }
 
@@ -577,6 +588,7 @@ public class MybatisUserRepository implements UserRepository {
         change.setRoleGroupId(role.getRoleGroupId());
         change.setUserId(userId);
         change.setMemberName(user.getRealName());
+        change.setMemberUserId(user.getUserId());
         change.setChangeType(changeType);
         change.setOperator(normalizeOperator(operator));
         change.setGmtCreate(LocalDateTime.now());

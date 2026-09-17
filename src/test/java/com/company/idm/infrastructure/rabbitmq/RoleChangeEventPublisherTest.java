@@ -108,6 +108,15 @@ class RoleChangeEventPublisherTest {
     }
 
     @Test
+    void messagePayloadCarriesPlatformUserIdForExactMatching() throws Exception {
+        RoleChangeMessage message = RoleChangeMessage.from(change(1L, "finance.reader"));
+
+        assertThat(message.userId()).isEqualTo("zhangsan-id");
+        String payload = new ObjectMapper().findAndRegisterModules().writeValueAsString(message);
+        assertThat(payload).contains("\"userId\":\"zhangsan-id\"");
+    }
+
+    @Test
     void disabledPublisherSkipsAllWork() {
         properties.getPublisher().setEnabled(false);
 
@@ -142,6 +151,7 @@ class RoleChangeEventPublisherTest {
             RoleScope.GROUP,
             10L,
             "zhangsan",
+            "zhangsan-id",
             "ADDED",
             LocalDateTime.now()
         );

@@ -69,7 +69,7 @@ interfaces (REST Controller / DTO) → application (用例编排/事务) → dom
 
 - 模型：用户↔角色 N:N，角色↔权限 N:N，角色↔菜单 N:N；Casbin 内存缓存 role→permission `GRANT`，DB 为权威，假阴性时 `refresh()` 重试，事务提交后刷新。
 - 不变量：内置角色（`builtIn=1`）权限级别/状态/删除锁定（`BUILT_IN_*_LOCKED`）；`SUPER_ADMIN` 权限系统管理（`SUPER_ADMIN_PERMISSIONS_SYSTEM_MANAGED`）；`admin` 账号不可移除 `SUPER_ADMIN`；并发快照冲突用 `expectedRoleIds`/`expectedPermissionIds` 检 `*_ASSIGN_CONFLICT`(409)。
-- 角色组（`interfaces/v2/rolegroup`）：组/协作者/组内角色/成员；角色供应（`/api/v2/open/role-supply` snapshot/changes，PAT 鉴权）供第三方增量取角色。
+- 角色组（`interfaces/v2/rolegroup`）：组/协作者/组内角色/成员；角色供应（`/api/v2/open/role-supply` snapshot/changes，PAT 鉴权）供第三方增量取角色成员（含成员平台用户ID `userId`，用于唯一标识匹配）。
 
 ## 同步与导入
 

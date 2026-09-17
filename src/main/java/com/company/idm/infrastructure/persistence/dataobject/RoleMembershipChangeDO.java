@@ -21,6 +21,7 @@ public class RoleMembershipChangeDO {
     private Long roleGroupId;
     private Long userId;
     private String memberName;
+    private String memberUserId;
     private String changeType;
     private String operator;
     private LocalDateTime gmtCreate;

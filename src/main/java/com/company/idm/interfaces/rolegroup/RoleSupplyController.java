@@ -58,7 +58,8 @@ public class RoleSupplyController {
             role.roleName(),
             role.roleScope(),
             role.roleGroupId(),
-            role.memberNames()
+            role.memberNames(),
+            role.memberUserIds()
         );
     }
 
@@ -71,6 +72,7 @@ public class RoleSupplyController {
             change.roleScope(),
             change.roleGroupId(),
             change.memberName(),
+            change.memberUserId(),
             change.changeType(),
             change.gmtCreate()
         );
@@ -89,7 +91,8 @@ public class RoleSupplyController {
         String roleName,
         RoleScope roleScope,
         Long roleGroupId,
-        List<String> memberNames
+        List<String> memberNames,
+        List<String> memberUserIds
     ) {
     }
 
@@ -108,6 +111,7 @@ public class RoleSupplyController {
         RoleScope roleScope,
         Long roleGroupId,
         String memberName,
+        String userId,
         String changeType,
         LocalDateTime changedAt
     ) {

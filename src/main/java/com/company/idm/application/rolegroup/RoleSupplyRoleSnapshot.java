@@ -9,6 +9,7 @@ public record RoleSupplyRoleSnapshot(
     String roleName,
     RoleScope roleScope,
     Long roleGroupId,
-    List<String> memberNames
+    List<String> memberNames,
+    List<String> memberUserIds
 ) {
 }

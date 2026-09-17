@@ -23,6 +23,7 @@
 - **UI/交互修复**：筛选不生效根因（`structuredClone` 不能克隆 Vue reactive，改 `toRaw`）、筛选回车触发查询、已选条件仅在应用后显示、登录页帮助弹层过大溢出、部门规则编辑器删除按钮溢出/规则名消歧/同级排序、部门树选择。
 - **测试**：后端全量 170 通过（含 UserV2ControllerTest 4 项、MyBatis XML 端到端 6 项）；前端 `vue-tsc` 对本次改动文件零错误。
 - **部署**：后端容器 `corp-idm-backend-dev`（新 JAR）+ 前端容器 `corp-idm-web`（新镜像）已运行；`build-versions.txt` 记录 V2/修复构建版本。
+- **角色供应成员身份标识（V56）**：订阅消息与 `/changes`、`/snapshot` 新增成员平台用户ID（`userId` / `memberUserIds`，飞书ID，与 LDAP `uid`、平台登录名同链）；变更记录表增 `member_user_id` 快照列并按用户表回填；V1/V2 加法兼容，角色组管理与既有消费方零影响；待 IDM 升级部署后与制品平台联测。
 
 ## 下一步 [下一步]
 
@@ -39,7 +40,7 @@
 
 ## 最近验证 [验证]
 
-- `mvn test`：170 项全绿（0 failure/0 error），含 V2 控制器与 MyBatis 分页/部门规则/角色子查询端到端。
+- `mvn test`：205 项全绿（0 failure/0 error），含 V2 控制器、MyBatis 端到端与角色供应成员 userId/消息载荷新用例。
 - 前端 `vue-tsc -b`：本次改动文件（user-filter/UserListView/api/types/utils）零错误；仅剩上述既有 40 处。
 - 运行验证：后端 `/actuator/health` UP；`/api/v2/auth/login` 返回 V2 信封含 traceId；`/api/v2/users` 无 token 返回 401（认证门禁）不再 500；前端容器 `UserListView` bundle 含 `departmentRules`/`users-v2`/`toRaw` 等新代码标记。
 - 手工验收：职务/部门/关键词筛选生效、回车查询、已选条件仅在应用后显示、登录帮助弹层完整显示。

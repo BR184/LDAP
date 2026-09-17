@@ -62,7 +62,8 @@ public class RoleSupplyV2Controller {
             role.roleName(),
             role.roleScope(),
             role.roleGroupId(),
-            role.memberNames()
+            role.memberNames(),
+            role.memberUserIds()
         );
     }
 
@@ -75,6 +76,7 @@ public class RoleSupplyV2Controller {
             change.roleScope(),
             change.roleGroupId(),
             change.memberName(),
+            change.memberUserId(),
             change.changeType(),
             change.gmtCreate()
         );

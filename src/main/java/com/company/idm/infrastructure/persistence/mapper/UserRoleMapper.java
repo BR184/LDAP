@@ -2,6 +2,7 @@ package com.company.idm.infrastructure.persistence.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.company.idm.infrastructure.persistence.dataobject.UserRoleDO;
+import com.company.idm.infrastructure.persistence.record.RoleSupplyMemberRecord;
 import com.company.idm.infrastructure.persistence.record.UserRoleBindingRecord;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
@@ -63,5 +64,14 @@ public interface UserRoleMapper extends BaseMapper<UserRoleDO> {
         ORDER BY u.real_name, u.id
         """)
     List<com.company.idm.infrastructure.persistence.record.PublicUserRecord> selectPublicUsersByRoleId(Long roleId);
+
+    @Select("""
+        SELECT u.user_id AS platformUserId, u.real_name AS realName
+        FROM sys_user_role ur
+        INNER JOIN sys_user u ON u.id = ur.user_id
+        WHERE ur.role_id = #{roleId} AND u.deleted = 0
+        ORDER BY u.real_name, u.id
+        """)
+    List<RoleSupplyMemberRecord> selectRoleSupplyMembersByRoleId(Long roleId);
 }
 

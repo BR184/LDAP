@@ -6,6 +6,7 @@ import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.rolegroup.RoleMembershipChange;
 import com.company.idm.domain.rolegroup.RoleMembershipChangeRepository;
 import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
+import com.company.idm.domain.user.RoleSupplyMember;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
@@ -37,16 +38,19 @@ public class RoleSupplyApplicationService {
             roleRepository.findAll()
         );
         List<RoleSupplyRoleSnapshot> roles = visibleRoles.stream()
-            .map(role -> new RoleSupplyRoleSnapshot(
-                role.getId(),
-                role.getRoleCode(),
-                role.getRoleName(),
-                role.getRoleScope(),
-                role.getRoleGroupId(),
-                userRepository.findPublicUsersByRoleId(role.getId()).stream()
-                    .map(com.company.idm.domain.user.PublicUser::realName)
-                    .toList()
-            ))
+            .map(role -> {
+                List<RoleSupplyMember> members =
+                    userRepository.findRoleSupplyMembersByRoleId(role.getId());
+                return new RoleSupplyRoleSnapshot(
+                    role.getId(),
+                    role.getRoleCode(),
+                    role.getRoleName(),
+                    role.getRoleScope(),
+                    role.getRoleGroupId(),
+                    members.stream().map(RoleSupplyMember::realName).toList(),
+                    members.stream().map(RoleSupplyMember::platformUserId).toList()
+                );
+            })
             .toList();
         return new RoleSupplySnapshot(snapshotCursor, LocalDateTime.now(), roles);
     }

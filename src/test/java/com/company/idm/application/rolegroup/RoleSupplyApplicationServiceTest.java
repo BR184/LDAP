@@ -13,7 +13,7 @@ import com.company.idm.domain.rbac.RoleScope;
 import com.company.idm.domain.rolegroup.RoleMembershipChange;
 import com.company.idm.domain.rolegroup.RoleMembershipChangeRepository;
 import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
-import com.company.idm.domain.user.PublicUser;
+import com.company.idm.domain.user.RoleSupplyMember;
 import com.company.idm.domain.user.UserRepository;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
@@ -42,8 +42,10 @@ class RoleSupplyApplicationServiceTest {
         Role system = role(4L, "SYSTEM_ADMIN", RoleScope.SYSTEM, null);
         when(changeRepository.currentCursor()).thenReturn(42L);
         when(roleRepository.findAll()).thenReturn(List.of(global, owned, foreign, system));
-        when(userRepository.findPublicUsersByRoleId(1L)).thenReturn(List.of(new PublicUser(7L, "张三")));
-        when(userRepository.findPublicUsersByRoleId(2L)).thenReturn(List.of(new PublicUser(8L, "李四")));
+        when(userRepository.findRoleSupplyMembersByRoleId(1L))
+            .thenReturn(List.of(new RoleSupplyMember("ou_zhangsan", "张三")));
+        when(userRepository.findRoleSupplyMembersByRoleId(2L))
+            .thenReturn(List.of(new RoleSupplyMember("ou_lisi", "李四")));
 
         RoleSupplySnapshot result = service.snapshot(groupToken(10L));
 
@@ -52,6 +54,8 @@ class RoleSupplyApplicationServiceTest {
             .containsExactly("GLOBAL_USER", "GROUP_A");
         assertThat(result.roles().get(0).memberNames()).containsExactly("张三");
         assertThat(result.roles().get(1).memberNames()).containsExactly("李四");
+        assertThat(result.roles().get(0).memberUserIds()).containsExactly("ou_zhangsan");
+        assertThat(result.roles().get(1).memberUserIds()).containsExactly("ou_lisi");
     }
 
     @Test
@@ -69,6 +73,8 @@ class RoleSupplyApplicationServiceTest {
         assertThat(result.nextCursor()).isEqualTo(9L);
         assertThat(result.changes()).extracting(RoleMembershipChange::changeType)
             .containsExactly("ADDED", "REMOVED");
+        assertThat(result.changes()).extracting(RoleMembershipChange::memberUserId)
+            .containsExactly("张三-id", "李四-id");
     }
 
     @Test
@@ -110,7 +116,8 @@ class RoleSupplyApplicationServiceTest {
 
     private RoleMembershipChange change(Long id, String type, String memberName) {
         return new RoleMembershipChange(
-            id, 2L, "GROUP_A", "Group A", RoleScope.GROUP, 10L, memberName, type, LocalDateTime.now()
+            id, 2L, "GROUP_A", "Group A", RoleScope.GROUP, 10L, memberName, memberName + "-id", type,
+            LocalDateTime.now()
         );
     }
 

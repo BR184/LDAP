@@ -82,6 +82,7 @@ public class MybatisRoleMembershipChangeRepository implements RoleMembershipChan
             RoleScope.valueOf(item.getRoleScope()),
             item.getRoleGroupId(),
             item.getMemberName(),
+            item.getMemberUserId(),
             item.getChangeType(),
             item.getGmtCreate()
         );

@@ -38,6 +38,8 @@ public interface UserRepository {
 
     List<PublicUser> findPublicUsersByRoleId(Long roleId);
 
+    List<RoleSupplyMember> findRoleSupplyMembersByRoleId(Long roleId);
+
     List<Long> findRoleIdsByUserId(Long userId);
 
     User save(User user);

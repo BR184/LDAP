@@ -11,6 +11,7 @@ public record RoleMembershipChange(
     RoleScope roleScope,
     Long roleGroupId,
     String memberName,
+    String memberUserId,
     String changeType,
     LocalDateTime gmtCreate
 ) {
