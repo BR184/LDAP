@@ -25,6 +25,7 @@
 - **部署**：后端容器 `corp-idm-backend-dev`（新 JAR）+ 前端容器 `corp-idm-web`（新镜像）已运行；`build-versions.txt` 记录 V2/修复构建版本。
 - **角色供应成员身份标识（V56）**：订阅消息与 `/changes`、`/snapshot` 新增成员平台用户ID（`userId` / `memberUserIds`，飞书ID，与 LDAP `uid`、平台登录名同链）；变更记录表增 `member_user_id` 快照列并按用户表回填；V1/V2 加法兼容，角色组管理与既有消费方零影响；待 IDM 升级部署后与制品平台联测。
 - **登录失效与陈旧缓存治理**：将 `LoginView.vue` 登录成功跳转从前端路由 `router.replace` 改为 `window.location.replace` 全页面硬重载，彻底销毁内存中挂载的旧版本 SPA 组件与 TanStack Query 缓存；在 Nginx 配置中为 `/` 和 `/index.html` 增加 `no-store, no-cache, must-revalidate` 严格防缓存响应头；将后端 JWT Token 默认有效期从 30 分钟延长至 480 分钟（8小时）。
+- **角色组多平台接入与CAT角色解绑隔离（V57）**：新建专属“CAT监控平台”角色组，将原误配为 `GLOBAL` 作用域的 `CAT_ADMIN` 角色收敛为该角色组下的专属组角色（`role_scope = 'GROUP'`），彻底解决新建其他角色组时全局广播注入 CAT 管理员的问题；修复 `RoleDO` 中 `roleGroupId` 切换作用域时无法更新置空为 NULL 的 MyBatis-Plus 策略缺陷（添加 `@TableField(updateStrategy = FieldStrategy.ALWAYS)`）；补充作用域切换置空单测并通过验证。
 
 ## 下一步 [下一步]
 
@@ -41,7 +42,8 @@
 
 ## 最近验证 [验证]
 
-- `mvn test`：205 项全绿（0 failure/0 error），含 V2 控制器、MyBatis 端到端与角色供应成员 userId/消息载荷新用例。
+- `mvn test`：206 项全绿（0 failure/0 error），含角色治理作用域切换置空与原有角色供应/RBAC全套用例。
+- 数据库与运行验证：Flyway V57 成功执行，`sys_role` 中 `CAT_ADMIN` 规范化为 `GROUP` 且绑定组 11（CAT监控平台）；调用 API 验证新建其他角色组（如“GitLab接入平台”）初始角色列表纯净，不再包含 `CAT_ADMIN`。
 - 前端 `npm run build`（`vue-tsc -b && vite build`）：构建全绿，0 错误；Vitest 单元测试全部通过。
 - 运行验证：后端 `/actuator/health` UP；HTTP 5173 验证 `Cache-Control: no-cache, no-store, must-revalidate`、`Pragma: no-cache`、`Expires: 0` 严格生效；前端 `LoginView` 产物已包含 `window.location.replace`。
 - 手工验收：职务/部门/关键词筛选生效、回车查询、已选条件仅在应用后显示、登录帮助弹层完整显示。
