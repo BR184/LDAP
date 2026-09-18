@@ -2,11 +2,10 @@
 import { reactive, ref } from 'vue'
 import { Lock, QuestionFilled, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
-const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(false)
@@ -41,7 +40,8 @@ async function handleSubmit() {
 
     ElMessage.success('登录成功')
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : authStore.defaultEntryPath
-    await router.replace(redirect)
+    // 采用全页面跳转代替客户端路由替换，销毁旧 SPA 内存堆栈与组件状态，确保加载最新构建的资源与路由
+    window.location.replace(redirect)
   } finally {
     loading.value = false
   }

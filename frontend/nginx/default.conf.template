@@ -7,11 +7,16 @@ server {
 
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires 0;
     }
 
-    # index.html 不缓存：发版后浏览器每次导航都会重新验证，确保拿到新入口（引用新构建的 chunk）
+    # index.html 严禁缓存：发版后浏览器每次导航都会重新拉取，确保拿到新入口（引用新构建的 chunk）
     location = /index.html {
-        add_header Cache-Control "no-cache";
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires 0;
     }
 
     # 构建产物文件名带内容哈希，可长缓存，避免旧缓存与新入口混用
