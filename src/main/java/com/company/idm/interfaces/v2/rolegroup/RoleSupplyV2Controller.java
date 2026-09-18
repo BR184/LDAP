@@ -11,6 +11,7 @@ import com.company.idm.domain.rbac.RoleScope;
 import com.company.idm.domain.rolegroup.RoleMembershipChange;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -45,11 +46,21 @@ public class RoleSupplyV2Controller {
     @GetMapping("/context")
     public ContextResponse context(
         @AuthenticationPrincipal AuthenticatedUser principal,
-        HttpServletRequest servletRequest
+        HttpServletRequest servletRequest,
+        HttpServletResponse servletResponse
     ) {
+        // 响应体含专属连接凭据（MQ 账号与密码）：禁止任何缓存，与订阅管理接口同一策略。
+        disableSecretCaching(servletResponse);
         RoleSupplyContext context = subscriptionApplicationService.contextForToken(
             principal, servletRequest.getServerName());
         return ContextResponse.from(context);
+    }
+
+    /** 秘密响应统一禁止缓存：no-store + no-cache + Expires 0。 */
+    private void disableSecretCaching(HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("Pragma", "no-cache");
+        response.setDateHeader("Expires", 0);
     }
 
     /**

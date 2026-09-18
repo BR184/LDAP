@@ -395,6 +395,9 @@ public class SubscriptionApplicationService {
             roleRepository.findById(roleId)
                 .ifPresent(role -> keys.add(String.format(ROLE_BINDING_PATTERN, role.getRoleCode())));
         }
+        // 全局订阅同样需要接收订阅控制与角色组展示事件，否则生命周期变化只能靠心跳与快照兜底。
+        keys.add("rg.*.subscription");
+        keys.add("rg.*.group");
         return List.copyOf(keys);
     }
 
