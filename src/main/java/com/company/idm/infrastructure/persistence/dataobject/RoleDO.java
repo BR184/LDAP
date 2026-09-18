@@ -1,6 +1,8 @@
 package com.company.idm.infrastructure.persistence.dataobject;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
@@ -20,6 +22,7 @@ public class RoleDO {
     private Integer status;
     private String remark;
     private String roleScope;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Long roleGroupId;
     private String creator;
     private String modifier;

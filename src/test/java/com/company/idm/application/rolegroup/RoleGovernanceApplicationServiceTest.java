@@ -65,6 +65,29 @@ class RoleGovernanceApplicationServiceTest {
     }
 
     @Test
+    void clearsRoleGroupIdWhenSwitchingToSystemOrGlobal() {
+        Role groupRole = Role.builder()
+            .id(8L)
+            .roleCode("CAT_ADMIN")
+            .roleName("CAT admin")
+            .roleScope(RoleScope.GROUP)
+            .roleGroupId(21L)
+            .status(1)
+            .build();
+        when(authorizationService.isPlatformAdmin(principal())).thenReturn(true);
+        when(roleRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(groupRole));
+        when(roleRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Role updated = service.updateScope(8L, RoleScope.SYSTEM, null, principal());
+
+        assertThat(updated.getRoleScope()).isEqualTo(RoleScope.SYSTEM);
+        assertThat(updated.getRoleGroupId()).isNull();
+        ArgumentCaptor<Role> roleCaptor = ArgumentCaptor.forClass(Role.class);
+        verify(roleRepository).save(roleCaptor.capture());
+        assertThat(roleCaptor.getValue().getRoleGroupId()).isNull();
+    }
+
+    @Test
     void rejectsScopeChangesForBuiltInRoles() {
         Role builtInRole = Role.builder()
             .id(9L)
