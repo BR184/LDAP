@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus'
 import pinia from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import type { ApiEnvelope } from '@/types/api'
+import { hardNavigateToLogin } from '@/utils/authNavigation'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -42,11 +43,7 @@ request.interceptors.response.use(
     if (status === 401) {
       ElMessage.error(message)
       authStore.clearSession()
-
-      if (window.location.pathname !== '/login') {
-        const redirect = window.location.pathname + window.location.search
-        window.location.href = `/login?redirect=${encodeURIComponent(redirect)}`
-      }
+      hardNavigateToLogin(window.location.pathname + window.location.search)
     } else if (status === 403) {
       ElMessage.error('当前账号没有权限执行此操作')
     } else {

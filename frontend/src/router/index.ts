@@ -3,6 +3,7 @@ import AdminLayout from '@/layout/AdminLayout.vue'
 import pinia from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { useMenuStore } from '@/stores/menu'
+import { hardNavigateToLogin } from '@/utils/authNavigation'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -112,6 +113,11 @@ const router = createRouter({
   },
 })
 
+/**
+ * 全局守卫：需要认证的页面在会话缺失、资料加载失败或菜单加载失败时，
+ * 统一以整页导航回到登录页（销毁可能驻留旧 chunk 的 SPA 运行时，
+ * 避免登录失效后重登复现旧页面），其余场景维持客户端导航。
+ */
 router.beforeEach(async (to) => {
   const authStore = useAuthStore(pinia)
   const menuStore = useMenuStore(pinia)
@@ -126,24 +132,16 @@ router.beforeEach(async (to) => {
   }
 
   if (!authStore.token) {
-    return {
-      path: '/login',
-      query: {
-        redirect: to.fullPath,
-      },
-    }
+    hardNavigateToLogin(to.fullPath)
+    return false
   }
 
   if (!authStore.profileLoaded) {
     try {
       await authStore.loadProfile()
     } catch {
-      return {
-        path: '/login',
-        query: {
-          redirect: to.fullPath,
-        },
-      }
+      hardNavigateToLogin(to.fullPath)
+      return false
     }
   }
 
@@ -152,12 +150,8 @@ router.beforeEach(async (to) => {
       await menuStore.loadMenus()
     } catch {
       authStore.clearSession()
-      return {
-        path: '/login',
-        query: {
-          redirect: to.fullPath,
-        },
-      }
+      hardNavigateToLogin(to.fullPath)
+      return false
     }
   }
 
