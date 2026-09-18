@@ -139,4 +139,16 @@ app:
       fixed-delay-ms: ${APP_RABBITMQ_PUBLISHER_FIXED_DELAY_MS:5000}
       confirm-timeout-ms: ${APP_RABBITMQ_PUBLISHER_CONFIRM_TIMEOUT_MS:10000}
       batch-size: ${APP_RABBITMQ_PUBLISHER_BATCH_SIZE:200}
+  role-supply:
+    # 角色供给（订阅推送）协议与生命周期参数。
+    protocol-version: ${APP_ROLE_SUPPLY_PROTOCOL_VERSION:2}
+    # 稳定来源标识：下游平台据此识别事实来自哪个身份中台实例，切换实例不得继承检查点与授权。
+    source-id: ${APP_ROLE_SUPPLY_SOURCE_ID:corp-idm}
+    # 状态心跳间隔：同一专属队列推送权威状态与已提交版本头，消费方据此判断新鲜度与是否落后。
+    heartbeat-interval-ms: ${APP_ROLE_SUPPLY_HEARTBEAT_INTERVAL_MS:30000}
+    # 事件保留天数：超窗后增量不可恢复，消费方必须重建完整快照；非正数表示不清理。
+    retention-days: ${APP_ROLE_SUPPLY_RETENTION_DAYS:30}
+    retention-cleanup-batch-size: ${APP_ROLE_SUPPLY_RETENTION_CLEANUP_BATCH_SIZE:2000}
+    retention-cleanup-cron: ${APP_ROLE_SUPPLY_RETENTION_CLEANUP_CRON:0 30 3 * * *}
+    snapshot-page-size: ${APP_ROLE_SUPPLY_SNAPSHOT_PAGE_SIZE:200}
 

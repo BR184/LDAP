@@ -47,7 +47,8 @@ class UserApplicationServiceAccessTest {
         mock(InitialPasswordPolicy.class),
         new UserAccessPolicy(),
         new SystemAdministratorProtectionPolicy(),
-        mock(UserReadScopeService.class)
+        mock(UserReadScopeService.class),
+        mock(com.company.idm.domain.rolegroup.RoleSupplyEventRecorder.class)
     );
 
     @Test

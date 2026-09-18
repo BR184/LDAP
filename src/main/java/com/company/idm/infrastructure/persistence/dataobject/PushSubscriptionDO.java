@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.Setter;
 
+/** 映射 sys_role_push_subscription 表的订阅数据对象。 */
 @Getter
 @Setter
 @TableName("sys_role_push_subscription")
@@ -18,8 +19,10 @@ public class PushSubscriptionDO {
     private String description;
     private String subjectType;
     private Long subjectId;
+    private String scopeMode;
     private String status;
     private Long accessTokenId;
+    private Long configVersion;
     private String mqQueue;
     private String mqUsername;
     private String mqPassword;

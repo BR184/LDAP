@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.company.idm.domain.rolegroup.PushSubscription;
 import com.company.idm.domain.rolegroup.PushSubscriptionRepository;
+import com.company.idm.domain.rolegroup.PushSubscriptionScopeMode;
 import com.company.idm.domain.rolegroup.PushSubscriptionStatus;
 import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
 import com.company.idm.infrastructure.persistence.dataobject.PushSubscriptionDO;
@@ -49,6 +50,18 @@ public class MybatisPushSubscriptionRepository implements PushSubscriptionReposi
     }
 
     @Override
+    public Optional<PushSubscription> findByAccessTokenId(Long accessTokenId) {
+        if (accessTokenId == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(subscriptionMapper.selectOne(new LambdaQueryWrapper<PushSubscriptionDO>()
+                .eq(PushSubscriptionDO::getAccessTokenId, accessTokenId)
+                .orderByDesc(PushSubscriptionDO::getId)
+                .last("LIMIT 1")))
+            .map(this::toDomain);
+    }
+
+    @Override
     public List<PushSubscription> findBySubject(
         PersonalAccessTokenSubjectType subjectType,
         Long subjectId
@@ -61,6 +74,14 @@ public class MybatisPushSubscriptionRepository implements PushSubscriptionReposi
     @Override
     public List<PushSubscription> findAll() {
         return subscriptionMapper.selectList(new LambdaQueryWrapper<PushSubscriptionDO>()
+                .orderByAsc(PushSubscriptionDO::getId))
+            .stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public List<PushSubscription> findAllEnabled() {
+        return subscriptionMapper.selectList(new LambdaQueryWrapper<PushSubscriptionDO>()
+                .eq(PushSubscriptionDO::getStatus, PushSubscriptionStatus.ENABLED.name())
                 .orderByAsc(PushSubscriptionDO::getId))
             .stream().map(this::toDomain).toList();
     }
@@ -116,6 +137,25 @@ public class MybatisPushSubscriptionRepository implements PushSubscriptionReposi
             .set(PushSubscriptionDO::getModifier, modifier)
             .set(PushSubscriptionDO::getGmtModified, gmtModified)
             .eq(PushSubscriptionDO::getId, subscriptionId)) > 0;
+    }
+
+    @Override
+    public Optional<Long> bumpConfigVersion(Long subscriptionId, String modifier, LocalDateTime gmtModified) {
+        if (subscriptionId == null) {
+            return Optional.empty();
+        }
+        int updated = subscriptionMapper.update(null, new LambdaUpdateWrapper<PushSubscriptionDO>()
+            .setSql("config_version = config_version + 1")
+            .set(PushSubscriptionDO::getModifier, modifier)
+            .set(PushSubscriptionDO::getGmtModified, gmtModified)
+            .eq(PushSubscriptionDO::getId, subscriptionId));
+        if (updated == 0) {
+            return Optional.empty();
+        }
+        PushSubscriptionDO current = subscriptionMapper.selectById(subscriptionId);
+        return current == null || current.getConfigVersion() == null
+            ? Optional.empty()
+            : Optional.of(current.getConfigVersion());
     }
 
     @Override
@@ -184,8 +224,10 @@ public class MybatisPushSubscriptionRepository implements PushSubscriptionReposi
             .description(dataObject.getDescription())
             .subjectType(PersonalAccessTokenSubjectType.valueOf(dataObject.getSubjectType()))
             .subjectId(dataObject.getSubjectId())
+            .scopeMode(parseScopeMode(dataObject.getScopeMode()))
             .status(PushSubscriptionStatus.valueOf(dataObject.getStatus()))
             .accessTokenId(dataObject.getAccessTokenId())
+            .configVersion(dataObject.getConfigVersion() == null ? 1L : dataObject.getConfigVersion())
             .mqQueue(dataObject.getMqQueue())
             .mqUsername(dataObject.getMqUsername())
             .mqPassword(dataObject.getMqPassword())
@@ -203,8 +245,12 @@ public class MybatisPushSubscriptionRepository implements PushSubscriptionReposi
         dataObject.setDescription(subscription.getDescription());
         dataObject.setSubjectType(subscription.getSubjectType().name());
         dataObject.setSubjectId(subscription.getSubjectId());
+        dataObject.setScopeMode(subscription.getScopeMode() == null
+            ? PushSubscriptionScopeMode.SELECTED_ROLES.name()
+            : subscription.getScopeMode().name());
         dataObject.setStatus(subscription.getStatus().name());
         dataObject.setAccessTokenId(subscription.getAccessTokenId());
+        dataObject.setConfigVersion(subscription.getConfigVersion());
         dataObject.setMqQueue(subscription.getMqQueue());
         dataObject.setMqUsername(subscription.getMqUsername());
         dataObject.setMqPassword(subscription.getMqPassword());
@@ -213,5 +259,19 @@ public class MybatisPushSubscriptionRepository implements PushSubscriptionReposi
         dataObject.setGmtCreate(subscription.getGmtCreate());
         dataObject.setGmtModified(subscription.getGmtModified());
         return dataObject;
+    }
+
+    /**
+     * 解析范围模式；缺失时保守回退为显式选集，避免把未升级订阅隐式扩大为整组范围。
+     */
+    private PushSubscriptionScopeMode parseScopeMode(String scopeMode) {
+        if (scopeMode == null || scopeMode.isBlank()) {
+            return PushSubscriptionScopeMode.SELECTED_ROLES;
+        }
+        try {
+            return PushSubscriptionScopeMode.valueOf(scopeMode);
+        } catch (IllegalArgumentException exception) {
+            return PushSubscriptionScopeMode.SELECTED_ROLES;
+        }
     }
 }

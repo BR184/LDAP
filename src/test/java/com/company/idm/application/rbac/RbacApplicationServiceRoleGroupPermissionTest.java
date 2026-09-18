@@ -36,7 +36,8 @@ class RbacApplicationServiceRoleGroupPermissionTest {
             mock(PermissionLevelRuleService.class),
             mock(MenuVisibilityPermissionService.class),
             new DelegatedPermissionPairPolicy(),
-            new SystemAdministratorProtectionPolicy()
+            new SystemAdministratorProtectionPolicy(),
+            mock(com.company.idm.domain.rolegroup.RoleSupplyEventRecorder.class)
         );
         Role role = Role.builder()
             .id(30L)

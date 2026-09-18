@@ -36,7 +36,8 @@ class RbacApplicationServiceMenuVisibilityTest {
             mock(PermissionLevelRuleService.class),
             mock(MenuVisibilityPermissionService.class),
             new DelegatedPermissionPairPolicy(),
-            new SystemAdministratorProtectionPolicy()
+            new SystemAdministratorProtectionPolicy(),
+            mock(com.company.idm.domain.rolegroup.RoleSupplyEventRecorder.class)
         );
 
         Menu root = menu(1L, 0L, "UINIT0");
@@ -71,7 +72,8 @@ class RbacApplicationServiceMenuVisibilityTest {
             mock(PermissionLevelRuleService.class),
             mock(MenuVisibilityPermissionService.class),
             new DelegatedPermissionPairPolicy(),
-            new SystemAdministratorProtectionPolicy()
+            new SystemAdministratorProtectionPolicy(),
+            mock(com.company.idm.domain.rolegroup.RoleSupplyEventRecorder.class)
         );
 
         Set<String> permissionCodes = Set.of("USER_READ");

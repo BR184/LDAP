@@ -41,7 +41,8 @@ class RbacApplicationServiceRoleProtectionTest {
         permissionLevelRuleService,
         mock(MenuVisibilityPermissionService.class),
         new DelegatedPermissionPairPolicy(),
-        new SystemAdministratorProtectionPolicy()
+        new SystemAdministratorProtectionPolicy(),
+        mock(com.company.idm.domain.rolegroup.RoleSupplyEventRecorder.class)
     );
 
     @Test

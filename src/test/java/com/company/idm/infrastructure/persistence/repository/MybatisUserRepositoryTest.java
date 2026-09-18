@@ -16,11 +16,9 @@ import com.company.idm.infrastructure.persistence.mapper.UserMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserPartTimeDepartmentMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserRoleMapper;
 import com.company.idm.infrastructure.persistence.mapper.RoleMapper;
-import com.company.idm.infrastructure.persistence.mapper.RoleMembershipChangeMapper;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.context.ApplicationEventPublisher;
 
 class MybatisUserRepositoryTest {
 
@@ -32,8 +30,7 @@ class MybatisUserRepositoryTest {
         userRoleMapper,
         partTimeDepartmentMapper,
         mock(RoleMapper.class),
-        mock(RoleMembershipChangeMapper.class),
-        mock(ApplicationEventPublisher.class)
+        mock(com.company.idm.domain.rolegroup.RoleSupplyEventRecorder.class)
     );
 
     @Test

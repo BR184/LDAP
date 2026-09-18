@@ -52,9 +52,10 @@ export const removeRoleMember = (groupId: number, roleId: number, userId: number
 
 export const fetchGroupSubscriptions = (groupId: number) =>
   request.get<never, SubscriptionItem[]>(`/v2/role-groups/${groupId}/subscriptions`)
+/** 创建角色组订阅：整组动态范围，不接受角色选集（组内新增角色自动纳入）。 */
 export const createGroupSubscription = (
   groupId: number,
-  payload: { name: string; description?: string | null; roleIds: number[] },
+  payload: { name: string; description?: string | null },
 ) => request.post<never, CreatedSubscription>(`/v2/role-groups/${groupId}/subscriptions`, payload)
 export const rotateGroupSubscription = (groupId: number, subscriptionId: number) =>
   request.post<never, SubscriptionCredential>(

@@ -266,14 +266,12 @@ const saveCollaboratorMutation = useMutation({
 
 const createSubscriptionMutation = useMutation({
   mutationFn: () => {
-    const payload = {
-      name: subscriptionForm.name,
-      description: subscriptionForm.description || null,
-      roleIds: subscriptionForm.roleIds,
-    }
+    const name = subscriptionForm.name
+    const description = subscriptionForm.description || null
+    // 组订阅为整组动态范围，不再提交角色选集；全局订阅保留显式选角。
     return subscriptionSubject.value === 'GLOBAL'
-      ? createGlobalSubscription(payload)
-      : createGroupSubscription(selectedGroupId.value!, payload)
+      ? createGlobalSubscription({ name, description, roleIds: subscriptionForm.roleIds })
+      : createGroupSubscription(selectedGroupId.value!, { name, description })
   },
   onSuccess: async (created) => {
     subscriptionDialogVisible.value = false
@@ -771,9 +769,18 @@ function formatDateTime(value?: string | null) {
 
     <el-dialog v-model="subscriptionDialogVisible" :title="subscriptionSubject === 'GLOBAL' ? '创建全局订阅令牌' : '创建组订阅令牌'" width="560px">
       <el-form label-position="top">
-        <el-form-item label="名称" required><el-input v-model="subscriptionForm.name" maxlength="64" /></el-form-item>
+        <el-form-item label="名称" required><el-input v-model="subscriptionForm.name" maxlength="64" placeholder="对接方名称，如：制品平台" /></el-form-item>
         <el-form-item label="说明"><el-input v-model="subscriptionForm.description" maxlength="255" /></el-form-item>
-        <el-form-item label="订阅角色" required>
+        <el-form-item v-if="subscriptionSubject === 'GROUP'" label="订阅范围">
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="订阅整个角色组"
+            description="当前及后续新增的组内角色自动纳入推送范围，无需重新勾选角色或重签令牌；组外与全局角色不会被推送。"
+          />
+        </el-form-item>
+        <el-form-item v-else label="订阅角色" required>
           <div class="subscription-role-picker">
             <el-select v-model="subscriptionForm.roleIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择需要推送的角色" style="width: 100%">
               <el-option v-for="role in subscriptionRoleOptions" :key="role.id" :label="`${role.roleName}（${role.roleCode}）`" :value="role.id" />
@@ -782,7 +789,7 @@ function formatDateTime(value?: string | null) {
           </div>
         </el-form-item>
       </el-form>
-      <template #footer><el-button @click="subscriptionDialogVisible = false">取消</el-button><el-button type="primary" :loading="createSubscriptionMutation.isPending.value" :disabled="!subscriptionForm.name.trim() || !subscriptionForm.roleIds.length" @click="createSubscriptionMutation.mutate()">创建</el-button></template>
+      <template #footer><el-button @click="subscriptionDialogVisible = false">取消</el-button><el-button type="primary" :loading="createSubscriptionMutation.isPending.value" :disabled="!subscriptionForm.name.trim() || (subscriptionSubject === 'GLOBAL' && !subscriptionForm.roleIds.length)" @click="createSubscriptionMutation.mutate()">创建</el-button></template>
     </el-dialog>
 
     <el-dialog
@@ -796,22 +803,30 @@ function formatDateTime(value?: string | null) {
         <el-alert type="warning" :closable="false" show-icon title="凭证仅在创建与轮换时一次性展示，请立即妥善保存；关闭后需验证登录密码才能重看。" />
         <div class="credential-block">
           <div class="credential-block__head">
-            <strong>订阅令牌</strong>
-            <el-button link type="primary" :icon="CopyDocument" @click="copyText(currentCredential.tokenSecret, '订阅令牌')">复制</el-button>
+            <strong>接入令牌</strong>
+            <el-button link type="primary" :icon="CopyDocument" @click="copyText(currentCredential.tokenSecret, '接入令牌')">复制接入令牌</el-button>
           </div>
           <el-input :model-value="currentCredential.tokenSecret" readonly type="textarea" :rows="2" class="secret-value" />
-          <p class="credential-hint">用于调用 /api/v2/open/role-supply/snapshot 与 /changes 建立初始账并兜底对账</p>
+          <p class="credential-hint">
+            对接平台只需粘贴此令牌即可自动完成接入：平台后端会凭令牌获取专属队列连接信息与角色目录，
+            无需人工抄录 MQ 参数。令牌同时用于 /api/v2/open/role-supply/context、/snapshot 与 /changes。
+          </p>
         </div>
-        <div class="credential-block">
-          <div class="credential-block__head"><strong>RabbitMQ 连接信息</strong></div>
-          <div v-for="item in credentialRows" :key="item.label" class="credential-row">
-            <span class="credential-row__label">{{ item.label }}</span>
-            <span class="credential-row__value">{{ item.value }}</span>
-            <el-button link type="primary" :icon="CopyDocument" @click="copyText(item.value, item.label)">复制</el-button>
-          </div>
-        </div>
+        <el-collapse class="credential-collapse">
+          <el-collapse-item name="mq">
+            <template #title>RabbitMQ 连接参数（手工接入或排障时查看）</template>
+            <div v-for="item in credentialRows" :key="item.label" class="credential-row">
+              <span class="credential-row__label">{{ item.label }}</span>
+              <span class="credential-row__value">{{ item.value }}</span>
+              <el-button link type="primary" :icon="CopyDocument" @click="copyText(item.value, item.label)">复制</el-button>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
       </template>
-      <template #footer><el-button type="primary" :icon="CopyDocument" @click="copyFullCredential">复制全部凭证</el-button></template>
+      <template #footer>
+        <el-button type="primary" :icon="CopyDocument" :disabled="!currentCredential" @click="copyText(currentCredential?.tokenSecret ?? '', '接入令牌')">复制接入令牌</el-button>
+        <el-button :icon="CopyDocument" :disabled="!currentCredential" @click="copyFullCredential">复制全部凭证</el-button>
+      </template>
     </el-dialog>
   </PageContainer>
 </template>

@@ -50,7 +50,8 @@ class RoleGroupApplicationServiceTest {
         policyRefreshService,
         authorizationService,
         tokenRepository,
-        mock(PushSubscriptionRepository.class)
+        mock(PushSubscriptionRepository.class),
+        mock(com.company.idm.domain.rolegroup.RoleSupplyEventRecorder.class)
     );
 
     @BeforeEach

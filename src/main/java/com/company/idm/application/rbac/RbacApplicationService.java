@@ -11,6 +11,9 @@ import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.rbac.PermissionRepository;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
+import com.company.idm.domain.rolegroup.RoleSupplyEventDraft;
+import com.company.idm.domain.rolegroup.RoleSupplyEventRecorder;
+import com.company.idm.domain.rolegroup.RoleSupplyEventType;
 import com.company.idm.domain.rbac.RoleScope;
 import com.company.idm.application.rolegroup.DelegatedPermissionPairPolicy;
 import com.company.idm.application.user.SystemAdministratorProtectionPolicy;
@@ -43,6 +46,7 @@ public class RbacApplicationService {
     private final MenuVisibilityPermissionService menuVisibilityPermissionService;
     private final DelegatedPermissionPairPolicy delegatedPermissionPairPolicy;
     private final SystemAdministratorProtectionPolicy systemAdministratorProtectionPolicy;
+    private final RoleSupplyEventRecorder roleSupplyEventRecorder;
 
     public List<Role> listRoles() {
         return roleRepository.findAll();
@@ -119,6 +123,8 @@ public class RbacApplicationService {
             .roleGroupId(null)
             .build());
         applyDefaultAccessGrants(role, true);
+        roleSupplyEventRecorder.record(RoleSupplyEventDraft.roleEvent(
+            role, RoleSupplyEventType.ROLE_CREATED, Map.of("roleStatus", role.getStatus()), operator));
         auditLogRepository.save(AuditLog.builder()
             .operator(operator)
             .operationType("ROLE_CREATE")
@@ -150,6 +156,12 @@ public class RbacApplicationService {
             .roleGroupId(role.getRoleGroupId())
             .build());
         applyDefaultAccessGrants(updated, false);
+        roleSupplyEventRecorder.record(RoleSupplyEventDraft.roleEvent(
+            updated,
+            RoleSupplyEventType.ROLE_UPDATED,
+            Map.of("roleName", updated.getRoleName(), "roleStatus", updated.getStatus()),
+            operator
+        ));
         auditLogRepository.save(AuditLog.builder()
             .operator(operator)
             .operationType("ROLE_UPDATE")
@@ -171,6 +183,12 @@ public class RbacApplicationService {
         permissionLevelRuleService.checkCanUpdateRole(command.operator(), role, role.getPermissionLevel());
         roleRepository.updateStatus(command.roleId(), command.status());
         policyRefreshService.refresh();
+        roleSupplyEventRecorder.record(RoleSupplyEventDraft.roleEvent(
+            role,
+            RoleSupplyEventType.ROLE_STATUS_CHANGED,
+            Map.of("roleStatus", command.status()),
+            command.operator()
+        ));
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
             .operationType("ROLE_STATUS_CHANGE")
@@ -524,6 +542,9 @@ public class RbacApplicationService {
     }
 
     private void deleteRoleInternal(Role role, String operator) {
+        // 删除事实必须在角色行消失前记录，保证消费方仍可重放“角色已删除”并撤销对应授权。
+        roleSupplyEventRecorder.record(RoleSupplyEventDraft.roleEvent(
+            role, RoleSupplyEventType.ROLE_DELETED, Map.of("roleCode", role.getRoleCode()), operator));
         roleRepository.delete(role.getId());
         auditLogRepository.save(AuditLog.builder()
             .operator(operator)

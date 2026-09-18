@@ -6,7 +6,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.company.idm.common.api.PageResult;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.common.enums.SourceType;
-import com.company.idm.domain.rolegroup.RoleMembershipChangedEvent;
+import com.company.idm.domain.rbac.RoleScope;
+import com.company.idm.domain.rolegroup.RoleSupplyEventDraft;
+import com.company.idm.domain.rolegroup.RoleSupplyEventRecorder;
+import com.company.idm.domain.rolegroup.RoleSupplyEventType;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.PublicUser;
 import com.company.idm.domain.user.RoleSupplyMember;
@@ -17,9 +20,7 @@ import com.company.idm.infrastructure.persistence.dataobject.UserPartTimeDepartm
 import com.company.idm.infrastructure.persistence.dataobject.UserDO;
 import com.company.idm.infrastructure.persistence.dataobject.UserRoleDO;
 import com.company.idm.infrastructure.persistence.dataobject.RoleDO;
-import com.company.idm.infrastructure.persistence.dataobject.RoleMembershipChangeDO;
 import com.company.idm.infrastructure.persistence.mapper.RoleMapper;
-import com.company.idm.infrastructure.persistence.mapper.RoleMembershipChangeMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserPartTimeDepartmentMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserMapper;
 import com.company.idm.infrastructure.persistence.mapper.UserRoleMapper;
@@ -35,7 +36,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,8 +50,7 @@ public class MybatisUserRepository implements UserRepository {
     private final UserRoleMapper userRoleMapper;
     private final UserPartTimeDepartmentMapper userPartTimeDepartmentMapper;
     private final RoleMapper roleMapper;
-    private final RoleMembershipChangeMapper roleMembershipChangeMapper;
-    private final ApplicationEventPublisher applicationEventPublisher;
+    private final RoleSupplyEventRecorder roleScopeEventRecorder;
 
     @Override
     public Optional<User> findById(Long id) {
@@ -574,26 +573,33 @@ public class MybatisUserRepository implements UserRepository {
             .toList();
     }
 
+    /**
+     * 记录成员角色变化事实。
+     *
+     * <p>与角色绑定写入处于同一事务：事件经集中记录器落库并分配所属角色组范围的
+     * 提交有序版本，事务回滚时事件一并消失，提交后由发布器按未发布标记继续投递。
+     */
     private void recordMembershipChange(Long userId, Long roleId, String changeType, String operator) {
         UserDO user = userMapper.selectById(userId);
         RoleDO role = roleMapper.selectById(roleId);
         if (user == null || role == null) {
             throw new IllegalStateException("Cannot record role membership change without user and role snapshots");
         }
-        RoleMembershipChangeDO change = new RoleMembershipChangeDO();
-        change.setRoleId(roleId);
-        change.setRoleCode(role.getRoleCode());
-        change.setRoleName(role.getRoleName());
-        change.setRoleScope(role.getRoleScope());
-        change.setRoleGroupId(role.getRoleGroupId());
-        change.setUserId(userId);
-        change.setMemberName(user.getRealName());
-        change.setMemberUserId(user.getUserId());
-        change.setChangeType(changeType);
-        change.setOperator(normalizeOperator(operator));
-        change.setGmtCreate(LocalDateTime.now());
-        roleMembershipChangeMapper.insert(change);
-        applicationEventPublisher.publishEvent(new RoleMembershipChangedEvent(change.getId()));
+        boolean added = !"REMOVED".equals(changeType);
+        roleScopeEventRecorder.record(RoleSupplyEventDraft.memberChange(
+            added ? RoleSupplyEventType.MEMBER_ADDED : RoleSupplyEventType.MEMBER_REMOVED,
+            roleId,
+            role.getRoleCode(),
+            role.getRoleName(),
+            role.getRoleScope() == null ? null : RoleScope.valueOf(role.getRoleScope()),
+            role.getRoleGroupId(),
+            userId,
+            user.getRealName(),
+            user.getUserId(),
+            changeType,
+            Map.of("roleStatus", String.valueOf(role.getStatus())),
+            operator
+        ));
     }
 
     private String normalizeOperator(String operator) {

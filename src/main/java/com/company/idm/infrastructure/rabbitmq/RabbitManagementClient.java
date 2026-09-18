@@ -2,6 +2,7 @@ package com.company.idm.infrastructure.rabbitmq;
 
 import com.company.idm.common.exception.BizException;
 import com.company.idm.infrastructure.config.RabbitmqProperties;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.URI;
@@ -11,8 +12,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -106,6 +109,77 @@ public class RabbitManagementClient {
     /** 回收账号在 vhost 上的全部权限（权限不存在时忽略）。 */
     public void revokePermissions(String username) {
         send("DELETE", "/api/permissions/" + encodedVhost() + "/" + encode(username), null, true);
+    }
+
+    /** 删除队列到交换机的指定绑定（绑定不存在时忽略）。 */
+    public void unbindQueue(String queue, String exchange, String routingKey) {
+        send(
+            "DELETE",
+            "/api/bindings/" + encodedVhost() + "/e/" + encode(exchange) + "/q/" + encode(queue)
+                + "/" + encode(routingKey),
+            null,
+            true
+        );
+    }
+
+    /** 列出队列的入站绑定路由键，用于清理已废弃的旧式绑定。 */
+    public List<String> listQueueBindingRoutingKeys(String queue) {
+        List<Map<String, Object>> bindings = getForList(
+            "/api/queues/" + encodedVhost() + "/" + encode(queue) + "/bindings"
+        );
+        List<String> routingKeys = new ArrayList<>();
+        for (Map<String, Object> binding : bindings) {
+            if (binding.get("routing_key") instanceof String routingKey) {
+                routingKeys.add(routingKey);
+            }
+        }
+        return routingKeys;
+    }
+
+    /**
+     * 关闭指定账号的全部连接。
+     *
+     * <p>权限回收不会断开已建立的连接：订阅停用、轮换与撤销必须显式终止旧连接，
+     * 否则旧消费者仍能继续读取队列，生命周期约束形同虚设。
+     */
+    public void closeUserConnections(String username) {
+        if (username == null || username.isBlank()) {
+            return;
+        }
+        for (Map<String, Object> connection : getForList("/api/connections")) {
+            if (!username.equals(connection.get("user"))) {
+                continue;
+            }
+            if (connection.get("name") instanceof String connectionName) {
+                send("DELETE", "/api/connections/" + encode(connectionName), null, true);
+            }
+        }
+    }
+
+    private List<Map<String, Object>> getForList(String path) {
+        String url = properties.getManagement().getBaseUrl() + path;
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofMillis(properties.getManagement().getReadTimeoutMs()))
+                .header("Authorization", authorizationHeader)
+                .header("Content-Type", "application/json")
+                .GET()
+                .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                log.warn("RabbitMQ management request failed: GET {} -> {}", url, response.statusCode());
+                return List.of();
+            }
+            return objectMapper.readValue(response.body(), new TypeReference<List<Map<String, Object>>>() { });
+        } catch (IOException exception) {
+            log.warn("RabbitMQ management request failed: GET {}", url, exception);
+            return List.of();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            log.warn("RabbitMQ management request interrupted: GET {}", url, exception);
+            return List.of();
+        }
     }
 
     private void ensureExchange(String name, String type) {

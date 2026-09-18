@@ -30,7 +30,7 @@ class SubscriptionV2ControllerTest {
     @Test
     void responsesContainingASecretCannotBeCached() {
         when(applicationService.createGroupSubscription(
-            any(), any(), any(), any(), any(), any(), any()
+            any(), any(), any(), any(), any(), any()
         )).thenReturn(createdSubscription());
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setServerName("idm.example.com");
@@ -38,7 +38,7 @@ class SubscriptionV2ControllerTest {
 
         controller.createGroupSubscription(
             10L,
-            new SubscriptionV2Controller.SaveSubscriptionRequest("财务系统同步", null, List.of(11L)),
+            new SubscriptionV2Controller.SaveGroupSubscriptionRequest("制品平台", null),
             session(),
             request,
             response
@@ -52,25 +52,26 @@ class SubscriptionV2ControllerTest {
     @Test
     void creationDelegatesToApplicationServiceWithClientContext() {
         when(applicationService.createGroupSubscription(
-            any(), any(), any(), any(), any(), any(), any()
+            any(), any(), any(), any(), any(), any()
         )).thenReturn(createdSubscription());
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setServerName("idm.example.com");
 
         var result = controller.createGroupSubscription(
             10L,
-            new SubscriptionV2Controller.SaveSubscriptionRequest("财务系统同步", null, List.of(11L)),
+            new SubscriptionV2Controller.SaveGroupSubscriptionRequest("制品平台", null),
             session(),
             request,
             new MockHttpServletResponse()
         );
 
         verify(applicationService).createGroupSubscription(
-            10L, "财务系统同步", null, List.of(11L), session(), "127.0.0.1", "idm.example.com"
+            10L, "制品平台", null, session(), "127.0.0.1", "idm.example.com"
         );
         assertThat(result.data().credential().tokenSecret()).isEqualTo("idm_pat_secret");
         assertThat(result.data().credential().mq().queue()).isEqualTo("idm.sub.3");
         assertThat(result.data().subscription().status()).isEqualTo("ENABLED");
+        assertThat(result.data().subscription().scopeMode()).isEqualTo("DYNAMIC_GROUP");
     }
 
     @Test
@@ -88,11 +89,13 @@ class SubscriptionV2ControllerTest {
     private CreatedSubscription createdSubscription() {
         SubscriptionView view = new SubscriptionView(
             3L,
-            "财务系统同步",
+            "制品平台",
             null,
             PersonalAccessTokenSubjectType.ROLE_GROUP,
             10L,
+            "DYNAMIC_GROUP",
             PushSubscriptionStatus.ENABLED,
+            1L,
             1,
             "delegate",
             LocalDateTime.now(),

@@ -47,10 +47,15 @@ public class SubscriptionV2Controller {
             .toList());
     }
 
+    /**
+     * 创建角色组订阅：订阅整个角色组，不固化角色清单。
+     *
+     * <p>范围随组内角色动态变化，新增角色无需修改绑定或重签令牌；因此请求不再接受角色选集。
+     */
     @PostMapping("/role-groups/{groupId}/subscriptions")
     public ApiResponseV2<CreatedSubscriptionResponse> createGroupSubscription(
         @PathVariable Long groupId,
-        @Valid @RequestBody SaveSubscriptionRequest request,
+        @Valid @RequestBody SaveGroupSubscriptionRequest request,
         @AuthenticationPrincipal AuthenticatedUser principal,
         HttpServletRequest servletRequest,
         HttpServletResponse servletResponse
@@ -60,7 +65,6 @@ public class SubscriptionV2Controller {
             groupId,
             request.name(),
             request.description(),
-            request.roleIds(),
             principal,
             ClientIpUtil.getClientIp(servletRequest),
             servletRequest.getServerName()
@@ -233,6 +237,14 @@ public class SubscriptionV2Controller {
         response.setDateHeader("Expires", 0);
     }
 
+    /** 角色组订阅创建请求：整组动态范围，不接受角色选集。 */
+    public record SaveGroupSubscriptionRequest(
+        @NotBlank @Size(max = 64) String name,
+        @Size(max = 255) String description
+    ) {
+    }
+
+    /** 全局订阅创建请求：保留显式角色选集，不默认选择全部企业角色。 */
     public record SaveSubscriptionRequest(
         @NotBlank @Size(max = 64) String name,
         @Size(max = 255) String description,

@@ -17,7 +17,9 @@ import com.company.idm.domain.rbac.RoleScope;
 import com.company.idm.domain.rolegroup.RoleMembershipChange;
 import com.company.idm.domain.rolegroup.RoleMembershipChangeRepository;
 import com.company.idm.domain.rolegroup.RoleMembershipChangedEvent;
+import com.company.idm.domain.rolegroup.RoleSupplyEventType;
 import com.company.idm.infrastructure.config.RabbitmqProperties;
+import com.company.idm.infrastructure.config.RoleSupplyProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,16 +31,21 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+/**
+ * 事件发布器测试：验证保序投递、确认失败停止、序列化失败留待重试，以及范围分层路由键。
+ */
 class RoleChangeEventPublisherTest {
 
     private final RoleMembershipChangeRepository changeRepository = mock(RoleMembershipChangeRepository.class);
     private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
     private final RabbitmqProperties properties = new RabbitmqProperties();
+    private final RoleSupplyProperties supplyProperties = new RoleSupplyProperties();
     private final ObjectMapper objectMapper = mock(ObjectMapper.class);
     private final RoleChangeEventPublisher publisher = new RoleChangeEventPublisher(
         changeRepository,
         rabbitTemplate,
         properties,
+        supplyProperties,
         objectMapper
     );
 
@@ -61,14 +68,49 @@ class RoleChangeEventPublisherTest {
             eq("idm.role-change"), routingKeyCaptor.capture(), messageCaptor.capture(), any(CorrelationData.class)
         );
         assertThat(routingKeyCaptor.getAllValues())
-            .containsExactly("role.finance.reader", "role.audit.reader");
+            .containsExactly("rg.10.role.finance.reader", "rg.10.role.audit.reader");
         assertThat(messageCaptor.getAllValues())
-            .allSatisfy(message -> assertThat(message.getMessageProperties().getContentType())
-                .isEqualTo(MessageProperties.CONTENT_TYPE_JSON));
+            .allSatisfy(message -> {
+                assertThat(message.getMessageProperties().getContentType())
+                    .isEqualTo(MessageProperties.CONTENT_TYPE_JSON);
+                assertThat(message.getMessageProperties().getHeaders())
+                    .containsEntry("x-idm-message-type", RoleSupplyMessage.TYPE_ROLE_CHANGE)
+                    .containsEntry("x-idm-protocol-version", 2);
+            });
         assertThat(messageCaptor.getAllValues().get(0).getMessageProperties().getMessageId()).isEqualTo("1");
         assertThat(messageCaptor.getAllValues().get(1).getMessageProperties().getMessageId()).isEqualTo("2");
 
         assertMarkedPublished(1L, 2L);
+    }
+
+    @Test
+    void groupAndSubscriptionControlEventsUseScopeSpecificRoutingKeys() throws Exception {
+        when(changeRepository.findUnpublished(200)).thenReturn(
+            List.of(
+                event(3L, RoleSupplyEventType.GROUP_UPDATED, null, 10L, null),
+                event(4L, RoleSupplyEventType.SUBSCRIPTION_CONTROL, null, 10L, 6L),
+                event(5L, RoleSupplyEventType.MEMBER_ADDED, "GLOBAL_USER", null, null)
+            ),
+            List.of()
+        );
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        doAnswer(invocation -> {
+            CorrelationData correlation = invocation.getArgument(3);
+            correlation.getFuture().complete(new CorrelationData.Confirm(true, null));
+            return null;
+        }).when(rabbitTemplate).send(eq("idm.role-change"), anyString(), any(Message.class), any(CorrelationData.class));
+
+        publisher.publishPendingChanges();
+
+        ArgumentCaptor<String> routingKeyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(rabbitTemplate, times(3)).send(
+            eq("idm.role-change"), routingKeyCaptor.capture(), any(Message.class), any(CorrelationData.class)
+        );
+        assertThat(routingKeyCaptor.getAllValues()).containsExactly(
+            "rg.10.group",
+            "rg.10.subscription",
+            "rg.0.role.GLOBAL_USER"
+        );
     }
 
     @Test
@@ -108,10 +150,15 @@ class RoleChangeEventPublisherTest {
     }
 
     @Test
-    void messagePayloadCarriesPlatformUserIdForExactMatching() throws Exception {
-        RoleChangeMessage message = RoleChangeMessage.from(change(1L, "finance.reader"));
+    void messagePayloadCarriesPlatformUserIdScopeVersionAndEventType() throws Exception {
+        RoleSupplyMessage message = RoleSupplyMessage.from(
+            change(1L, "finance.reader"), 2, "corp-idm", new ObjectMapper()
+        );
 
         assertThat(message.userId()).isEqualTo("zhangsan-id");
+        assertThat(message.eventType()).isEqualTo("MEMBER_ADDED");
+        assertThat(message.scopeVersion()).isEqualTo(4L);
+        assertThat(message.sourceId()).isEqualTo("corp-idm");
         String payload = new ObjectMapper().findAndRegisterModules().writeValueAsString(message);
         assertThat(payload).contains("\"userId\":\"zhangsan-id\"");
     }
@@ -143,16 +190,32 @@ class RoleChangeEventPublisherTest {
     }
 
     private RoleMembershipChange change(Long id, String roleCode) {
+        return event(id, RoleSupplyEventType.MEMBER_ADDED, roleCode, 10L, null);
+    }
+
+    private RoleMembershipChange event(
+        Long id,
+        RoleSupplyEventType eventType,
+        String roleCode,
+        Long roleGroupId,
+        Long controlVersion
+    ) {
         return new RoleMembershipChange(
             id,
-            20L + id,
+            eventType,
+            roleCode == null ? null : 20L + id,
             roleCode,
             roleCode,
-            RoleScope.GROUP,
-            10L,
+            roleGroupId == null ? RoleScope.GLOBAL : RoleScope.GROUP,
+            roleGroupId,
+            roleGroupId == null ? null : 4L,
+            7L,
             "zhangsan",
             "zhangsan-id",
-            "ADDED",
+            eventType == RoleSupplyEventType.MEMBER_ADDED ? "ADDED" : null,
+            null,
+            controlVersion == null ? null : 4L,
+            controlVersion,
             LocalDateTime.now()
         );
     }

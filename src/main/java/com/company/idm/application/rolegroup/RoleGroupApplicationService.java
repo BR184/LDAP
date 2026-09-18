@@ -7,6 +7,9 @@ import com.company.idm.application.rbac.PolicyRefreshService;
 import com.company.idm.common.enums.EmploymentStatus;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
+import com.company.idm.domain.rolegroup.RoleSupplyEventDraft;
+import com.company.idm.domain.rolegroup.RoleSupplyEventRecorder;
+import com.company.idm.domain.rolegroup.RoleSupplyEventType;
 import com.company.idm.domain.rbac.RoleScope;
 import com.company.idm.domain.rolegroup.RoleGroup;
 import com.company.idm.domain.rolegroup.RoleGroupMember;
@@ -49,6 +52,7 @@ public class RoleGroupApplicationService {
     private final RoleGroupAuthorizationService authorizationService;
     private final PersonalAccessTokenRepository tokenRepository;
     private final PushSubscriptionRepository pushSubscriptionRepository;
+    private final RoleSupplyEventRecorder roleSupplyEventRecorder;
 
     public List<RoleGroupView> listGroups(AuthenticatedUser principal) {
         authorizationService.requireRead(principal);
@@ -111,6 +115,8 @@ public class RoleGroupApplicationService {
             .gmtModified(LocalDateTime.now())
             .build());
         audit(principal.userId(), "ROLE_GROUP_UPDATE", "ROLE_GROUP", groupId, saved.getGroupName());
+        roleSupplyEventRecorder.record(RoleSupplyEventDraft.groupEvent(
+            groupId, saved.getGroupName(), null, principal.userId()));
         return toView(saved, principal);
     }
 
@@ -232,6 +238,8 @@ public class RoleGroupApplicationService {
             .roleGroupId(groupId)
             .build());
         audit(principal.userId(), "ROLE_GROUP_ROLE_CREATE", "ROLE", saved.getId(), saved.getRoleCode());
+        roleSupplyEventRecorder.record(RoleSupplyEventDraft.roleEvent(
+            saved, RoleSupplyEventType.ROLE_CREATED, null, principal.userId()));
         return toRoleView(saved, true);
     }
 
@@ -261,6 +269,8 @@ public class RoleGroupApplicationService {
             .roleGroupId(groupId)
             .build());
         audit(principal.userId(), "ROLE_GROUP_ROLE_UPDATE", "ROLE", roleId, saved.getRoleCode());
+        roleSupplyEventRecorder.record(RoleSupplyEventDraft.roleEvent(
+            saved, RoleSupplyEventType.ROLE_UPDATED, null, principal.userId()));
         return toRoleView(saved, true);
     }
 
@@ -271,6 +281,9 @@ public class RoleGroupApplicationService {
         if (roleRepository.existsUserBinding(roleId)) {
             throw new BizException("ROLE_IN_USE", "当前角色仍绑定用户，不能删除");
         }
+        // 删除事实先于角色行删除记录，使消费方能重放“角色已删除”并撤销对应授权。
+        roleSupplyEventRecorder.record(RoleSupplyEventDraft.roleEvent(
+            role, RoleSupplyEventType.ROLE_DELETED, null, principal.userId()));
         roleRepository.delete(roleId);
         policyRefreshService.refresh();
         audit(principal.userId(), "ROLE_GROUP_ROLE_DELETE", "ROLE", roleId, role.getRoleCode());

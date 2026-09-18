@@ -14,6 +14,9 @@ import com.company.idm.domain.ldap.LdapGroupService;
 import com.company.idm.domain.rbac.PermissionLevelRuleService;
 import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
+import com.company.idm.domain.rolegroup.RoleSupplyEventDraft;
+import com.company.idm.domain.rolegroup.RoleSupplyEventRecorder;
+import com.company.idm.domain.rolegroup.RoleSupplyEventType;
 import com.company.idm.domain.user.PasswordPolicyValidator;
 import com.company.idm.domain.user.User;
 import com.company.idm.domain.user.UserAccessPolicy;
@@ -58,6 +61,7 @@ public class UserApplicationService {
     private final UserAccessPolicy userAccessPolicy;
     private final SystemAdministratorProtectionPolicy systemAdministratorProtectionPolicy;
     private final UserReadScopeService userReadScopeService;
+    private final RoleSupplyEventRecorder roleSupplyEventRecorder;
 
     /**
      * V1 keyword 模糊搜索：跨 userId/realName/employeeNo 三字段模糊匹配，管理端搜索框与批量删除共用。
@@ -242,6 +246,7 @@ public class UserApplicationService {
             .build();
         userRepository.updateAccessAllowed(command.userId(), command.accessAllowed(), nextTokenVersion, command.operator());
         syncLdapAccessState(updated);
+        recordAccessChangeEvents(user, command.accessAllowed(), command.operator());
         auditLogRepository.save(AuditLog.builder()
             .operator(command.operator())
             .operationType("USER_ACCESS_CHANGE")
@@ -731,6 +736,38 @@ public class UserApplicationService {
 
     private String buildRecycledUsername(User user) {
         return user.getUserId() + "__deleted__" + user.getId();
+    }
+
+    /**
+     * 记录用户访问状态变化对应的成员事实。
+     *
+     * <p>停用使该用户全部角色的对外授权事实消失，启用则恢复；角色绑定本身不变，
+     * 因此这里只补记事实事件，不触碰角色绑定数据，避免把可逆的访问控制变成不可逆的授权删除。
+     */
+    private void recordAccessChangeEvents(User user, boolean accessAllowed, String operator) {
+        Set<String> roleCodes = user.getRoleCodes();
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            return;
+        }
+        for (Role role : roleRepository.findAll()) {
+            if (!roleCodes.contains(role.getRoleCode())) {
+                continue;
+            }
+            roleSupplyEventRecorder.record(RoleSupplyEventDraft.memberChange(
+                accessAllowed ? RoleSupplyEventType.MEMBER_ADDED : RoleSupplyEventType.MEMBER_REMOVED,
+                role.getId(),
+                role.getRoleCode(),
+                role.getRoleName(),
+                role.getRoleScope(),
+                role.getRoleGroupId(),
+                user.getId(),
+                user.getRealName(),
+                user.getUserId(),
+                accessAllowed ? "ADDED" : "REMOVED",
+                Map.of("reason", accessAllowed ? "ACCESS_GRANTED" : "ACCESS_REVOKED"),
+                operator
+            ));
+        }
     }
 
     private void deleteUserInternal(User user, String operator) {

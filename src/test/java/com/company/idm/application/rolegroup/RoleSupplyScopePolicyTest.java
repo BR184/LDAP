@@ -13,15 +13,27 @@ class RoleSupplyScopePolicyTest {
     private final RoleSupplyScopePolicy policy = new RoleSupplyScopePolicy();
 
     @Test
-    void groupTokensSeeOnlyTheirGroupAndGlobalRoles() {
+    void groupTokensSeeOnlyRolesInsideTheirOwnGroup() {
         List<Role> visible = policy.filterVisibleRoles(
             PersonalAccessTokenSubjectType.ROLE_GROUP,
             10L,
             roles()
         );
 
+        // 页面可见不等于订阅范围：全局角色、其他组角色与系统管理角色均不得泄露给组订阅。
         assertThat(visible).extracting(Role::getRoleCode)
-            .containsExactly("GLOBAL_USER", "GROUP_A");
+            .containsExactly("GROUP_A");
+    }
+
+    @Test
+    void groupTokensWithoutScopeIdSeeNothing() {
+        List<Role> visible = policy.filterVisibleRoles(
+            PersonalAccessTokenSubjectType.ROLE_GROUP,
+            null,
+            roles()
+        );
+
+        assertThat(visible).isEmpty();
     }
 
     @Test
