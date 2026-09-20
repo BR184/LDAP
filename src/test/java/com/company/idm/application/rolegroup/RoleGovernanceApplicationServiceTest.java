@@ -16,6 +16,7 @@ import com.company.idm.domain.rbac.RoleScope;
 import com.company.idm.domain.rolegroup.RoleGroup;
 import com.company.idm.domain.rolegroup.RoleGroupRepository;
 import com.company.idm.domain.token.PersonalAccessTokenSubjectType;
+import com.company.idm.domain.rolegroup.RoleSupplyEventRecorder;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import com.company.idm.infrastructure.security.CredentialType;
 import java.util.List;
@@ -31,12 +32,14 @@ class RoleGovernanceApplicationServiceTest {
     private final AuditLogRepository auditLogRepository = mock(AuditLogRepository.class);
     private final PolicyRefreshService policyRefreshService = mock(PolicyRefreshService.class);
     private final RoleGroupAuthorizationService authorizationService = mock(RoleGroupAuthorizationService.class);
+    private final RoleSupplyEventRecorder roleSupplyEventRecorder = mock(RoleSupplyEventRecorder.class);
     private final RoleGovernanceApplicationService service = new RoleGovernanceApplicationService(
         roleRepository,
         roleGroupRepository,
         auditLogRepository,
         policyRefreshService,
-        authorizationService
+        authorizationService,
+        roleSupplyEventRecorder
     );
 
     @Test

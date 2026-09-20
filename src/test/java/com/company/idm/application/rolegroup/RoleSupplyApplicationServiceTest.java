@@ -67,7 +67,7 @@ class RoleSupplyApplicationServiceTest {
         Role foreign = role(3L, "GROUP_B", RoleScope.GROUP, 20L);
         Role system = role(4L, "SUPER_ADMIN", RoleScope.SYSTEM, null);
         when(roleRepository.findAll()).thenReturn(List.of(global, owned, foreign, system));
-        when(scopeVersionRepository.lockCurrentVersion(GROUP_ID)).thenReturn(42L);
+        when(scopeVersionRepository.currentVersion(GROUP_ID)).thenReturn(42L);
         when(userRepository.findRoleSupplyMembersByRoleId(2L))
             .thenReturn(List.of(new RoleSupplyMember("ou_lisi", "李四")));
 
@@ -92,7 +92,7 @@ class RoleSupplyApplicationServiceTest {
             role(2L, "ARTIFACTS_BUILD", RoleScope.GROUP, GROUP_ID),
             role(3L, "ARTIFACTS_PACKAGE", RoleScope.GROUP, GROUP_ID)
         ));
-        when(scopeVersionRepository.lockCurrentVersion(GROUP_ID)).thenReturn(7L);
+        when(scopeVersionRepository.currentVersion(GROUP_ID)).thenReturn(7L);
         when(userRepository.findRoleSupplyMembersByRoleId(2L)).thenReturn(List.of());
         when(userRepository.findRoleSupplyMembersByRoleId(3L)).thenReturn(List.of());
 

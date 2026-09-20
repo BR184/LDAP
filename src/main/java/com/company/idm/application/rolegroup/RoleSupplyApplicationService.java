@@ -67,9 +67,12 @@ public class RoleSupplyApplicationService {
     public RoleSupplySnapshot snapshot(AuthenticatedUser principal, int page, int size) {
         PushSubscription subscription = subscriptionResolver.resolveEnabled(principal);
         Long groupId = subscriptionResolver.groupScopeOf(subscription);
+        // 边界与内容必须来自同一读视图：使用普通读（与后续角色/成员读取同一快照），
+        // 避免“锁定读取得新版本 + 普通读取得旧内容”的窗口；事务期间新提交的事件
+        // 版本大于边界，会作为增量事件正常到达，不会遗漏。
         long boundary = groupId == null
             ? changeRepository.currentCursor()
-            : scopeVersionRepository.lockCurrentVersion(groupId);
+            : scopeVersionRepository.currentVersion(groupId);
         List<Role> visibleRoles = scopePolicy.filterVisibleRoles(
             subscription.getSubjectType(),
             subscription.getSubjectId(),

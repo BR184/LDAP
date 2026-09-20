@@ -8,8 +8,13 @@ import com.company.idm.domain.rbac.Role;
 import com.company.idm.domain.rbac.RoleRepository;
 import com.company.idm.domain.rbac.RoleScope;
 import com.company.idm.domain.rolegroup.RoleGroupRepository;
+import com.company.idm.domain.rolegroup.RoleSupplyEventDraft;
+import com.company.idm.domain.rolegroup.RoleSupplyEventRecorder;
+import com.company.idm.domain.rolegroup.RoleSupplyEventType;
 import com.company.idm.infrastructure.security.AuthenticatedUser;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +28,7 @@ public class RoleGovernanceApplicationService {
     private final AuditLogRepository auditLogRepository;
     private final PolicyRefreshService policyRefreshService;
     private final RoleGroupAuthorizationService authorizationService;
+    private final RoleSupplyEventRecorder roleSupplyEventRecorder;
 
     public List<Role> listRoles(AuthenticatedUser principal) {
         requirePlatformAdmin(principal);
@@ -41,6 +47,18 @@ public class RoleGovernanceApplicationService {
             throw new BizException("BUILT_IN_ROLE_SCOPE_LOCKED", "内置角色的作用域不允许修改");
         }
         Long normalizedGroupId = validateScopeTarget(roleId, roleScope, roleGroupId);
+        boolean scopeChanged = !Objects.equals(role.getRoleScope(), roleScope)
+            || !Objects.equals(role.getRoleGroupId(), normalizedGroupId);
+        if (scopeChanged
+            && role.getRoleScope() == RoleScope.GROUP
+            && role.getRoleGroupId() != null) {
+            // 旧组范围：角色移出等价于删除，旧组订阅方据此撤销该角色授权。
+            roleSupplyEventRecorder.record(RoleSupplyEventDraft.roleEvent(
+                role,
+                RoleSupplyEventType.ROLE_DELETED,
+                Map.of("reason", "SCOPE_MOVED_OUT"),
+                principal.userId()));
+        }
         Role saved = roleRepository.save(Role.builder()
             .id(role.getId())
             .roleCode(role.getRoleCode())
@@ -52,6 +70,16 @@ public class RoleGovernanceApplicationService {
             .roleScope(roleScope)
             .roleGroupId(normalizedGroupId)
             .build());
+        if (scopeChanged
+            && saved.getRoleScope() == RoleScope.GROUP
+            && saved.getRoleGroupId() != null) {
+            // 新组范围：角色纳入，新组订阅方据此发现角色并接收后续成员变化。
+            roleSupplyEventRecorder.record(RoleSupplyEventDraft.roleEvent(
+                saved,
+                RoleSupplyEventType.ROLE_CREATED,
+                Map.of("reason", "SCOPE_MOVED_IN"),
+                principal.userId()));
+        }
         policyRefreshService.refresh();
         auditLogRepository.save(AuditLog.builder()
             .operator(principal.userId())

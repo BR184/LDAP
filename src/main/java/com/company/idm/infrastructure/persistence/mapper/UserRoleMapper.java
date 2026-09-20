@@ -69,7 +69,7 @@ public interface UserRoleMapper extends BaseMapper<UserRoleDO> {
         SELECT u.user_id AS platformUserId, u.real_name AS realName
         FROM sys_user_role ur
         INNER JOIN sys_user u ON u.id = ur.user_id
-        WHERE ur.role_id = #{roleId} AND u.deleted = 0
+        WHERE ur.role_id = #{roleId} AND u.deleted = 0 AND u.access_allowed = 1
         ORDER BY u.real_name, u.id
         """)
     List<RoleSupplyMemberRecord> selectRoleSupplyMembersByRoleId(Long roleId);
