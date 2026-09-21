@@ -172,7 +172,7 @@ AI 应在任务收尾和用户纠正工作方式时，检查用户的直接表�
 
 ## Git 规则
 
-- 远端为 `origin`（内网 GitLab：`http://10.0.100.25/developer_experience_platform/ldap`），主线为 `main`；日常特性/优化工作提交到对应特性分支（当前 `ldap内网上线优化`），验证后可在 GitLab 发起 MR 合并回 `main`。
+- 远端为 `origin`（内网 GitLab：`http://10.0.100.25/developer_experience_platform/ldap`），主线为 `main`；日常特性/优化工作提交到对应特性分支（当前 `feat/ldap-intranet-optimization`），验证后可在 GitLab 发起 MR 合并回 `main`。
 - 每个通过验证、职责单一、可独立回退的工作单元应自动提交并推送到对应远端分支。
 - 测试失败、实现不完整、文档失真或工作树混入无关改动时不得提交推送。
 - 提交采用 Conventional Commits：`feat`、`fix`、`refactor`、`test`、`docs`、`build`、`ci`、`perf`、`chore`。

@@ -12,7 +12,7 @@
 
 ## 当前目标 [目标]
 
-- 分支 `ldap内网上线优化` 的 V2 API 规范化 + 用户管理筛选升级已上线；下一阶段收敛：修复前端既有类型债、推进 lumen_flow 切换 V2、评审合并回 `main`。
+- 分支 `feat/ldap-intranet-optimization` 的 V2 API 规范化 + 用户管理筛选升级已上线；下一阶段收敛：修复前端既有类型债、推进 lumen_flow 切换 V2、评审合并回 `main`。
 
 ## 已完成 [完成]
 
@@ -32,7 +32,7 @@
 1. 修复前端 `vue-tsc -b` 既有类型债（约 40 处 el-table 槽位 `DefaultRow`），使 `npm run build` 恢复绿色，可移除 `build:no-check` 回退。
 2. lumen_flow 目录同步切换到 V2 精确端点 `GET /api/v2/users/by-user-id/{userId}`（当前走 V1 `?userId=` 已可用，切换需下游配合）；建议同时加固 lumen_flow 侧（`FetchUser` 精确过滤 + 歧义改永久失败不卡 run）。
 3. 修复 `build-with-version-tracking.ps1` 引号语法错误（当前需手动 mvn + 手写版本记录）。
-4. 评审分支 `ldap内网上线优化` 并 MR 合并回 `main`。
+4. 评审分支 `feat/ldap-intranet-optimization` 并 MR 合并回 `main`。
 
 ## 阻塞与风险 [风险]
 
