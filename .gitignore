@@ -11,6 +11,9 @@ ldap-offline-imagesv0.1/
 LDAP_incremental_update/
 部署打的压缩包/
 docs/feishu-import/
+handover-packages/
 deploy-backups/
+.gitlab.rb.backup
+gitlab.rb.current
 openwebui_idm_diagnostic.txt
 openwebui_ldap_relogin_diagnostic.txt
